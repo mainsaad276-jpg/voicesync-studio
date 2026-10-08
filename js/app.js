@@ -541,8 +541,13 @@
         try { el.playbackRate = spd; } catch (e) {}
         state.previewEl = el;
         el.onended = function () { state.previewing = false; setMsg(t('done')); };
+        el.onerror = function () { state.previewing = false; setMsg(t('noAudio'), true); };
         if (!state.lastEngineNote) setMsg(t('playing'));
-        el.play();
+        // Team 2 Round 4: catch play() rejection so the guard never sticks.
+        try {
+          var pp = el.play();
+          if (pp && pp.catch) pp.catch(function () { state.previewing = false; setMsg(t('noAudio'), true); });
+        } catch (e) { state.previewing = false; setMsg(t('noAudio'), true); }
         return;
       }
       state.previewing = false;
@@ -867,7 +872,9 @@
     state.playToken++; // invalidate any in-flight Google chunk chain
     if (state.recording) { stopRecording(); }
     if (state.dictating) { stopDictate(); }
-    // Stop voice preview too.
+    // Stop voice preview too. Team 2 Round 4: also reset the busy-guard,
+    // otherwise stopping a Google-fallback preview kills the button forever.
+    state.previewing = false;
     try { if (state.previewSrc) state.previewSrc.stop(); } catch (e) {}
     try { if (state.previewCtx) state.previewCtx.close(); } catch (e) {}
     state.previewSrc = null; state.previewCtx = null;
