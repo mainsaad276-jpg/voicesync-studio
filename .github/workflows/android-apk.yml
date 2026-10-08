@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main, apk-build-test]
+    branches: [main]
     paths-ignore: ['progress/**', '**.md']
   workflow_dispatch:
 

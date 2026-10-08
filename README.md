@@ -47,6 +47,22 @@ A ready workflow is included at `.github/workflows/pages.yml` — push to the
 appears on the workflow run (`https://<username>.github.io/voicesync-studio/`).
 No build step is needed: the repo ships as plain HTML/CSS/JS.
 
+## Android app (APK)
+
+Every push to `main` builds an Android app automatically (GitHub Actions →
+`.github/workflows/android-apk.yml`, Capacitor 6).
+
+- **Download:** [VoiceSync-Studio.apk](https://github.com/mainsaad276-jpg/voicesync-studio/releases/download/android-latest/VoiceSync-Studio.apk)
+  (Releases → "android-latest"). Open it on the phone and allow "Install unknown apps".
+- **Native features:** offline phone voices (Android Text-to-Speech), Voice to Text,
+  files saved to `Documents/VoiceSync`, Share sheet, clipboard, back button.
+- **Phone layout:** four steps with a bottom tab bar — Write, Voices, Listen, Save.
+- The APK is signed with a debug key (`android-config/`) so updates install over
+  each other. Before publishing on Google Play, create a private release key.
+- Build pieces: `package.json`, `capacitor.config.json`, `scripts/build-www.js`,
+  `scripts/patch-android.js`, `js/native.js` (the bridge; does nothing on the website),
+  `js/tabs.js`, `assets/` (icon and splash).
+
 ## Browser support
 
 - **Best:** Chrome / Edge (WebM video export needs `MediaRecorder`).
