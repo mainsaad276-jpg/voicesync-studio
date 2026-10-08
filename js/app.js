@@ -685,6 +685,14 @@
       for (var ci = 0; ci < CHARACTERS.length; ci++) {
         if (CHARACTERS[ci].voiceId === sel.value) { state.selChar = CHARACTERS[ci]; break; }
       }
+      // MINOR FIX (Team 2 R6): apply the matched character's pitch offset so
+      // shared base voices stay distinct when picked from the dropdown too.
+      if (state.selChar && typeof state.selChar.pitch === 'number') {
+        state.pitch = state.selChar.pitch;
+        var pr2 = $('pitchRange'), pv2 = $('pitchVal');
+        if (pr2) pr2.value = String(state.selChar.pitch);
+        if (pv2) pv2.textContent = pitchDisplay(state.selChar.pitch);
+      }
       try { localStorage.setItem('voicesync-voice', sel.value); } catch (e) {}
       renderCharCards();
       updateSelCharBox();
@@ -952,8 +960,11 @@
       if (pv) pv.textContent = pitchDisplay(c.pitch);
     }
     // Medium 10: sync language UI to the character's language.
-    try { syncLangUiToCode(charLangCode(c)); } catch (e) {}
+    // MAJOR FIX (Team 2 R6): persist FIRST so loadVoices() (triggered by
+    // syncLangUiToCode) picks up the NEW voice instead of clobbering
+    // state.voiceId with the previously saved one.
     try { localStorage.setItem('voicesync-voice', c.voiceId); } catch (e) {}
+    try { syncLangUiToCode(charLangCode(c)); } catch (e) {}
     updateSelCharBox();
     var sel = $('voiceSelect');
     if (sel) {
