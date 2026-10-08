@@ -97,6 +97,7 @@
     voice_preview: 'Preview',
     previewing: 'Previewing voice…',
     engineFallback: 'Note: {want} voice was unavailable — played with {got} instead (all voices may sound similar).',
+    engineFallbackShort: 'fallback — voices may sound similar',
     dialogue_mode: 'Dialogue mode (two voices)',
     dialogue_hint: 'Start lines with 1: for Voice 1 and 2: for Voice 2.',
     dialogueNeedMarkers: 'Dialogue mode: start lines with 1: and 2: to assign voices.',
@@ -144,6 +145,25 @@
     var s = safeGet(function () { return window.I18N.strings[state.lang][key]; }, undefined);
     if (typeof s === 'string' && s) return s;
     return FALLBACK[key] || key;
+  }
+
+  // Q1+Q2: always-visible engine badge — which engine actually spoke?
+  // Shows on EVERY result path, not just Web Speech.
+  function updateEngineBadge() {
+    var badge = $('engineBadge');
+    if (!badge) return;
+    var r = state.lastResult;
+    if (!r || !r.engine) { badge.hidden = true; return; }
+    var engineNames = {
+      edge: 'Edge Neural', google: 'Google', webspeech: 'Device voice',
+      chatterbox: 'Chatterbox', dialogue: 'Dialogue', mic: 'Recording'
+    };
+    var label = engineNames[r.engine] || r.engine;
+    var isFallback = !!state.lastEngineNote;
+    badge.textContent = (isFallback ? '⚠️ ' : '🔊 ') + label +
+      (isFallback ? ' — ' + t('engineFallbackShort') : '');
+    badge.className = 'engine-badge' + (isFallback ? ' warn' : '');
+    badge.hidden = false;
   }
 
   function setMsg(msg, isError) {
@@ -463,14 +483,31 @@
     if (!hasModule('TTS') || typeof window.TTS.synthesize !== 'function') return;
     var vid = state.voiceId;
     if (!vid) { setMsg(t('noVoices'), true); return; }
+    // Q4: busy-guard — no overlapping previews.
+    if (state.previewing) return;
+    state.previewing = true;
     var sample = (state.ttsLang === 'ur') ? 'السلام علیکم! یہ میری آواز کا نمونہ ہے۔'
       : (state.ttsLang === 'hi') ? 'नमस्ते! यह मेरी आवाज़ का नमूना है।'
       : 'Hello! This is a preview of my voice.';
     setMsg(t('previewing'));
     stopAll();
+    state.previewing = true; // stopAll clears it; re-arm
     try {
       var r = await window.TTS.synthesize(sample, vid);
-      if (!r || r.error) { setMsg(t('ttsFailed') + ': ' + ((r && r.error) || ''), true); return; }
+      if (!r || r.error) { setMsg(t('ttsFailed') + ': ' + ((r && r.error) || ''), true); state.previewing = false; return; }
+      // Q2: show which engine actually spoke the preview.
+      state.lastResult = { engine: r.engine };
+      state.lastEngineNote = null;
+      if (r.engine && vid) {
+        var wantEngine = vid.split(':')[0];
+        if (wantEngine && r.engine !== wantEngine) {
+          state.lastEngineNote = t('engineFallback').replace('{want}', wantEngine).replace('{got}', r.engine);
+        }
+      }
+      updateEngineBadge();
+      if (state.lastEngineNote) setMsg(state.lastEngineNote, true);
+      // Q5: preview honors speed/pitch.
+      var spd = state.speed || 1, pit = state.pitch || 0;
       // Play directly without touching the main pipeline.
       if (r.audioBuffer) {
         var AC = window.AudioContext || window.webkitAudioContext;
@@ -478,30 +515,40 @@
           var ctx = new AC();
           var src = ctx.createBufferSource();
           src.buffer = r.audioBuffer;
+          src.playbackRate.value = spd;
+          try { src.detune.value = pit * 100; } catch (e) {}
           src.connect(ctx.destination);
-          src.onended = function () { try { ctx.close(); } catch (e) {} setMsg(t('done')); };
-          setMsg(t('playing'));
+          src.onended = function () { try { ctx.close(); } catch (e) {} state.previewing = false; setMsg(t('done')); };
+          if (!state.lastEngineNote) setMsg(t('playing'));
           src.start(0);
           state.previewCtx = ctx; state.previewSrc = src;
           return;
         }
       }
       if (r.utterance && typeof window.speechSynthesis !== 'undefined') {
-        setMsg(t('playing'));
+        try {
+          r.utterance.rate = spd;
+          r.utterance.pitch = Math.max(0, Math.min(2, 1 + pit / 12));
+        } catch (e) {}
+        r.utterance.onend = function () { state.previewing = false; };
+        if (!state.lastEngineNote) setMsg(t('playing'));
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(r.utterance);
         return;
       }
       if (r.url) {
         var el = new Audio(r.url);
+        try { el.playbackRate = spd; } catch (e) {}
         state.previewEl = el;
-        el.onended = function () { setMsg(t('done')); };
-        setMsg(t('playing'));
+        el.onended = function () { state.previewing = false; setMsg(t('done')); };
+        if (!state.lastEngineNote) setMsg(t('playing'));
         el.play();
         return;
       }
+      state.previewing = false;
       setMsg(t('noAudio'), true);
     } catch (e) {
+      state.previewing = false;
       setMsg(t('ttsFailed') + ': ' + (e && e.message || e), true);
     }
   }
@@ -1133,6 +1180,7 @@
       }
       state.lastVoiceLabel = selVoice;
     } catch (e) {}
+    updateEngineBadge(); // Q1: visible on EVERY path
 
     if (result.audioBuffer) {
       // Audio path: real buffer -> lip-sync analysis -> playback.
@@ -1152,6 +1200,7 @@
       }
       // Honesty: if the user picked Chatterbox but the free server was busy,
       // say so instead of silently substituting the device voice.
+      // Q1: fallback note shows on ALL paths now (badge also always visible).
       if (state.voiceId && state.voiceId.indexOf('chatterbox:') === 0) {
         setMsg(t('chatterboxBusy'));
       } else if (state.lastEngineNote) {
@@ -1162,6 +1211,8 @@
     } else if (result.engine === 'google' && result.url) {
       // Google <audio>-element path (API.md §3): no byte access, but the
       // mouth still moves via text-timing cues — never a dead mouth.
+      // Q1: show fallback warning here too, not just Web Speech.
+      if (state.lastEngineNote) setMsg(state.lastEngineNote, true);
       startGooglePlayback(result);
     } else {
       setMsg(t('noAudio'), true);

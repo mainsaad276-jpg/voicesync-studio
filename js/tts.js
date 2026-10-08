@@ -356,13 +356,14 @@
         engine: 'edge'
       });
     }
-    // Google fallback entries: one male + one female slot per supported language.
+    // Google fallback entries: ONE shared voice per language (Team 2 proved
+    // the male/female URLs are byte-identical — Google Translate TTS has a
+    // single voice per language, so two labels would deceive).
     var langs = lang ? [lang] : Object.keys(LANG_LABEL);
     for (i = 0; i < langs.length; i++) {
       var l = langs[i], base = _baseLang(l);
       if (GOOGLE_LANGS.indexOf(base) === -1) continue;
-      out.push({ id: 'google:' + l + ':female', name: 'Google ' + _langLabel(l) + ' — Female (fallback)', lang: l, gender: 'female', engine: 'google' });
-      out.push({ id: 'google:' + l + ':male',   name: 'Google ' + _langLabel(l) + ' — Male (fallback)', lang: l, gender: 'male',   engine: 'google' });
+      out.push({ id: 'google:' + l, name: 'Google ' + _langLabel(l) + ' (fallback — one shared voice)', lang: l, gender: '', engine: 'google' });
     }
     // Live Web Speech voices when the browser exposes them.
     try {
