@@ -158,9 +158,15 @@
 
         <div class="field">
           <label class="field-label" for="voiceSelect" data-i18n="voice_label">Voice</label>
-          <select id="voiceSelect" class="select">
-            <option value="" data-i18n="voice_loading">Loading voices…</option>
-          </select>
+          <div class="voice-row">
+            <select id="voiceSelect" class="select">
+              <option value="" data-i18n="voice_loading">Loading voices…</option>
+            </select>
+            <button id="btnVoicePreview" class="btn btn-secondary btn-small" type="button" aria-label="Preview voice">
+              <span aria-hidden="true">&#128266;</span>
+              <span data-i18n="voice_preview">Preview</span>
+            </button>
+          </div>
         </div>
       </div>
 

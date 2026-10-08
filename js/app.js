@@ -94,6 +94,9 @@
     easy_mode: 'Easy Mode',
     easyOn: 'Easy Mode on — just Type, Generate, Play, Save.',
     easyOff: 'Easy Mode off — all options visible.',
+    voice_preview: 'Preview',
+    previewing: 'Previewing voice…',
+    engineFallback: 'Note: {want} voice was unavailable — played with {got} instead (all voices may sound similar).',
     dialogue_mode: 'Dialogue mode (two voices)',
     dialogue_hint: 'Start lines with 1: for Voice 1 and 2: for Voice 2.',
     dialogueNeedMarkers: 'Dialogue mode: start lines with 1: and 2: to assign voices.',
@@ -450,6 +453,57 @@
       });
     }
     loadVoices();
+    // Voice preview: hear the selected voice before generating.
+    var pv = $('btnVoicePreview');
+    if (pv) pv.addEventListener('click', previewVoice);
+  }
+
+  // Preview the currently selected voice with a short sample.
+  async function previewVoice() {
+    if (!hasModule('TTS') || typeof window.TTS.synthesize !== 'function') return;
+    var vid = state.voiceId;
+    if (!vid) { setMsg(t('noVoices'), true); return; }
+    var sample = (state.ttsLang === 'ur') ? 'السلام علیکم! یہ میری آواز کا نمونہ ہے۔'
+      : (state.ttsLang === 'hi') ? 'नमस्ते! यह मेरी आवाज़ का नमूना है।'
+      : 'Hello! This is a preview of my voice.';
+    setMsg(t('previewing'));
+    stopAll();
+    try {
+      var r = await window.TTS.synthesize(sample, vid);
+      if (!r || r.error) { setMsg(t('ttsFailed') + ': ' + ((r && r.error) || ''), true); return; }
+      // Play directly without touching the main pipeline.
+      if (r.audioBuffer) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) {
+          var ctx = new AC();
+          var src = ctx.createBufferSource();
+          src.buffer = r.audioBuffer;
+          src.connect(ctx.destination);
+          src.onended = function () { try { ctx.close(); } catch (e) {} setMsg(t('done')); };
+          setMsg(t('playing'));
+          src.start(0);
+          state.previewCtx = ctx; state.previewSrc = src;
+          return;
+        }
+      }
+      if (r.utterance && typeof window.speechSynthesis !== 'undefined') {
+        setMsg(t('playing'));
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(r.utterance);
+        return;
+      }
+      if (r.url) {
+        var el = new Audio(r.url);
+        state.previewEl = el;
+        el.onended = function () { setMsg(t('done')); };
+        setMsg(t('playing'));
+        el.play();
+        return;
+      }
+      setMsg(t('noAudio'), true);
+    } catch (e) {
+      setMsg(t('ttsFailed') + ': ' + (e && e.message || e), true);
+    }
   }
 
   // SPEC §3: TTS.getVoices(lang) -> Promise<[{id,name,lang,gender,engine}]>
@@ -766,6 +820,12 @@
     state.playToken++; // invalidate any in-flight Google chunk chain
     if (state.recording) { stopRecording(); }
     if (state.dictating) { stopDictate(); }
+    // Stop voice preview too.
+    try { if (state.previewSrc) state.previewSrc.stop(); } catch (e) {}
+    try { if (state.previewCtx) state.previewCtx.close(); } catch (e) {}
+    state.previewSrc = null; state.previewCtx = null;
+    try { if (state.previewEl) state.previewEl.pause(); } catch (e) {}
+    state.previewEl = null;
     stopMusic();
     cleanupPitched();
     try {
@@ -1055,6 +1115,24 @@
     releaseLastAudio();
     state.lastResult = result;
     if (result.url) state.lastUrl = result.url;
+    // Honesty: if the selected voice's engine failed and a fallback produced
+    // the audio, say so — e.g. all Edge voices collapse to one Google voice.
+    try {
+      var selVoice = null;
+      var vsel = $('voiceSelect');
+      if (vsel && vsel.selectedOptions && vsel.selectedOptions[0]) {
+        selVoice = vsel.selectedOptions[0].textContent || '';
+      }
+      state.lastEngineNote = null;
+      if (result.engine && state.voiceId) {
+        var wantEngine = state.voiceId.split(':')[0];
+        if (wantEngine && result.engine !== wantEngine && result.engine !== 'dialogue' && result.engine !== 'mic') {
+          state.lastEngineNote = t('engineFallback')
+            .replace('{want}', wantEngine).replace('{got}', result.engine);
+        }
+      }
+      state.lastVoiceLabel = selVoice;
+    } catch (e) {}
 
     if (result.audioBuffer) {
       // Audio path: real buffer -> lip-sync analysis -> playback.
@@ -1076,6 +1154,8 @@
       // say so instead of silently substituting the device voice.
       if (state.voiceId && state.voiceId.indexOf('chatterbox:') === 0) {
         setMsg(t('chatterboxBusy'));
+      } else if (state.lastEngineNote) {
+        setMsg(state.lastEngineNote, true);
       } else {
         setMsg(t('readyTapPlay'));
       }
