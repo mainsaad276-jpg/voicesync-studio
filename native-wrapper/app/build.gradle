@@ -19,6 +19,7 @@ if (keystorePropsFile.exists()) {
 android {
     namespace 'com.abubakarytzone.voicesync'
     compileSdk 36
+    buildToolsVersion "36.1.0"
 
     defaultConfig {
         applicationId 'com.abubakarytzone.voicesync'
@@ -59,11 +60,17 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    buildFeatures {
+        // MainActivity reads BuildConfig.DEBUG to gate WebView debugging.
+        buildConfig = true
+    }
 }
 
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'          // WebViewAssetLoader, WebViewClientCompat
     implementation 'androidx.appcompat:appcompat:1.7.0'     // AppCompatActivity, WindowCompat (edge-to-edge)
+    implementation 'androidx.core:core-splashscreen:1.0.1'  // Android 12+ SplashScreen backport (values-v31 theme)
     // Crashlytics SDK only — no google-services plugin, no google-services.json.
     // CrashReporter.init() probes for a configured FirebaseApp and silently
     // disables reporting when it is absent.
