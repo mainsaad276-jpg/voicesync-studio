@@ -214,13 +214,13 @@ async function main() {
   t('char_array_exists', !!charM);
   var chars = [];
   if (charM) {
-    var re = /\{\s*name:\s*'([^']+)',\s*voiceId:\s*'([^']+)',\s*lang:\s*'([^']+)',\s*gender:\s*'([^']+)',\s*style:\s*'([^']+)'\s*\}/g;
+    var re = /\{\s*name:\s*'([^']+)',\s*voiceId:\s*'([^']+)',\s*lang:\s*'([^']+)',\s*gender:\s*'([^']+)',\s*style:\s*'([^']+)'(?:,\s*pitch:\s*(-?\d+))?\s*\}/g;
     var cm;
     while ((cm = re.exec(charM[1])) !== null) {
-      chars.push({ name: cm[1], voiceId: cm[2], lang: cm[3], gender: cm[4], style: cm[5] });
+      chars.push({ name: cm[1], voiceId: cm[2], lang: cm[3], gender: cm[4], style: cm[5], pitch: cm[6] ? parseInt(cm[6], 10) : 0 });
     }
   }
-  t('char_count_12', chars.length === 12);
+  t('char_count_27', chars.length === 27);
   // Each mapped ID must exist in EDGE_VOICES (real voices only)
   var edgeIds = {};
   var evm = ttsjs.match(/var EDGE_VOICES = \[([\s\S]*?)\];/);
@@ -233,8 +233,88 @@ async function main() {
     t('char_engine_edge_' + c.name, c.voiceId.indexOf('edge:') === 0);
   });
   // Required characters from the boss's screenshot
-  ['Ahmed', 'Fatima', 'Bilal', 'Aisha', 'Priya', 'Ivan', 'Natasha'].forEach(function (nm) {
+  ['Ahmed', 'Fatima', 'Bilal', 'Aisha', 'Dastaan Go', 'Guddu', 'Priya Sharma', 'Arjun Kumar', 'Ananya', 'Ivan Petrov', 'Natasha Volkova', 'Dmitri', 'Alex Carter', 'Sophia Miller', 'Emma Rose', 'The Narrator', 'Oliver Reed', 'Amelia Hart', 'Omar Farooq', 'Layla Noor', 'Yusuf Ali', 'Hans Weber', 'Pierre Dubois', 'Kenji Sato', 'Yuki Tanaka', 'Seo-yeon', 'Chotu'].forEach(function (nm) {
     t('char_required_' + nm, chars.some(function (c) { return c.name === nm; }));
+  });
+  // Characters sharing one base voice must differ by pitch (boss: no "voice 1" clones)
+  var byVoice = {};
+  chars.forEach(function (c) {
+    (byVoice[c.voiceId] = byVoice[c.voiceId] || []).push(c);
+  });
+  Object.keys(byVoice).forEach(function (vid) {
+    var group = byVoice[vid];
+    if (group.length > 1) {
+      var pitches = group.map(function (c) { return c.pitch; });
+      var distinct = pitches.every(function (p, i) { return pitches.indexOf(p) === i; });
+      t('char_pitch_distinct_' + vid, distinct);
+    }
+  });
+  t('charInitials_fn', appjs.indexOf('function charInitials') !== -1);
+  t('pitchDisplay_fn', appjs.indexOf('function pitchDisplay') !== -1);
+
+  /* 13. Round 2: Free Voice Over sections (language pills, text, generate,
+        engines, clone premium, guide, footer) */
+  // Language pills
+  t('r2_langpills_html', html.indexOf('id="langPills"') !== -1);
+  t('r2_langsearch_html', html.indexOf('id="langSearch"') !== -1);
+  t('r2_browservoice_html', html.indexOf('id="browserVoiceSelect"') !== -1);
+  t('r2_langpills_js', appjs.indexOf('var LANG_PILLS') !== -1);
+  t('r2_setlangpill_fn', appjs.indexOf('function setLangPill') !== -1);
+  t('r2_renderlangpills_fn', appjs.indexOf('function renderLangPills') !== -1);
+  t('r2_refreshbrowser_fn', appjs.indexOf('function refreshBrowserVoices') !== -1);
+  t('r2_initlangpills_boot', appjs.indexOf('initLangPills()') !== -1);
+  // Language pill codes are real ttsLang values (en-GB allowed via base match)
+  var pillCodes = ['ur', 'hi', 'ru', 'en', 'en-GB', 'ar', 'es', 'fr'];
+  pillCodes.forEach(function (pc) {
+    t('r2_pillcode_' + pc, appjs.indexOf("code: '" + pc + "'") !== -1);
+  });
+  // Text section
+  t('r2_textcounter_html', html.indexOf('id="textCounter"') !== -1);
+  ['btnSample', 'btnPaste', 'btnCopy', 'btnClear'].forEach(function (id) {
+    t('r2_' + id.toLowerCase() + '_html', html.indexOf('id="' + id + '"') !== -1);
+  });
+  t('r2_inittextbuttons_fn', appjs.indexOf('function initTextButtons') !== -1);
+  t('r2_counter_words', appjs.indexOf('counter_words') !== -1);
+  // Generate section
+  t('r2_gen_title', html.indexOf('gen_title') !== -1);
+  ['btnGenBig', 'btnListenBig', 'btnPauseBig', 'btnStopBig', 'btnDlMp3Big'].forEach(function (id) {
+    t('r2_' + id.toLowerCase() + '_html', html.indexOf('id="' + id + '"') !== -1);
+  });
+  t('r2_pause_fn', appjs.indexOf('function pausePlayback') !== -1);
+  t('r2_selcharbox_html', html.indexOf('id="selCharBox"') !== -1);
+  t('r2_updateselcharbox_fn', appjs.indexOf('function updateSelCharBox') !== -1);
+  t('r2_audioplayer_html', html.indexOf('id="audioPlayer"') !== -1);
+  t('r2_showaudioplayer_fn', appjs.indexOf('function showAudioPlayer') !== -1);
+  // Engines section
+  t('r2_engines_html', html.indexOf('engines_title') !== -1);
+  ['eng_google_h', 'eng_studio_h', 'eng_browser_h'].forEach(function (k) {
+    t('r2_' + k, html.indexOf(k) !== -1);
+  });
+  // Clone premium (locked)
+  t('r2_clone_html', html.indexOf('id="cloneName"') !== -1);
+  t('r2_clonebtn_html', html.indexOf('id="btnClonePremium"') !== -1);
+  t('r2_clonesample_html', html.indexOf('id="btnCloneSample"') !== -1);
+  t('r2_initclone_fn', appjs.indexOf('function initClone') !== -1);
+  t('r2_initclone_boot', appjs.indexOf('initClone()') !== -1);
+  t('r2_clone_locked_msg', appjs.indexOf('clone_locked_msg') !== -1);
+  // Guide + footer
+  t('r2_guide_html', html.indexOf('guide_title') !== -1);
+  t('r2_footer_ur', html.indexOf('footer_ur') !== -1);
+  t('r2_footer_brand', html.indexOf('footer_brand') !== -1);
+  // i18n keys present in both languages
+  ['langpills_title', 'browser_voice_label', 'yourtext_title', 'counter_words',
+   'btn_sample', 'btn_paste', 'btn_copy', 'btn_clear', 'gen_title', 'speed_sub',
+   'pitch_sub', 'btn_pause', 'dl_help', 'selchar_hint', 'char_howto',
+   'engines_title', 'eng_google_h', 'clone_title', 'clone_create', 'clone_locked',
+   'guide_title', 'footer_ur', 'footer_brand', 'paused', 'sample_text'
+  ].forEach(function (k) {
+    t('r2_i18n_en_' + k, new RegExp(k + ":\\s*'").test(i18njs));
+  });
+  var urBlock2 = i18njs.match(/ur:\s*\{([\s\S]*?)\n    \}/);
+  ['langpills_title', 'browser_voice_label', 'yourtext_title', 'btn_sample',
+   'gen_title', 'btn_pause', 'clone_create', 'guide_title', 'footer_ur'
+  ].forEach(function (k) {
+    t('r2_i18n_ur_' + k, !!urBlock2 && urBlock2[1].indexOf(k + ':') !== -1);
   });
   // charMatches filter logic
   var charMatchesFn = grab(appjs, 'charMatches');
@@ -259,8 +339,8 @@ async function main() {
   t('char_css_cream', css.indexOf('#f7f3ea') !== -1);
   t('char_css_green', css.indexOf('#1d5c4d') !== -1);
   // previewVoice accepts voiceId param (character play buttons)
-  t('char_preview_param', /async function previewVoice\(voiceId\)/.test(appjs));
-  t('char_preview_call', appjs.indexOf('previewVoice(c.voiceId)') !== -1);
+  t('char_preview_param', /async function previewVoice\(voiceId, pitchOverride\)/.test(appjs));
+  t('char_preview_call', appjs.indexOf('previewVoice(c.voiceId, c.pitch || 0)') !== -1);
   t('char_select_fn', appjs.indexOf('function selectCharacter') !== -1);
   t('char_init_boot', appjs.indexOf('initCharVoices()') !== -1);
   // i18n keys in both languages

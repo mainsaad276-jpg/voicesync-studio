@@ -235,9 +235,38 @@
   /* ---------------- text input ---------------- */
 
   function updateCharCount() {
-    var box = $('textInput'), cc = $('charCount');
-    if (!box || !cc) return;
-    cc.textContent = String(box.value.length);
+    var box = $('textInput'), tc = $('textCounter');
+    if (!box || !tc) return;
+    var txt = box.value;
+    var words = txt.trim() ? txt.trim().split(/\s+/).length : 0;
+    var parts = Math.max(1, Math.ceil(txt.length / 2000));
+    tc.textContent = txt.length + ' ' + t('counter_chars') + ' \u2022 ' +
+      words + ' ' + t('counter_words') + ' \u2022 ' + parts + ' ' + t('counter_parts');
+  }
+
+  function initTextButtons() {
+    var box = $('textInput');
+    var smp = $('btnSample'), pst = $('btnPaste'), cpy = $('btnCopy'), clr = $('btnClear');
+    if (smp) smp.addEventListener('click', function () {
+      if (!box) return;
+      box.value = t('sample_text');
+      updateCharCount();
+    });
+    if (pst) pst.addEventListener('click', function () {
+      if (!box || !navigator.clipboard || !navigator.clipboard.readText) { setMsg(t('paste_unavail'), true); return; }
+      navigator.clipboard.readText().then(function (tx) {
+        box.value = tx || ''; updateCharCount();
+      }).catch(function () { setMsg(t('paste_unavail'), true); });
+    });
+    if (cpy) cpy.addEventListener('click', function () {
+      if (!box || !navigator.clipboard || !navigator.clipboard.writeText) return;
+      navigator.clipboard.writeText(box.value).then(function () { setMsg(t('copied')); })
+        .catch(function () {});
+    });
+    if (clr) clr.addEventListener('click', function () {
+      if (!box) return;
+      box.value = ''; updateCharCount();
+    });
   }
 
   function initTextInput() {
@@ -303,6 +332,10 @@
     }
   }
 
+  // Pitch slider shows a multiplier like the reference UI (1.00 = normal).
+  // Behavior unchanged: semitones drive detune/utterance pitch.
+  function pitchDisplay(st) { return Math.pow(2, (st || 0) / 12).toFixed(2); }
+
   function initTuning() {
     var sr = $('speedRange'), pr = $('pitchRange');
     var sv = $('speedVal'), pv = $('pitchVal');
@@ -312,7 +345,7 @@
     });
     if (pr) pr.addEventListener('input', function () {
       state.pitch = parseInt(pr.value, 10) || 0;
-      if (pv) pv.textContent = (state.pitch > 0 ? '+' : '') + state.pitch;
+      if (pv) pv.textContent = pitchDisplay(state.pitch);
     });
   }
 
@@ -479,10 +512,12 @@
   }
 
   // Preview the given (or currently selected) voice with a short sample.
-  async function previewVoice(voiceId) {
+  async function previewVoice(voiceId, pitchOverride) {
     if (!hasModule('TTS') || typeof window.TTS.synthesize !== 'function') return;
     var vid = voiceId || state.voiceId;
     if (!vid) { setMsg(t('noVoices'), true); return; }
+    // Round 2: character pitch offset honored in preview (does not clobber state).
+    var pit = (typeof pitchOverride === 'number') ? pitchOverride : (state.pitch || 0);
     // Q4: busy-guard — no overlapping previews.
     if (state.previewing) return;
     state.previewing = true;
@@ -517,7 +552,7 @@
       updateEngineBadge();
       if (state.lastEngineNote) setMsg(state.lastEngineNote, true);
       // Q5: preview honors speed/pitch.
-      var spd = state.speed || 1, pit = state.pitch || 0;
+      var spd = state.speed || 1;
       // Play directly without touching the main pipeline.
       if (r.audioBuffer) {
         var AC = window.AudioContext || window.webkitAudioContext;
@@ -611,6 +646,7 @@
     }
     sel.value = pick.id;
     state.voiceId = pick.id;
+    refreshBrowserVoices(voices);
     sel.onchange = function () {
       state.voiceId = sel.value;
       try { localStorage.setItem('voicesync-voice', sel.value); } catch (e) {}
@@ -620,22 +656,148 @@
     renderCharCards();
   }
 
+  /* ---------------- Language pills (Free Voice Over skin) ---------------- */
+  var LANG_PILLS = [
+    { code: 'ur',    label: 'Urdu • \u0627\u0631\u062f\u0648' },
+    { code: 'hi',    label: 'Hindi • \u0939\u093f\u0928\u094d\u0926\u0940' },
+    { code: 'ru',    label: 'Russian • \u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
+    { code: 'en',    label: 'English (US) • English' },
+    { code: 'en-GB', label: 'English (UK) • English UK' },
+    { code: 'ar',    label: 'Arabic • \u0627\u0644\u0639\u0631\u0628\u064a\u0629' },
+    { code: 'es',    label: 'Spanish • Espa\u00f1ol' },
+    { code: 'fr',    label: 'French • Fran\u00e7ais' }
+  ];
+
+  function renderLangPills() {
+    var wrap = $('langPills');
+    if (!wrap) return;
+    var q = ($('langSearch') && $('langSearch').value || '').trim().toLowerCase();
+    wrap.innerHTML = '';
+    LANG_PILLS.forEach(function (L) {
+      if (q && L.label.toLowerCase().indexOf(q) === -1) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lang-pill' + (state.ttsLang === L.code ? ' selected' : '');
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', state.ttsLang === L.code ? 'true' : 'false');
+      b.textContent = L.label;
+      b.addEventListener('click', function () { setLangPill(L.code); });
+      wrap.appendChild(b);
+    });
+  }
+
+  function setLangPill(code) {
+    state.ttsLang = code;
+    try { localStorage.setItem('voicesync-ttsLang', code); } catch (e) {}
+    // Sync the full language dropdown (exact or base-language match).
+    var tl = $('ttsLang');
+    if (tl) {
+      var base = String(code).split('-')[0];
+      var matched = false;
+      for (var i = 0; i < tl.options.length; i++) {
+        if (tl.options[i].value === code) { tl.value = code; matched = true; break; }
+      }
+      if (!matched) {
+        for (var j = 0; j < tl.options.length; j++) {
+          if (tl.options[j].value === base) { tl.value = base; break; }
+        }
+      }
+    }
+    loadVoices();
+    renderLangPills();
+  }
+
+  function initLangPills() {
+    renderLangPills();
+    var s = $('langSearch');
+    if (s) s.addEventListener('input', renderLangPills);
+  }
+
+  // Browser (device) voices dropdown — offline engine only.
+  function refreshBrowserVoices(voices) {
+    var sel = $('browserVoiceSelect');
+    if (!sel) return;
+    var keep = sel.value;
+    sel.innerHTML = '';
+    var dev = (voices || []).filter(function (v) { return v.engine === 'webspeech'; });
+    if (!dev.length) {
+      var o0 = document.createElement('option');
+      o0.value = '';
+      o0.textContent = t('browser_voice_none');
+      sel.appendChild(o0);
+      return;
+    }
+    dev.forEach(function (v) {
+      var o = document.createElement('option');
+      o.value = v.id;
+      o.textContent = v.name;
+      sel.appendChild(o);
+    });
+    sel.value = keep || '';
+    sel.onchange = function () {
+      if (!sel.value) return;
+      state.voiceId = sel.value;
+      try { localStorage.setItem('voicesync-voice', sel.value); } catch (e) {}
+      var main = $('voiceSelect');
+      if (main) main.value = sel.value;
+      renderCharCards();
+      updateSelCharBox();
+    };
+  }
+
   /* ---------------- Character Voices (Free Voice Over skin) ---------------- */
   // Each character maps to a REAL Edge Neural voice ID (edge:<ShortName>).
+  // `pitch` is a semitone offset applied on select/preview so characters that
+  // share one base voice still sound genuinely different (boss: "sab ki
+  // voice 1 jaisi na ho"). Verified against EDGE_VOICES in QA.
   var CHARACTERS = [
-    { name: 'Ahmed',   voiceId: 'edge:ur-PK-AsadNeural',      lang: 'Urdu',    gender: 'Male',   style: 'News Narrator' },
-    { name: 'Fatima',  voiceId: 'edge:ur-PK-UzmaNeural',      lang: 'Urdu',    gender: 'Female', style: 'Soft Story' },
-    { name: 'Bilal',   voiceId: 'edge:ur-IN-SalmanNeural',    lang: 'Urdu',    gender: 'Male',   style: 'Deep Calm' },
-    { name: 'Aisha',   voiceId: 'edge:ur-IN-GulNeural',       lang: 'Urdu',    gender: 'Female', style: 'Kids Story' },
-    { name: 'Priya',   voiceId: 'edge:hi-IN-SwaraNeural',     lang: 'Hindi',   gender: 'Female', style: 'Storyteller' },
-    { name: 'Arjun',   voiceId: 'edge:hi-IN-MadhurNeural',    lang: 'Hindi',   gender: 'Male',   style: 'Narrator' },
-    { name: 'Ivan',    voiceId: 'edge:ru-RU-DmitryNeural',    lang: 'Russian', gender: 'Male',   style: 'Deep Voice' },
-    { name: 'Natasha', voiceId: 'edge:ru-RU-SvetlanaNeural',  lang: 'Russian', gender: 'Female', style: 'Soft Voice' },
-    { name: 'James',   voiceId: 'edge:en-US-ChristopherNeural', lang: 'English', gender: 'Male', style: 'Narrator' },
-    { name: 'Emma',    voiceId: 'edge:en-US-AriaNeural',      lang: 'English', gender: 'Female', style: 'Friendly' },
-    { name: 'Omar',    voiceId: 'edge:ar-SA-HamedNeural',     lang: 'Arabic',  gender: 'Male',   style: 'News' },
-    { name: 'Layla',   voiceId: 'edge:ar-SA-ZariyahNeural',   lang: 'Arabic',  gender: 'Female', style: 'Story' }
+    // Urdu
+    { name: 'Ahmed',        voiceId: 'edge:ur-PK-AsadNeural',    lang: 'Urdu',    gender: 'Male',   style: 'News Narrator', pitch: 0 },
+    { name: 'Fatima',       voiceId: 'edge:ur-PK-UzmaNeural',    lang: 'Urdu',    gender: 'Female', style: 'Soft Story', pitch: 0 },
+    { name: 'Bilal',        voiceId: 'edge:ur-IN-SalmanNeural',  lang: 'Urdu',    gender: 'Male',   style: 'Deep Calm Voice', pitch: 0 },
+    { name: 'Aisha',        voiceId: 'edge:ur-IN-GulNeural',     lang: 'Urdu',    gender: 'Female', style: 'Kids Teacher', pitch: 0 },
+    { name: 'Dastaan Go',   voiceId: 'edge:ur-PK-AsadNeural',    lang: 'Urdu',    gender: 'Male',   style: 'Storyteller \u2022 Dastaan', pitch: -4 },
+    { name: 'Guddu',        voiceId: 'edge:ur-IN-GulNeural',     lang: 'Urdu',    gender: 'Female', style: 'Cartoon \u2022 Urdu Kids Fun', pitch: 7 },
+    // Hindi
+    { name: 'Priya Sharma', voiceId: 'edge:hi-IN-SwaraNeural',   lang: 'Hindi',   gender: 'Female', style: 'Bollywood Story', pitch: 0 },
+    { name: 'Arjun Kumar',  voiceId: 'edge:hi-IN-MadhurNeural',  lang: 'Hindi',   gender: 'Male',   style: 'News Anchor', pitch: 0 },
+    { name: 'Ananya',       voiceId: 'edge:hi-IN-SwaraNeural',   lang: 'Hindi',   gender: 'Female', style: 'Soft Narration', pitch: 3 },
+    // Russian
+    { name: 'Ivan Petrov',     voiceId: 'edge:ru-RU-DmitryNeural',   lang: 'Russian', gender: 'Male',   style: 'Deep Narrator', pitch: 0 },
+    { name: 'Natasha Volkova', voiceId: 'edge:ru-RU-SvetlanaNeural', lang: 'Russian', gender: 'Female', style: 'Clear Studio', pitch: 0 },
+    { name: 'Dmitri',          voiceId: 'edge:ru-RU-DmitryNeural',   lang: 'Russian', gender: 'Male',   style: 'Documentary', pitch: -3 },
+    // English (US)
+    { name: 'Alex Carter',   voiceId: 'edge:en-US-ChristopherNeural', lang: 'English', gender: 'Male',   style: 'Youtube Voice', pitch: 0 },
+    { name: 'Sophia Miller', voiceId: 'edge:en-US-JennyNeural',       lang: 'English', gender: 'Female', style: 'Natural', pitch: 0 },
+    { name: 'Emma Rose',     voiceId: 'edge:en-US-AriaNeural',        lang: 'English', gender: 'Female', style: 'Kids/Friendly', pitch: 0 },
+    { name: 'The Narrator',  voiceId: 'edge:en-US-GuyNeural',        lang: 'English', gender: 'Male',   style: 'Deep \u2022 Movie Trailer', pitch: -5 },
+    // English (UK)
+    { name: 'Oliver Reed',  voiceId: 'edge:en-GB-RyanNeural',  lang: 'English', gender: 'Male',   style: 'BBC Style', pitch: 0 },
+    { name: 'Amelia Hart',  voiceId: 'edge:en-GB-SoniaNeural', lang: 'English', gender: 'Female', style: 'Elegant', pitch: 0 },
+    // Arabic
+    { name: 'Omar Farooq', voiceId: 'edge:ar-SA-HamedNeural',  lang: 'Arabic', gender: 'Male',   style: 'News', pitch: 0 },
+    { name: 'Layla Noor',  voiceId: 'edge:ar-SA-ZariyahNeural', lang: 'Arabic', gender: 'Female', style: 'Soft', pitch: 0 },
+    // Bengali
+    { name: 'Yusuf Ali',   voiceId: 'edge:bn-BD-PradeepNeural', lang: 'Bengali', gender: 'Male', style: 'Narrator', pitch: 0 },
+    // German
+    { name: 'Hans Weber',  voiceId: 'edge:de-DE-ConradNeural', lang: 'German', gender: 'Male', style: 'Documentary', pitch: 0 },
+    // French
+    { name: 'Pierre Dubois', voiceId: 'edge:fr-FR-HenriNeural', lang: 'French', gender: 'Male', style: 'Storyteller', pitch: 0 },
+    // Japanese
+    { name: 'Kenji Sato',  voiceId: 'edge:ja-JP-NanamiNeural', lang: 'Japanese', gender: 'Male',   style: 'Anime Narrator', pitch: -6 },
+    { name: 'Yuki Tanaka', voiceId: 'edge:ja-JP-NanamiNeural', lang: 'Japanese', gender: 'Female', style: 'Friendly', pitch: 0 },
+    // Korean
+    { name: 'Seo-yeon',    voiceId: 'edge:ko-KR-SunHiNeural', lang: 'Korean', gender: 'Female', style: 'K-Drama Style', pitch: 0 },
+    // Cartoon
+    { name: 'Chotu',       voiceId: 'edge:hi-IN-MadhurNeural', lang: 'Hindi', gender: 'Male', style: 'Boy \u2022 Funny Kids', pitch: 8 }
   ];
+
+  // Two-letter initials like the reference ("PS", "AK", "IP").
+  function charInitials(name) {
+    var parts = String(name || '').trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  }
 
   function charMatches(c, q) {
     if (!q) return true;
@@ -664,7 +826,7 @@
       var avatar = document.createElement('span');
       avatar.className = 'char-avatar';
       avatar.setAttribute('aria-hidden', 'true');
-      avatar.textContent = c.name.charAt(0);
+      avatar.textContent = charInitials(c.name);
       card.appendChild(avatar);
 
       var play = document.createElement('span');
@@ -674,7 +836,7 @@
       play.textContent = '▶';
       play.addEventListener('click', function (ev) {
         ev.stopPropagation();
-        previewVoice(c.voiceId);
+        previewVoice(c.voiceId, c.pitch || 0);
       });
       card.appendChild(play);
 
@@ -709,7 +871,15 @@
   // Clicking a card selects that voice for generation.
   function selectCharacter(c) {
     state.voiceId = c.voiceId;
+    // Character pitch offset so shared base voices sound different.
+    if (typeof c.pitch === 'number') {
+      state.pitch = c.pitch;
+      var pr = $('pitchRange'), pv = $('pitchVal');
+      if (pr) pr.value = String(c.pitch);
+      if (pv) pv.textContent = pitchDisplay(c.pitch);
+    }
     try { localStorage.setItem('voicesync-voice', c.voiceId); } catch (e) {}
+    updateSelCharBox();
     var sel = $('voiceSelect');
     if (sel) {
       var found = false;
@@ -731,6 +901,7 @@
 
   function initCharVoices() {
     renderCharCards();
+    updateSelCharBox();
     var s = $('charSearch');
     if (s) s.addEventListener('input', renderCharCards);
   }
@@ -790,7 +961,7 @@
       if (typeof p.pitch === 'number') {
         state.pitch = p.pitch;
         var pr = $('pitchRange'); if (pr) { pr.value = p.pitch; }
-        var pl = $('pitchVal'); if (pl) pl.textContent = (p.pitch > 0 ? '+' : '') + p.pitch;
+        var pl = $('pitchVal'); if (pl) pl.textContent = pitchDisplay(p.pitch);
       }
       if (typeof p.dialogueMode === 'boolean') {
         state.dialogueMode = p.dialogueMode;
@@ -1007,6 +1178,7 @@
     state.previewSrc = null; state.previewCtx = null;
     try { if (state.previewEl) state.previewEl.pause(); } catch (e) {}
     state.previewEl = null;
+    showAudioPlayer(null);
     stopMusic();
     cleanupPitched();
     try {
@@ -1125,8 +1297,22 @@
   // LipSync.makeTalkingCues (SPEC §3): NEVER a dead mouth on this path.
   // Avatar.speak only reads .currentTime, so a virtual clock that
   // accumulates across chunks is a valid timeSrc.
+  // Round 2: mirror playable URLs into the visible <audio> player (video reference).
+  function showAudioPlayer(url) {
+    var ap = $('audioPlayer');
+    if (!ap) return;
+    if (url) {
+      try { ap.src = url; } catch (e) {}
+      ap.hidden = false;
+    } else {
+      try { ap.pause(); ap.removeAttribute('src'); } catch (e) {}
+      ap.hidden = true;
+    }
+  }
+
   function startGooglePlayback(result) {
     stopAll();
+    showAudioPlayer(result.url);
     var token = state.playToken;
     var urls = (result.urls && result.urls.length) ? result.urls.slice() : [result.url];
     var dur = result.duration || 5;
@@ -1219,7 +1405,7 @@
   /* ---------------- generate flow ---------------- */
 
   function setBusy(busy) {
-    ['btnGenerate', 'btnPlay'].forEach(function (id) {
+    ['btnGenerate', 'btnPlay', 'btnGenBig', 'btnListenBig'].forEach(function (id) {
       var b = $(id);
       if (b) b.disabled = !!busy;
     });
@@ -1296,6 +1482,7 @@
     releaseLastAudio();
     state.lastResult = result;
     if (result.url) state.lastUrl = result.url;
+    if (result.url) showAudioPlayer(result.url);
     // Honesty: if the selected voice's engine failed and a fallback produced
     // the audio, say so — e.g. all Edge voices collapse to one Google voice.
     try {
@@ -1370,6 +1557,72 @@
     if (p) p.addEventListener('click', replay);
     if (s) s.addEventListener('click', function () { stopAll(); setMsg(t('stopped')); });
     if (r) r.addEventListener('click', toggleRecord);
+    // Round 2 big buttons (Free Voice Over skin) — same handlers.
+    var gb = $('btnGenBig'), lb = $('btnListenBig'), pb = $('btnPauseBig'),
+        sb = $('btnStopBig'), db = $('btnDlMp3Big');
+    if (gb) gb.addEventListener('click', onGenerate);
+    if (lb) lb.addEventListener('click', replay);
+    if (pb) pb.addEventListener('click', pausePlayback);
+    if (sb) sb.addEventListener('click', function () { stopAll(); setMsg(t('stopped')); });
+    if (db) db.addEventListener('click', exportMp3);
+  }
+
+  // Round 2: pause current playback (Web Audio / speech / audio element).
+  function pausePlayback() {
+    try {
+      if (state.audioCtx && state.audioCtx.state === 'running') {
+        state.audioCtx.suspend(); setMsg(t('paused')); return;
+      }
+    } catch (e) {}
+    try {
+      if (window.speechSynthesis && window.speechSynthesis.speaking &&
+          !window.speechSynthesis.paused) {
+        window.speechSynthesis.pause(); setMsg(t('paused')); return;
+      }
+    } catch (e) {}
+    try {
+      if (state.previewEl && !state.previewEl.paused) {
+        state.previewEl.pause(); setMsg(t('paused')); return;
+      }
+    } catch (e) {}
+    try {
+      var ap = $('audioPlayer');
+      if (ap && !ap.paused) { ap.pause(); setMsg(t('paused')); return; }
+    } catch (e) {}
+    setMsg(t('nothing_to_pause'), true);
+  }
+
+  // Round 2: selected-character info box under the Download button.
+  function updateSelCharBox() {
+    var box = $('selCharBox');
+    if (!box) return;
+    var c = null;
+    for (var i = 0; i < CHARACTERS.length; i++) {
+      if (CHARACTERS[i].voiceId === state.voiceId) { c = CHARACTERS[i]; break; }
+    }
+    if (c) {
+      box.innerHTML = '';
+      var b = document.createElement('b'); b.textContent = c.name;
+      box.appendChild(b);
+      box.appendChild(document.createTextNode(
+        ' selected \u2014 ' + c.lang + ' \u2022 ' + c.gender + ' \u2022 ' + c.style +
+        '. ' + t('selchar_hint')));
+    } else {
+      box.textContent = t('selchar_none');
+    }
+  }
+
+  // Round 2: voice-cloning premium (locked UI).
+  function initClone() {
+    var sb = $('btnCloneSample'), cf = $('cloneFile'), cb = $('btnClonePremium');
+    if (sb && cf) sb.addEventListener('click', function () { cf.click(); });
+    if (cf) cf.addEventListener('change', function () {
+      var n = $('cloneFileName');
+      if (n) n.textContent = (cf.files && cf.files[0]) ? cf.files[0].name : t('clone_nofile');
+    });
+    if (cb) cb.addEventListener('click', function () {
+      setMsg(t('clone_locked_msg'), true);
+    });
   }
 
   /* ---------------- mic recording: "Record My Voice" ---------------- */
@@ -1851,12 +2104,15 @@
     renderModuleStatus();
     initLanguage();
     initTextInput();
+    initTextButtons();
     initTtsControls();
+    initLangPills();
     initCharVoices();
     initDialogue();
     initPresets();
     initEasyMode();
     initTransport();
+    initClone();
     initExport();
     initProject();
     mountAvatar();

@@ -40,16 +40,44 @@
       <span class="pill gold" data-i18n="pill_clone">★VOICE CLONING — PREMIUM</span>
     </div>
 
+    <!-- Language pills (Free Voice Over skin) -->
+    <section class="card lang-card" aria-labelledby="langpills-heading">
+      <h2 id="langpills-heading" class="card-title">
+        <span data-i18n="langpills_title">LANGUAGE</span> — <span data-i18n="langpills_title_ur">زبان چنیں</span>
+        <span class="muted">(+60)</span>
+      </h2>
+      <input id="langSearch" class="char-search" type="search"
+        data-i18n-ph="langpills_search_ph" placeholder="Search language... Urdu, Hindi, Russian, Arabic"
+        aria-label="Search languages">
+      <div id="langPills" class="lang-pills" role="listbox" aria-label="Languages"></div>
+      <p class="field-label browser-voice-label" data-i18n="browser_voice_label">BROWSER VOICE (sirf Offline engine ke liye)</p>
+      <select id="browserVoiceSelect" class="select" aria-label="Browser voice"></select>
+    </section>
+
     <!-- Text editor + voice selection -->
     <section class="card editor-card" aria-labelledby="editor-heading">
-      <h2 id="editor-heading" class="card-title" data-i18n="editor_title">Script Editor</h2>
+      <h2 id="editor-heading" class="card-title">
+        <span data-i18n="yourtext_title">YOUR TEXT</span> — <span data-i18n="yourtext_title_ur">اپنا ٹیکسٹ لکھیں</span>
+      </h2>
 
-      <label class="field-label" for="textInput" data-i18n="text_label">Your text</label>
       <textarea id="textInput" class="text-input" rows="6"
         data-i18n-ph="text_placeholder" placeholder="Type or paste your script here..."></textarea>
+      <p class="text-counter"><span id="textCounter">0 characters • 0 words • 1 part</span></p>
+      <div class="text-btns">
+        <button id="btnSample" class="btn btn-secondary btn-small" type="button">
+          <span data-i18n="btn_sample">Sample</span>
+        </button>
+        <button id="btnPaste" class="btn btn-secondary btn-small" type="button">
+          <span data-i18n="btn_paste">Paste</span>
+        </button>
+        <button id="btnCopy" class="btn btn-secondary btn-small" type="button">
+          <span data-i18n="btn_copy">Copy</span>
+        </button>
+        <button id="btnClear" class="btn btn-secondary btn-small" type="button">
+          <span data-i18n="btn_clear">Clear</span>
+        </button>
+      </div>
       <div class="editor-meta">
-        <span id="charCount" class="char-count">0</span>
-        <span class="char-count-label" data-i18n="chars">chars</span>
         <label class="roman-toggle" title="Roman Urdu -> اردو">
           <input type="checkbox" id="romanUrdu">
           <span data-i18n="roman_urdu">Roman Urdu</span>
@@ -213,42 +241,100 @@
         data-i18n-ph="char_search_ph" placeholder="Search character... Ahmed, Priya, Ivan, Natasha"
         aria-label="Search character voices">
       <div id="charGrid" class="char-grid" role="listbox" aria-label="Character voices"></div>
+      <p class="char-howto" data-i18n="char_howto">Koi bhi character chunen — us ki awaz sunne ke liye ▶ dabayen. Card par click karne se wahi awaz Generate ke liye select ho jayegi. Har character ka apna alag lehja hai.</p>
     </section>
 
-    <!-- Avatar preview + transport + timeline -->
+    <!-- Free speech engines (Free Voice Over skin) -->
+    <section class="card engines-card" aria-labelledby="engines-heading">
+      <h2 id="engines-heading" class="card-title">
+        <span data-i18n="engines_title">FREE SPEECH ENGINES</span> — <span data-i18n="engines_title_ur">سارے فری انجن</span>
+      </h2>
+      <div class="slider-card">
+        <h4 data-i18n="eng_google_h">Google Free Voice</h4>
+        <p class="engine-tag" data-i18n="eng_google_tag">60+ LANGUAGES • DIRECT PLAY</p>
+        <p data-i18n="eng_google_d">Google ki free public awaz — seedha player se chalti hai, 60+ languages. MP3 file ke liye Studio engine best hai. Internet chahiye.</p>
+      </div>
+      <div class="slider-card engine-best">
+        <h4 data-i18n="eng_studio_h">Studio Voices (Edge Neural)</h4>
+        <p class="engine-tag" data-i18n="eng_studio_tag">HAR CHARACTER KA ALAG LEHJA • MP3 DOWNLOAD</p>
+        <p data-i18n="eng_studio_d">Microsoft Edge ki free neural studio awazen — Asad, Uzma, Swara, Madhur, Dmitry, Svetlana waghera asal mukhtalif awazen, har character ke lehje ke sath. Generate aur Download MP3 ke liye yahi best hai.</p>
+      </div>
+      <div class="slider-card">
+        <h4 data-i18n="eng_browser_h">Browser Voice (Offline)</h4>
+        <p class="engine-tag" data-i18n="eng_browser_tag">BEST OFFLINE • DEVICE VOICES</p>
+        <p data-i18n="eng_browser_d">Aap ke phone/computer ki apni awazen. Baghair internet ke chalti hai. Pitch/speed ka full control.</p>
+      </div>
+      <p class="muted" data-i18n="engines_note">Teenon engines <b>bilkul free</b> hain — koi API key, account ya payment nahi. Ek engine par awaz pasand na aaye to dusra try karen; har language ke liye best engine upar character khud chun deta hai.</p>
+    </section>
+
+    <!-- Generate / Listen / Download (Free Voice Over skin) -->
     <section class="card preview-card" aria-labelledby="preview-heading">
-      <h2 id="preview-heading" class="card-title" data-i18n="preview_title">Preview</h2>
+      <h2 id="preview-heading" class="card-title">
+        <span data-i18n="gen_title">GENERATE, LISTEN &amp; DOWNLOAD</span> — <span data-i18n="gen_title_ur">آواز بنائیں، سنیں اور ڈاؤن لوڈ کریں</span>
+      </h2>
 
       <div id="avatarMount" class="avatar-mount" aria-label="Talking character preview"></div>
 
-      <div class="transport">
-        <button id="btnGenerate" class="btn btn-primary" type="button">
-          <span aria-hidden="true">&#127908;</span>
+      <div class="slider-card">
+        <div class="slider-head">
+          <span><b data-i18n="tune_speed">Speed</b> — <span data-i18n="speed_ur">رفتار</span></span>
+          <span id="speedVal" class="tune-val">1.00×</span>
+        </div>
+        <input type="range" id="speedRange" min="0.5" max="2" step="0.1" value="1" aria-label="Speed">
+        <p class="slider-sub" data-i18n="speed_sub">0.5× slow — 1× normal — 1.8× fast</p>
+      </div>
+
+      <div class="slider-card">
+        <div class="slider-head">
+          <span><b data-i18n="tune_pitch">Pitch</b> — <span data-i18n="pitch_ur">آواز کی اونچائی</span></span>
+          <span id="pitchVal" class="tune-val">1.00</span>
+        </div>
+        <input type="range" id="pitchRange" min="-12" max="12" step="1" value="0" aria-label="Pitch">
+        <p class="slider-sub" data-i18n="pitch_sub">Offline engine + character style par asar hota hai</p>
+      </div>
+
+      <button id="btnGenBig" class="btn btn-big" type="button">
+        <span aria-hidden="true">&#127908;</span>
+        <span><span data-i18n="btn_generate">Generate Voice</span> — <span data-i18n="btn_generate_ur">آواز بنائیں</span></span>
+      </button>
+      <div class="btn-row2">
+        <button id="btnListenBig" class="btn btn-big" type="button">
+          <span aria-hidden="true">&#9654;</span>
+          <span><span data-i18n="btn_play">Listen</span> — <span data-i18n="btn_listen_ur">سنیں</span></span>
+        </button>
+        <button id="btnPauseBig" class="btn btn-big btn-light" type="button">
+          <span aria-hidden="true">&#9208;</span>
+          <span data-i18n="btn_pause">Pause</span>
+        </button>
+      </div>
+      <button id="btnStopBig" class="btn btn-big btn-light" type="button">
+        <span aria-hidden="true">&#9209;</span>
+        <span data-i18n="btn_stop">Stop</span>
+      </button>
+      <button id="btnDlMp3Big" class="btn btn-big" type="button">
+        <span aria-hidden="true">&#11015;</span>
+        <span><span data-i18n="btn_mp3">Download MP3</span> — <span data-i18n="btn_dl_ur">ڈاؤن لوڈ کریں MP3</span></span>
+      </button>
+      <p class="dl-help" data-i18n="dl_help">Awaz generate hone ke baad yahi Download MP3 button dabayen — file ek click me save ho jayegi. Agar download prompt nazar na aaye to neechay player ke ⋮ menu → Download se bhi MP3 save kar sakte hain.</p>
+
+      <audio id="audioPlayer" class="audio-player" controls hidden></audio>
+
+      <div id="selCharBox" class="selchar-box" role="status"></div>
+
+      <div class="transport transport-mini">
+        <button id="btnGenerate" class="btn btn-secondary btn-small" type="button" hidden>
           <span data-i18n="btn_generate">Generate Voice</span>
         </button>
-        <button id="btnPlay" class="btn btn-primary" type="button">
-          <span aria-hidden="true">&#9654;</span>
+        <button id="btnPlay" class="btn btn-secondary btn-small" type="button" hidden>
           <span data-i18n="btn_play">Play</span>
         </button>
-        <button id="btnStop" class="btn btn-secondary" type="button">
-          <span aria-hidden="true">&#9632;</span>
+        <button id="btnStop" class="btn btn-secondary btn-small" type="button" hidden>
           <span data-i18n="btn_stop">Stop</span>
         </button>
-        <button id="btnRecord" class="btn btn-secondary" type="button">
+        <button id="btnRecord" class="btn btn-secondary btn-small" type="button">
           <span aria-hidden="true">&#127908;</span>
           <span data-i18n="btn_record">Record My Voice</span>
         </button>
-      </div>
-
-      <div class="tuning">
-        <div class="tuning-row">
-          <label for="speedRange"><span data-i18n="tune_speed">Speed</span> <span id="speedVal" class="tune-val">1.0×</span></label>
-          <input type="range" id="speedRange" min="0.5" max="2" step="0.1" value="1" aria-label="Speed">
-        </div>
-        <div class="tuning-row">
-          <label for="pitchRange"><span data-i18n="tune_pitch">Pitch</span> <span id="pitchVal" class="tune-val">0</span></label>
-          <input type="range" id="pitchRange" min="-12" max="12" step="1" value="0" aria-label="Pitch">
-        </div>
       </div>
 
       <div class="music-row">
@@ -272,6 +358,73 @@
 
       <p id="statusMsg" class="status" role="status" data-i18n="status_ready">Ready — type your text and press Play.</p>
       <p id="engineBadge" class="engine-badge" hidden></p>
+    </section>
+
+    <!-- Voice cloning — Premium (locked UI, Free Voice Over skin) -->
+    <section class="card clone-card" aria-labelledby="clone-heading">
+      <h2 id="clone-heading" class="card-title">
+        <span data-i18n="clone_title">VOICE CLONING</span>
+        <span class="pill gold" data-i18n="pill_premium">★ PREMIUM</span>
+      </h2>
+      <div class="clone-box">
+        <h3 data-i18n="clone_h3">Apni Awaz Clone Karen — My Voice Clone</h3>
+        <p data-i18n="clone_desc">Apni 15–30 second ki saaf recording dein, AI aap ki bilkul waisi hi awaz bana dega — phir koi bhi text aap ki apni awaz me bolega. Cloned voices sab se zyada pasand ki jati hain, is liye ye feature <b>Premium</b> hai.</p>
+        <div class="slider-card">
+          <h4 data-i18n="clone_steps_h">Clone banane ke steps</h4>
+          <ul class="clone-list">
+            <li data-i18n="clone_step1">15–30 sec saaf awaz record karen (shor na ho)</li>
+            <li data-i18n="clone_step2">Sample upload karen aur clone ka naam dein</li>
+            <li data-i18n="clone_step3">Clone tayyar — har text aap ki awaz me</li>
+          </ul>
+        </div>
+        <div class="slider-card">
+          <h4 data-i18n="clone_why_h">Kyun Premium hai?</h4>
+          <ul class="clone-list">
+            <li data-i18n="clone_why1">Asli voice cloning ke liye paid AI service lagti hai (free API par mumkin nahi)</li>
+            <li data-i18n="clone_why2">Payment ka tareeqa jald add hoga</li>
+            <li data-i18n="clone_why3">Tab tak tamam character voices bilkul free istemal karen</li>
+          </ul>
+        </div>
+        <input id="cloneName" class="char-search" type="text"
+          data-i18n-ph="clone_name_ph" placeholder="Clone ka naam... e.g. Abubakar Voice"
+          aria-label="Clone name">
+        <button id="btnCloneSample" class="btn btn-secondary" type="button">
+          <span aria-hidden="true">&#127908;</span>
+          <span data-i18n="clone_sample">Voice sample chunen</span>
+        </button>
+        <input type="file" id="cloneFile" accept="audio/*" hidden>
+        <p class="muted" id="cloneFileName" data-i18n="clone_nofile">Koi file nahi chuni</p>
+        <button id="btnClonePremium" class="btn btn-orange" type="button">
+          <span aria-hidden="true">&#128274;</span>
+          <span data-i18n="clone_create">Create My Clone — Premium</span>
+        </button>
+        <p class="muted" data-i18n="clone_locked">Payment jald aa raha hai — abhi ye feature locked hai.</p>
+        <div class="slider-card">
+          <p data-i18n="clone_free_note"><b>Premium cloning jald launch hoga.</b> Filhal upar wali <b>free character voices</b> istemal karen — Ahmed, Fatima, Priya, Ivan aur bohat si awazen tayyar hain.</p>
+        </div>
+      </div>
+      <p class="muted" data-i18n="clone_chatterbox_note">Tip: VoiceSync me <b>Chatterbox (beta)</b> voice list me free cloning pehle se mojood hai — mic recording ko reference bana kar koi bhi text usi andaz me bolwayen.</p>
+    </section>
+
+    <!-- Engine guide (Free Voice Over skin) -->
+    <section class="card guide-card" aria-labelledby="guide-heading">
+      <h2 id="guide-heading" class="card-title" data-i18n="guide_title">KAUN SA ENGINE KAB ISTEMAL KAREN?</h2>
+      <div class="slider-card">
+        <h4>Urdu / Hindi / Pashto / Bengali</h4>
+        <p data-i18n="guide_ur">Studio Voices sab se best hain — Ahmed, Fatima, Priya, Arjun har character apne alag lehje me bolta hai aur saaf MP3 file milti hai. Google engine bhi in zabanon me seedha play ho jata hai.</p>
+      </div>
+      <div class="slider-card">
+        <h4>Russian / English / European</h4>
+        <p data-i18n="guide_eu">Studio Voices (Edge Neural) me Ivan, Natasha, Aria, Dmitry jaise named studio characters milte hain — YouTube voice-over ke liye behtareen. Har character ke sath ▶ button se pehle awaz ka preview sun sakte hain.</p>
+      </div>
+      <div class="slider-card">
+        <h4 data-i18n="guide_off_h">Baghair Internet</h4>
+        <p data-i18n="guide_off">Browser Voice offline chalti hai. Agar Urdu awaz na mile to phone ki TTS settings se Urdu voice pack install karen.</p>
+      </div>
+      <div class="slider-card">
+        <h4 data-i18n="guide_clone_h">Apni Awaz Chahiye?</h4>
+        <p data-i18n="guide_clone">Wo asli voice cloning hai — upar wala Premium section dekhen. Payment on hote hi aap apni awaz ka clone bana sakenge.</p>
+      </div>
     </section>
 
     <!-- Export + project -->
@@ -323,6 +476,8 @@
 
   <!-- ============ FOOTER ============ -->
   <footer class="footer">
+    <p class="footer-ur" data-i18n="footer_ur">تمام کریکٹر آوازیں بالکل مفت ہیں — وائس کلوننگ پریمیم فیچر ہے</p>
+    <p><span data-i18n="footer_brand">Abubakar YT Zone • Text likho, awaz suno, MP3 download karo</span></p>
     <p><span data-i18n="footer_text">100% free — no API keys, no sign-up.</span> <span class="footer-tech" data-i18n="footer_tech">Edge Neural → Google → Web Speech fallbacks</span></p>
   </footer>
 
