@@ -47,15 +47,31 @@ jobs:
             echo "Release signing: OFF (add ANDROID_KEYSTORE_BASE64 secret to enable)"
             exit 0
           fi
-          # Tolerate copy-paste noise: spaces, line breaks, a leading "Value:".
-          CLEAN=$(printf '%s' "$KS_B64" | sed 's/^[[:space:]]*Value:[[:space:]]*//' | tr -d ' \r\n\t')
-          echo "Keystore text length after cleanup: ${#CLEAN} characters (expected about 3624)"
-          if ! printf '%s' "$CLEAN" | base64 -d > "$RUNNER_TEMP/release.keystore" 2>/dev/null; then
-            echo "::warning::Play Store signing skipped: ANDROID_KEYSTORE_BASE64 is not valid. Re-paste the WHOLE long line from GITHUB-SECRETS.txt (starts with MII, about 3624 characters). The test APK is still built."
-            exit 0
-          fi
+          # Find the keystore inside whatever was pasted (extra words, the whole
+          # file, line breaks): take the longest base64 run, then validate it.
+          printf '%s' "$KS_B64" > "$RUNNER_TEMP/ks.txt"
+          python3 - "$RUNNER_TEMP/ks.txt" "$RUNNER_TEMP/release.keystore" <<'PY'
+          import base64, re, sys
+          raw = open(sys.argv[1], encoding='utf-8', errors='replace').read()
+          runs = re.findall(r'[A-Za-z0-9+/=]{200,}', raw)
+          if not runs or len(max(runs, key=len)) < 2000:
+              runs = re.findall(r'[A-Za-z0-9+/=]{200,}', re.sub(r'\s+', '', raw))
+          best = max(runs, key=len) if runs else ''
+          info = f"pasted {len(raw)} chars, keystore text found {len(best)} chars (expected 3624), starts with MII: {best.startswith('MII')}"
+          try:
+              data = base64.b64decode(best + '=' * (-len(best) % 4), validate=True)
+              assert len(data) > 1000 and data[:1] == b'0'
+          except Exception:
+              print(f"::warning::Play Store signing skipped: keystore secret is not valid ({info}). Re-paste the long line that starts with MII. The test APK is still built.")
+              sys.exit(0)
+          open(sys.argv[2], 'wb').write(data)
+          open(sys.argv[2] + '.info', 'w').write(info)
+          print('Keystore decoded:', info)
+          PY
+          if [ ! -s "$RUNNER_TEMP/release.keystore" ]; then exit 0; fi
           if ! keytool -list -keystore "$RUNNER_TEMP/release.keystore" -storepass "$KS_PASS" -alias "${KS_ALIAS:-voicesync}" >/dev/null 2>&1; then
-            echo "::warning::Play Store signing skipped: password or alias does not match the keystore. Check ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS (voicesync). The test APK is still built."
+            INFO=$(cat "$RUNNER_TEMP/release.keystore.info")
+            echo "::warning::Play Store signing skipped: keystore could not be opened ($INFO). If the found length is not 3624 the long line was cut, re-paste it; otherwise check ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS (voicesync). The test APK is still built."
             exit 0
           fi
           echo "Release signing: ON (keystore, password and alias verified)"
