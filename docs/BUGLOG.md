@@ -93,3 +93,33 @@ viseme rate on a real screen, 360px mobile layout, WebM export in desktop
 Chrome, Rhubarb WASM 37 MB first-load timing. The stub-DOM wiring test proves
 the click path and module contracts — it does not replace a human browser run.
 None faked — marked NOT VERIFIED until then.
+
+## QA FINAL PASS (Nadia, 2026-10-08, commit 551a76a)
+
+Re-ran everything verifiable from this VM against the integrated tree. Evidence, not claims:
+
+**A2 syntax:** `node --check` exit 0 on all 6 js files (app, tts, lipsync, avatar, exporter, i18n).
+
+**A3 contracts (read each file):**
+- TTS: `getVoices`/`synthesize`/`cancel` present; voice items carry `{id,name,lang,gender,engine}` with `engine ∈ {edge,google,webspeech}`; chunking + `{error}`-never-throw present. ⚠️ See MINOR-02.
+- LipSync: `ready()`/`analyze()`/`makeTalkingCues()` present; heuristic path pure-JS (no network); cue shape `{viseme,start,end}` with valid visemes.
+- Avatar: all 6 methods present; `VISEME_PATHS` = 9 keys A–X, all non-empty strings, pairwise distinct (asserted in node); invalid `setViseme('Z')` falls back without throw.
+- Exporter: all 5 functions present; `encodeWAV` output = valid RIFF/WAVE, `data` length = samples×channels×2 (asserted); `recordVideo` without MediaRecorder rejects with clean Error; save/load roundtrips.
+- i18n: `I18N.strings={en,ur}` 36/36 keys, zero gaps; `I18N.apply` is a function.
+
+**A4 HTML wiring:** all 20 SPEC §3.6 ids referenced by `app.js` exist in `index.html` (20/20, 0 stale); all 22 `data-i18n` keys present in en+ur; no unclosed tags; CSS has no genuinely dead selectors (only hex-color regex false positives + known INFO-01).
+
+**Wiring (re-run `/tmp/daniyal2-wiring.js` on committed tree):** ALL CHECKS PASSED — boot status line, voice dropdown, `getVoices('ur')` prefix match, `makeTalkingCues` ≈8/sec, full google flow `synthesize→cues→speak→play`, replay, real-cue `analyze`→`speak`, WAV RIFF, clean MediaRecorder reject, MP3-via-URL export, project save/load roundtrip, ur→rtl toggle.
+
+**Group C:** `docs/API.md` truth table has live 200-proofs with dates for every endpoint (voices list 200/JSON, translate_tts 200/MP3, Rhubarb WASM+glue+37MB model 200/CORS-*); dead dashed Edge token documented 401; `pages.yml` valid YAML; tree clean (`git status` empty, 3 commits).
+
+### New: MINOR-02 — `TTS.getVoices()` returns Array, SPEC v1.1 says Promise
+Impl (`js/tts.js:162`) returns a plain array; SPEC §3 says `Promise<[...]>`. **Zero functional impact:** `app.js` consumes it via `await` (line 195), which accepts plain values; internal sync callers (`_findVoice`, `_defaultVoiceId`) also fine. Fix options: wrap impl in `Promise.resolve()` (needs internal callers updated) or amend SPEC to "Array-or-Promise (await-compatible)". Logged, not release-blocking.
+
+### Still OPEN
+- **INFO-01** — `.busy`/`.error` CSS classes unused (harmless dead CSS).
+- **MINOR-02** — getVoices doc mismatch (above).
+- **Group B (runtime acceptance) — NOT VERIFIED, needs a real browser/phone:** real Edge-neural audio bytes end-to-end (Edge WS 403-from-datacenter is VM-specific), Google `<audio>`-element playback + CORS behavior on Pages, on-screen viseme sync rate, 360px mobile layout render, WebM export in desktop Chrome, Rhubarb 37 MB first-load timing. The stub-DOM wiring test proves the click path and contracts — it does NOT replace a human browser run.
+
+### QA verdict on v1.0 tag
+**Do NOT tag v1.0 final yet.** The tree is code-complete and 100% of VM-verifiable checks pass with evidence — but the user's bar is "100 percent thek", and six acceptance items (B1–B7) can only be proven in a real browser. Tag `v1.0-rc1` at most; final QA sign-off and the v1.0 tag wait for one human browser/phone run of Group B. Nothing was faked to reach this line.
