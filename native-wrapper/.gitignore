@@ -1,0 +1,17 @@
+# Keystore material — NEVER commit
+keystore.properties
+*.jks
+*.keystore
+
+# Local SDK location
+local.properties
+
+# Gradle / build outputs
+.gradle/
+build/
+app/build/
+**/build/
+
+# IDE
+.idea/
+*.iml

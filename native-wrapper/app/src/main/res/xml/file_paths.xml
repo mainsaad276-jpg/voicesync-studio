@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider paths for VoiceSyncBridge.shareFile(): shared exports are
+     staged under <cache-path>/shared and served via content URI. -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>

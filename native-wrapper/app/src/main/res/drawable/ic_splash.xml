@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash / brand mark: dark-green disc with a cream audio-waveform.
+     Used by the Android 12 splash theme (values-v31) and the pre-31 launch
+     background. Drawn as bars so it reads as "voice" at any size. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <path
+        android:fillColor="#1D5C4D"
+        android:pathData="M144,24 c66.27,0 120,53.73 120,120 c0,66.27 -53.73,120 -120,120 C77.73,264 24,210.27 24,144 C24,77.73 77.73,24 144,24 Z" />
+    <!-- waveform bars, centered on (144,144), cream #FFFDF8 -->
+    <path android:fillColor="#FFFDF8" android:pathData="M80,120 h14 v48 h-14 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M102,104 h14 v80 h-14 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M124,88 h14 v112 h-14 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M146,76 h14 v136 h-14 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M168,88 h14 v112 h-14 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M190,104 h14 v80 h-14 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M212,120 h14 v48 h-14 Z" />
+</vector>

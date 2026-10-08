@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VoiceSync Studio</string>
+    <string name="exit_double_tap">Press back again to exit</string>
+    <string name="mic_permission_rationale">Microphone access is needed to record your voice. Allow it to continue.</string>
+    <string name="file_chooser_title">Choose a file</string>
+</resources>

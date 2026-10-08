@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: cream waveform centered in the 108dp viewport.
+     Keep art inside the 72dp-diopter safe circle (center 54,54). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFDF8" android:pathData="M30,45 h6 v18 h-6 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M39,39 h6 v30 h-6 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M48,33 h6 v42 h-6 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M57,28 h6 v52 h-6 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M66,33 h6 v42 h-6 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M75,39 h6 v30 h-6 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M84,45 h6 v18 h-6 Z" />
+</vector>

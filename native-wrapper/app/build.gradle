@@ -1,0 +1,71 @@
+plugins {
+    // AGP 8.5.2 — compatible with Gradle 8.7, supports compileSdk/targetSdk 36.
+    // The google-services plugin is deliberately NOT applied: there is no
+    // google-services.json in this build (boss-side asset). Crashlytics is
+    // included as SDK-only and initialized defensively in code (see CrashReporter).
+    id 'com.android.application' version '8.5.2'
+}
+
+// Upload-keystore credentials live in the GITIGNORED ../keystore.properties.
+// If the file is missing (e.g. a fresh checkout), the release build falls back
+// to the debug key so local builds never hard-fail — CI/Play builds MUST
+// provide keystore.properties.
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { stream -> keystoreProps.load(stream) }
+}
+
+android {
+    namespace 'com.abubakarytzone.voicesync'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.abubakarytzone.voicesync'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+            // else: AGP leaves the config unsigned here; buildTypes.release
+            // below only assigns it when credentials exist.
+        }
+    }
+
+    buildTypes {
+        release {
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Default debug key — for local development only.
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'          // WebViewAssetLoader, WebViewClientCompat
+    implementation 'androidx.appcompat:appcompat:1.7.0'     // AppCompatActivity, WindowCompat (edge-to-edge)
+    // Crashlytics SDK only — no google-services plugin, no google-services.json.
+    // CrashReporter.init() probes for a configured FirebaseApp and silently
+    // disables reporting when it is absent.
+    implementation 'com.google.firebase:firebase-crashlytics:19.0.3'
+}

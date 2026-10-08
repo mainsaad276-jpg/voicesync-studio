@@ -21,3 +21,9 @@ progress/*.local.md
 # Android build (generated in CI)
 www/
 android/
+
+# Android wrapper secrets — NEVER commit
+native-wrapper/keystore.properties
+native-wrapper/local.properties
+*.jks
+*.keystore

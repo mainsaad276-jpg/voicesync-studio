@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ splash: cream background, dark-green brand mark. -->
+    <style name="Theme.VoiceSync.Starting" parent="android:Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/cream</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/cream</item>
+        <item name="windowSplashScreenBrandingImage">@drawable/ic_splash_wordmark</item>
+        <item name="postSplashScreenTheme">@style/Theme.VoiceSync</item>
+    </style>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bottom branding strip for the Android 12 splash: a small dark-green
+     waveform on transparent. (windowSplashScreenBrandingImage) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="48dp"
+    android:viewportWidth="200"
+    android:viewportHeight="48">
+    <path android:fillColor="#1D5C4D" android:pathData="M52,18 h8 v12 h-8 Z" />
+    <path android:fillColor="#1D5C4D" android:pathData="M64,12 h8 v24 h-8 Z" />
+    <path android:fillColor="#1D5C4D" android:pathData="M76,6 h8 v36 h-8 Z" />
+    <path android:fillColor="#1D5C4D" android:pathData="M88,2 h8 v44 h-8 Z" />
+    <path android:fillColor="#1D5C4D" android:pathData="M100,6 h8 v36 h-8 Z" />
+    <path android:fillColor="#1D5C4D" android:pathData="M112,12 h8 v24 h-8 Z" />
+    <path android:fillColor="#1D5C4D" android:pathData="M124,18 h8 v12 h-8 Z" />
+</vector>
