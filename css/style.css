@@ -551,3 +551,52 @@ body.tabbed .lang-toggle { width: auto; max-width: 118px; flex: 0 0 auto; paddin
 body.tabbed .topbar { overflow: hidden; }
 body.tabbed .btn-accent { background: var(--accent); border-color: var(--accent); }
 body.tabbed #videoFormat { min-height: 44px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--card); padding: 0 10px; font: inherit; }
+
+/* ===== Review fixes: mobile polish (2026-10-08) ===== */
+/* Floating status note on steps without the status line. */
+.tab-status {
+  position: fixed; left: 12px; right: 12px; z-index: 41;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  background: #1d2b27; color: #fff; padding: 12px 14px; border-radius: 14px;
+  font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  opacity: 0; transform: translateY(12px); pointer-events: none; transition: all .2s ease;
+}
+.tab-status[data-kind="error"] { background: #8c1d16; }
+.tab-status.show { opacity: 1; transform: none; pointer-events: auto; }
+body:not(.tabbed) .tab-status { display: none; }
+/* Notes sit above the floating Generate button when it is shown. */
+body.tabbed[data-current-tab="write"] .tab-status, body.tabbed[data-current-tab="voices"] .tab-status,
+body.tabbed[data-current-tab="write"] .native-toast, body.tabbed[data-current-tab="voices"] .native-toast {
+  bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Listen step: keep Generate above the tab bar on small phones. */
+body.tabbed .avatar-mount { max-height: min(26vh, 220px); }
+/* Developer status line is not for app users. */
+body.tabbed .module-status { display: none; }
+
+/* Save step: tidy two-column export grid at every width. */
+body.tabbed .export-card .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+body.tabbed .export-card .btn-group > * { width: 100%; margin: 0; }
+/* rows: WAV + MP3, Video + format, Subtitles + Share */
+
+/* Easy Mode button shows when it is on. */
+#easyToggle[aria-pressed="true"] { background: #dcefe8; border-color: var(--accent); color: var(--accent); }
+
+/* 44px touch targets. */
+body.tabbed input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+body.tabbed label:has(> input[type=checkbox]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+body.tabbed input[type=range] { height: 44px; accent-color: var(--accent); }
+body.tabbed .char-search, body.tabbed #btnPresetDelete { min-height: 44px; min-width: 44px; }
+body.tabbed .footer a { display: inline-block; padding: 12px 0; }
+
+/* Urdu: no doubled bilingual titles, English voice names stay readable. */
+html[lang="ur"] .dual-sep, html[lang="ur"] .dual-sep + [data-i18n$="_ur"] { display: none; }
+html[dir="rtl"] #voiceSelect, html[dir="rtl"] #voiceSelect2 { direction: ltr; text-align: right; }
+#textCounter { unicode-bidi: plaintext; }
+/* Listen step on phones: action buttons first, fine-tuning sliders after. */
+body.tabbed[data-current-tab="listen"] .preview-card[data-tab] { display: flex; flex-direction: column; }
+body.tabbed .preview-card > .slider-card,
+body.tabbed .preview-card > .music-row,
+body.tabbed .preview-card > .transport-mini { order: 1; }
+body.tabbed .preview-card > .btn-big { width: 100%; }

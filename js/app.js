@@ -70,7 +70,7 @@
     useWavForMic: 'For your recording use Download WAV (MP3 encoding is not available for mic audio).',
     chatterboxWorking: 'Making the human-like voice… (free shared server, may take a minute)',
     chatterboxBusy: 'Human-like voice server is busy right now — tap Play for the device voice, or try Chatterbox again later.',
-    recordSaved: 'Recording saved to Downloads — tap Play to hear it.',
+    recordSaved: 'Recording saved to your device — tap Play to hear it.',
     btn_dictate: 'Voice to Text',
     btn_stop_dictate: 'Stop Listening',
     listening: 'Listening… speak now. Tap again to stop.',
@@ -260,6 +260,11 @@
       lt.addEventListener('change', function () {
         state.lang = (lt.value === 'ur') ? 'ur' : 'en';
         applyI18n();
+        // Text built in JS (cards, counter, presets, selected voice) must
+        // switch language too, not only the static labels.
+        [updateCharCount, renderCharCards, refreshPresetList, updateSelCharBox].forEach(function (fn) {
+          try { fn(); } catch (e) { /* never crash on a language switch */ }
+        });
       });
     }
   }
@@ -677,7 +682,7 @@
       if (r.utterance && typeof window.speechSynthesis !== 'undefined') {
         try {
           r.utterance.rate = spd;
-          r.utterance.pitch = Math.max(0, Math.min(2, 1 + pit / 12));
+          r.utterance.pitch = Math.max(0.5, Math.min(2, Math.pow(2, pit / 12))); // semitones -> pitch ratio
         } catch (e) {}
         r.utterance.onend = function () { state.previewing = false; };
         if (!previewEngineNote) setMsg(t('playing'));
@@ -1069,8 +1074,8 @@
 
       var tags = document.createElement('div');
       tags.className = 'char-tags';
-      var t1 = document.createElement('span'); t1.className = 'char-tag'; t1.textContent = 'FREE';
-      var t2 = document.createElement('span'); t2.className = 'char-tag'; t2.textContent = 'Studio';
+      var t1 = document.createElement('span'); t1.className = 'char-tag'; t1.textContent = state.lang === 'ur' ? 'مفت' : 'FREE';
+      var t2 = document.createElement('span'); t2.className = 'char-tag'; t2.textContent = state.lang === 'ur' ? 'اسٹوڈیو' : 'Studio';
       tags.appendChild(t1); tags.appendChild(t2);
       card.appendChild(tags);
 
@@ -1521,8 +1526,8 @@
     var dur = result.duration || 5;
     try {
       u.rate = state.speed || 1;
-      var p = 1 + (state.pitch || 0) / 12;
-      u.pitch = Math.max(0, Math.min(2, p));
+      var p = Math.pow(2, (state.pitch || 0) / 12); // semitones -> pitch ratio (0.5..2)
+      u.pitch = Math.max(0.5, Math.min(2, p));
     } catch (e) {}
     var cues = [];
     if (hasModule('LipSync') && typeof window.LipSync.makeTalkingCues === 'function') {

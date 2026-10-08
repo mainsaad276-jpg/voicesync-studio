@@ -34,6 +34,8 @@
     if (TABS.indexOf(tab) === -1) tab = 'write';
     var changed = tab !== current;
     current = tab;
+    var chip = document.getElementById('tabStatus');
+    if (chip && changed) chip.classList.remove('show');
     try { localStorage.setItem(KEY, tab); } catch (e) {}
     apply();
     if (changed && isTabbed() && !(opts && opts.keepScroll)) {
@@ -82,12 +84,44 @@
       });
     }
 
+    mirrorStatus();
+
     if (mq) {
       var onChange = function () { apply(); };
       if (mq.addEventListener) mq.addEventListener('change', onChange);
       else if (mq.addListener) mq.addListener(onChange);
     }
     apply();
+  }
+
+  // The status line lives on the Listen step. On the other steps, show each
+  // new message as a short floating note so no button feels "dead".
+  function mirrorStatus() {
+    var src = document.getElementById('statusMsg');
+    if (!src || typeof MutationObserver === 'undefined') return;
+    var chip = document.createElement('div');
+    chip.id = 'tabStatus';
+    chip.className = 'tab-status';
+    chip.setAttribute('role', 'status');
+    chip.setAttribute('aria-live', 'polite');
+    document.body.appendChild(chip);
+    var timer = null;
+    new MutationObserver(function () {
+      var txt = src.textContent || '';
+      if (!isTabbed() || current === 'listen' || !txt.trim()) return;
+      // The idle "Ready" line (re-set on every language switch) is not news.
+      var S = window.I18N && window.I18N.strings;
+      if (S && ((S.en && txt === S.en.status_ready) || (S.ur && txt === S.ur.status_ready))) return;
+      // In the Android app the save toast already explains file results.
+      var nt = document.getElementById('nativeToast');
+      if (nt && nt.classList.contains('show')) return;
+      chip.textContent = txt;
+      chip.setAttribute('data-kind', src.getAttribute('data-kind') || 'info');
+      chip.classList.add('show');
+      clearTimeout(timer);
+      timer = setTimeout(function () { chip.classList.remove('show'); }, 4500);
+    }).observe(src, { childList: true, characterData: true, subtree: true, attributes: true });
+    chip.addEventListener('click', function () { chip.classList.remove('show'); });
   }
 
   window.VSTabs = {

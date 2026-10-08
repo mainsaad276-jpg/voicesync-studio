@@ -105,7 +105,17 @@
 
   function shareUris(uris, title) {
     if (!Share) return Promise.reject(new Error('Share unavailable'));
-    return Share.share({ title: title || 'VoiceSync Studio', files: uris, dialogTitle: title || 'VoiceSync Studio' });
+    return Share.share({ title: title || 'VoiceSync Studio', files: uris, dialogTitle: title || 'VoiceSync Studio' })
+      .catch(function (e) {
+        // Closing the share sheet is not an error: report it like the web API does.
+        if (e && /cancel/i.test(e.message || String(e))) {
+          var ab;
+          try { ab = new DOMException('Share canceled', 'AbortError'); }
+          catch (x) { ab = new Error('Share canceled'); ab.name = 'AbortError'; }
+          throw ab;
+        }
+        throw e;
+      });
   }
 
   // Save to Documents/VoiceSync; if the phone refuses, save to cache and open share sheet.
@@ -113,15 +123,15 @@
     name = safeName(name);
     return FS.writeFile({ path: 'VoiceSync/' + name, data: data, directory: 'DOCUMENTS', recursive: true })
       .then(function (r) {
-        toast((ur() ? 'محفوظ ہو گیا: Documents/VoiceSync/' : 'Saved: Documents/VoiceSync/') + name, {
-          label: ur() ? 'شیئر' : 'Share',
+        toast((ur() ? 'فائل محفوظ ہو گئی: \u2066Documents/VoiceSync/' + name + '\u2069' : 'Saved: Documents/VoiceSync/' + name), {
+          label: ur() ? 'شیئر کریں' : 'Share',
           run: function () { shareUris([r.uri]).catch(function () {}); }
         });
         return r.uri;
       })
       .catch(function () {
         return writeCache(name, data).then(function (uri) {
-          toast(ur() ? 'فائل تیار ہے، محفوظ کرنے کی جگہ چنیں' : 'File ready, choose where to save it');
+          toast(ur() ? 'فائل تیار ہے، محفوظ کرنے کی جگہ چنیں۔' : 'File ready, choose where to save it');
           return shareUris([uri], name).then(function () { return uri; }, function () { return uri; });
         });
       });
@@ -142,7 +152,7 @@
           return saveFile(fname, b64);
         })
         .catch(function (e) {
-          toast((ur() ? 'محفوظ نہیں ہو سکا: ' : 'Could not save: ') + (e && e.message ? e.message : e));
+          toast(ur() ? 'فائل محفوظ نہیں ہو سکی۔ دوبارہ کوشش کریں۔' : 'Could not save: ' + (e && e.message ? e.message : e));
         });
       return;
     }
@@ -154,6 +164,25 @@
     return origClick.apply(this, arguments);
   };
 
+  // Taps on local document links (Terms & User Guide PDF): WebView cannot show
+  // PDFs, so save the file and open the share/open-with sheet.
+  document.addEventListener('click', function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+    if (!a || a.hasAttribute('download')) return;
+    var href = a.href || '';
+    var local = /^https?:\/\/localhost\//i.test(href) || a.getAttribute('href').indexOf('http') !== 0;
+    if (local && /\.pdf(\?|#|$)/i.test(href) && FS) {
+      ev.preventDefault();
+      var fname = href.split('/').pop().split(/[?#]/)[0];
+      urlToBase64(href)
+        .then(function (b64) { return saveFile(decodeURIComponent(fname), b64); })
+        .catch(function () { toast(ur() ? 'فائل نہیں کھل سکی۔' : 'Could not open the file.'); });
+    } else if (!local && /^https?:/i.test(href)) {
+      ev.preventDefault();
+      window.open(href, '_system');
+    }
+  }, true);
+
   /* ---------------- share sheet ---------------- */
   if (Share && FS) {
     navigator.canShare = function (d) { return !!(d && (d.files || d.text || d.url)); };
@@ -161,6 +190,7 @@
       d = d || {};
       var files = d.files || [];
       if (!files.length) return Share.share({ title: d.title, text: d.text, url: d.url });
+      // Web Share rejects with AbortError on cancel; shareUris already maps it.
       return Promise.all(files.map(function (f) {
         return blobToBase64(f).then(function (b64) { return writeCache(safeName(f.name), b64); });
       })).then(function (uris) { return shareUris(uris, d.title); });
@@ -244,7 +274,7 @@
         text: text,
         lang: (u.voice && u.voice.lang) || u.lang || 'en-US',
         rate: Math.max(0.1, Math.min(3, Number(u.rate) || 1)),
-        pitch: Math.max(0.1, Math.min(2, Number(u.pitch) || 1)),
+        pitch: Math.max(0.1, Math.min(2, u.pitch == null || isNaN(Number(u.pitch)) ? 1 : Number(u.pitch))),
         volume: Math.max(0, Math.min(1, u.volume == null ? 1 : Number(u.volume))),
         queueStrategy: 0
       };
@@ -252,7 +282,24 @@
       if (vi !== undefined) opts.voice = vi;
       state.base = state.offset;
       var my = state.gen; // a later cancel/pause/resume makes this call stale
-      TTS.speak(opts).then(function () {
+      var tries = 0;
+      function attempt() {
+        return TTS.speak(opts).catch(function (err) {
+          var msg = (err && err.message) || '';
+          // The engine needs a moment after app start ("not available").
+          if (tries++ < 2 && /not available|unavailable|not ready|init/i.test(msg) && my === gen) {
+            return new Promise(function (r) { setTimeout(r, 600); }).then(attempt);
+          }
+          if (/not supported/i.test(msg)) {
+            toast(ur() ? 'اس زبان کی آواز فون میں نہیں ہے۔ انسٹال کریں؟' : 'This phone has no voice for this language. Install one?', {
+              label: ur() ? 'انسٹال' : 'Install',
+              run: function () { if (TTS.openInstall) TTS.openInstall().catch(function () {}); }
+            });
+          }
+          throw err;
+        });
+      }
+      attempt().then(function () {
         if (my !== gen || synth.paused) return;
         state.idx++; state.offset = 0;
         speakFrom(state);
@@ -376,6 +423,8 @@
     NativeRecognition.prototype._finish = function () {
       if (!this._running) return;
       this._running = false;
+      clearInterval(this._poll); this._poll = null;
+      clearTimeout(this._endTimer); this._endTimer = null;
       if (this._last) this._emit(this._last, true);
       this._last = '';
       this._handles.forEach(function (h) { try { h.remove(); } catch (e) {} });
@@ -400,26 +449,41 @@
             if (m) { self._last = m; if (self.interimResults) self._emit(m, false); }
           }),
           STT.addListener('listeningState', function (d) {
-            if (d && d.status === 'stopped') self._finish();
+            // Android sends the final words just after "stopped": wait for them.
+            if (d && d.status === 'stopped') self._endSoon();
           })
         ]);
       }).then(function (hs) {
         self._handles = hs || [];
         if (typeof self.onstart === 'function') self.onstart({});
+        // The recognizer can stop silently (silence, busy, error) without any
+        // event; poll so Voice to Text never gets stuck "listening".
+        self._poll = setInterval(function () {
+          if (!self._running || !STT.isListening) return;
+          STT.isListening().then(function (r) {
+            if (self._running && r && r.listening === false) self._endSoon();
+          }).catch(function () {});
+        }, 1500);
         return STT.start({ language: self.lang, partialResults: true, popup: false, maxResults: 1 });
       }).catch(function (e) {
         var code = (e && e.error) || 'network';
         if (e && e.message && /permission/i.test(e.message)) code = 'not-allowed';
         self._running = false;
+        clearInterval(self._poll); self._poll = null;
         self._handles.forEach(function (h) { try { h.remove(); } catch (x) {} });
         self._handles = [];
         if (typeof self.onerror === 'function') self.onerror({ error: code });
         if (typeof self.onend === 'function') self.onend({});
       });
     };
+    NativeRecognition.prototype._endSoon = function () {
+      var self = this;
+      if (!self._running || self._endTimer) return;
+      self._endTimer = setTimeout(function () { self._endTimer = null; self._finish(); }, 600);
+    };
     NativeRecognition.prototype.stop = function () {
       var self = this;
-      STT.stop().catch(function () {}).then(function () { self._finish(); });
+      STT.stop().catch(function () {}).then(function () { self._endSoon(); });
     };
     NativeRecognition.prototype.abort = NativeRecognition.prototype.stop;
     window.SpeechRecognition = NativeRecognition;

@@ -45,7 +45,7 @@
     <!-- Language pills (Free Voice Over skin) -->
     <section data-tab="write" class="card lang-card" aria-labelledby="langpills-heading">
       <h2 id="langpills-heading" class="card-title">
-        <span data-i18n="langpills_title">LANGUAGE</span> — <span data-i18n="langpills_title_ur">زبان چنیں</span>
+        <span data-i18n="langpills_title">LANGUAGE</span><span class="dual-sep"> — </span><span data-i18n="langpills_title_ur">زبان چنیں</span>
         <span class="muted">(+60)</span>
       </h2>
       <input id="langSearch" class="char-search" type="search"
@@ -59,7 +59,7 @@
     <!-- Text editor + voice selection -->
     <section data-tab="write" class="card editor-card" aria-labelledby="editor-heading">
       <h2 id="editor-heading" class="card-title">
-        <span data-i18n="yourtext_title">YOUR TEXT</span> — <span data-i18n="yourtext_title_ur">اپنا ٹیکسٹ لکھیں</span>
+        <span data-i18n="yourtext_title">YOUR TEXT</span><span class="dual-sep"> — </span><span data-i18n="yourtext_title_ur">اپنا ٹیکسٹ لکھیں</span>
       </h2>
 
       <textarea id="textInput" class="text-input" rows="6"
@@ -249,7 +249,7 @@
     <!-- Free speech engines (Free Voice Over skin) -->
     <section data-tab="voices" class="card engines-card" aria-labelledby="engines-heading">
       <h2 id="engines-heading" class="card-title">
-        <span data-i18n="engines_title">FREE SPEECH ENGINES</span> — <span data-i18n="engines_title_ur">سارے فری انجن</span>
+        <span data-i18n="engines_title">FREE SPEECH ENGINES</span><span class="dual-sep"> — </span><span data-i18n="engines_title_ur">سارے فری انجن</span>
       </h2>
       <div class="slider-card">
         <h4 data-i18n="eng_google_h">Google Free Voice</h4>
@@ -272,7 +272,7 @@
     <!-- Generate / Listen / Download (Free Voice Over skin) -->
     <section data-tab="listen" class="card preview-card" aria-labelledby="preview-heading">
       <h2 id="preview-heading" class="card-title">
-        <span data-i18n="gen_title">GENERATE, LISTEN &amp; DOWNLOAD</span> — <span data-i18n="gen_title_ur">آواز بنائیں، سنیں اور ڈاؤن لوڈ کریں</span>
+        <span data-i18n="gen_title">GENERATE, LISTEN &amp; DOWNLOAD</span><span class="dual-sep"> — </span><span data-i18n="gen_title_ur">آواز بنائیں، سنیں اور ڈاؤن لوڈ کریں</span>
       </h2>
 
       <div id="avatarMount" class="avatar-mount" data-i18n-aria="aria_talking_preview" aria-label="Talking character preview"></div>
@@ -297,12 +297,12 @@
 
       <button id="btnGenBig" class="btn btn-big" type="button">
         <span aria-hidden="true">&#127908;</span>
-        <span><span data-i18n="btn_generate">Generate Voice</span> — <span data-i18n="btn_generate_ur">آواز بنائیں</span></span>
+        <span><span data-i18n="btn_generate">Generate Voice</span><span class="dual-sep"> — </span><span data-i18n="btn_generate_ur">آواز بنائیں</span></span>
       </button>
       <div class="btn-row2">
         <button id="btnListenBig" class="btn btn-big" type="button">
           <span aria-hidden="true">&#9654;</span>
-          <span><span data-i18n="btn_play">Listen</span> — <span data-i18n="btn_listen_ur">سنیں</span></span>
+          <span><span data-i18n="btn_play">Listen</span><span class="dual-sep"> — </span><span data-i18n="btn_listen_ur">سنیں</span></span>
         </button>
         <button id="btnPauseBig" class="btn btn-big btn-light" type="button">
           <span aria-hidden="true">&#9208;</span>
@@ -315,7 +315,7 @@
       </button>
       <button id="btnDlMp3Big" class="btn btn-big" type="button">
         <span aria-hidden="true">&#11015;</span>
-        <span><span data-i18n="btn_mp3">Download MP3</span> — <span data-i18n="btn_dl_ur">ڈاؤن لوڈ کریں MP3</span></span>
+        <span><span data-i18n="btn_mp3">Download MP3</span><span class="dual-sep"> — </span><span data-i18n="btn_dl_ur">ڈاؤن لوڈ کریں MP3</span></span>
       </button>
       <p class="dl-help" data-i18n="dl_help">Awaz generate hone ke baad yahi Download MP3 button dabayen — file ek click me save ho jayegi. Agar download prompt nazar na aaye to neechay player ke ⋮ menu → Download se bhi MP3 save kar sakte hain.</p>
 
@@ -470,7 +470,7 @@
           <span aria-hidden="true">&#128193;</span>
           <span data-i18n="btn_load_project">Load Project</span>
         </button>
-        <input type="file" id="fileLoad" accept="application/json,.json" hidden>
+        <input type="file" id="fileLoad" accept="application/json,.json,text/plain,application/octet-stream" hidden>
       </div>
     </section>
 
@@ -480,18 +480,18 @@
   <div class="quick-cta" id="quickCta">
     <button type="button" class="btn btn-big" id="btnQuickGen">
       <span aria-hidden="true">&#127908;</span>
-      <span data-i18n="cta_generate">Awaz banayein aur sunein</span>
+      <span data-i18n="cta_generate">Generate &amp; listen</span>
     </button>
   </div>
   <nav class="tabbar" id="tabbar" data-i18n-aria="aria_tabs" aria-label="Sections">
     <button type="button" class="tab" data-go="write" aria-current="page">
-      <span class="tab-ico" aria-hidden="true">&#9997;&#65039;</span><span data-i18n="tab_write">Likho</span>
+      <span class="tab-ico" aria-hidden="true">&#9997;&#65039;</span><span data-i18n="tab_write">Write</span>
     </button>
     <button type="button" class="tab" data-go="voices">
-      <span class="tab-ico" aria-hidden="true">&#127917;</span><span data-i18n="tab_voices">Awazen</span>
+      <span class="tab-ico" aria-hidden="true">&#127917;</span><span data-i18n="tab_voices">Voices</span>
     </button>
     <button type="button" class="tab" data-go="listen">
-      <span class="tab-ico" aria-hidden="true">&#9654;&#65039;</span><span data-i18n="tab_listen">Suno</span>
+      <span class="tab-ico" aria-hidden="true">&#9654;&#65039;</span><span data-i18n="tab_listen">Listen</span>
     </button>
     <button type="button" class="tab" data-go="save">
       <span class="tab-ico" aria-hidden="true">&#11015;&#65039;</span><span data-i18n="tab_save">Save</span>

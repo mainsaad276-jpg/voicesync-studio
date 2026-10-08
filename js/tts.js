@@ -695,6 +695,18 @@
           }
         }
       } catch (e) { /* voice matching is best-effort */ }
+      // Tell the engine which language this is, so it never reads Urdu with an
+      // English voice. If the device lists voices but none for this language,
+      // fail now so the fallback chain moves on instead of failing at Play.
+      var guessed = _guessLang(text);
+      try { utter.lang = utter.voice ? utter.voice.lang : guessed; } catch (e) {}
+      try {
+        var all = speechSynthesis.getVoices() || [];
+        if (!utter.voice && all.length) {
+          reject(new Error('No device voice for ' + guessed + ' — install one in phone/computer speech settings'));
+          return;
+        }
+      } catch (e) { /* keep going */ }
       var t0 = Date.now();
       // Do NOT speak here — app.js speaks on Play via startWebSpeechPlayback,
       // so the utterance always starts from a real user gesture (browsers may

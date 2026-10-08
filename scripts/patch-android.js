@@ -16,10 +16,14 @@ for (const p of perms) {
     m = m.replace('</manifest>', `    <uses-permission android:name="${p}" />\n</manifest>`);
   }
 }
-// Saving to Documents on Android 9 and older needs storage permission;
+// Saving to Documents on Android 10 and older needs storage permission;
 // Android 10 needs legacy storage mode. Newer phones need neither.
-if (!m.includes('WRITE_EXTERNAL_STORAGE')) {
-  m = m.replace('</manifest>', '    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />\n</manifest>');
+// The Filesystem plugin asks for READ and WRITE together on Android 10 and
+// older; both must be declared or the request is denied outright.
+for (const p of ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE']) {
+  if (!m.includes('android.permission.' + p)) {
+    m = m.replace('</manifest>', `    <uses-permission android:name="android.permission.${p}" android:maxSdkVersion="29" />\n</manifest>`);
+  }
 }
 if (!m.includes('requestLegacyExternalStorage')) {
   m = m.replace('<application', '<application\n        android:requestLegacyExternalStorage="true"');

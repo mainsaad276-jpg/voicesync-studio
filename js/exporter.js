@@ -326,7 +326,6 @@
             fail('Video recording failed: ' + detail);
           };
 
-          recorder.start(250);
 
           if (audioURL) {
             audioEl = new Audio(audioURL);
@@ -360,6 +359,7 @@
               if (musicEl) { try { musicEl.pause(); } catch (e) {} }
               fail('Video export stopped: the voiceover audio could not be played.');
             };
+            recorder.start(250);
             safetyTimer = setTimeout(finish, 180000); // 3-minute hard cap
             var playPromise = audioEl.play();
             if (musicEl) {
@@ -379,6 +379,7 @@
             }
           } else {
             // No audio: record a short silent clip of the canvas.
+            recorder.start(250);
             safetyTimer = setTimeout(finish, opts.durationMs || 5000);
           }
         } catch (err) {
