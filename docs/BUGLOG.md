@@ -147,3 +147,11 @@ broken: `_webspeechSpeak` spoke during Generate (not on Play) and resolved
    autoplay-block `playFailed` message. New i18n keys en+ur.
 **Evidence:** `node --check` clean on all three edited files; full wiring test
 31/31 still passes. → Awaiting push + real-browser retest before FIXED.
+
+### CRITICAL-08 (part 2) — `_runEngine` dropped the Web Speech utterance
+After part-1 fix, real-user test still showed "TTS returned no audio and no
+utterance": `_runEngine`'s webspeech branch rebuilt the result object WITHOUT
+the `utterance` property (and read the old `spokenSec` shape), so app.js never
+saw it. Fixed in commit 47a1591 — utterance now passes through; duration read
+from new `info.duration` shape. `node --check` clean, 31/31 wiring tests pass,
+pushed to main, Pages verified serving the fix. → Awaiting user retest.
