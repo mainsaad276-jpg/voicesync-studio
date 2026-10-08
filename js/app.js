@@ -43,6 +43,8 @@
     ttsFailed: 'Voice generation failed',
     noAudio: 'TTS returned no audio and no utterance.',
     playFailed: 'Playback was blocked by the browser. Tap Play to try again.',
+    audioLoadFailed: 'Audio failed to load in this browser — the built-in voice will be used instead. Tap Play.',
+    readyTapPlay: 'Voice ready — tap Play to hear it.',
     nothingToPlay: 'Generate a voiceover first, then press Play.',
     exportNeedsAudio: 'Nothing to export yet — generate a voiceover first. (Browser-voice playback has no audio file to export; pick a neural voice with internet on.)',
     lipsyncLoading: 'Loading lip-sync engine (one-time download)…',
@@ -287,7 +289,7 @@
     el.preload = 'auto';
     el.src = result.url;
     el.onended = function () { stopAvatar(); stopTimeline(); state.speaking = false; setMsg(t('done')); };
-    el.onerror = function () { stopAll(); setMsg(t('playFailed'), true); };
+    el.onerror = function () { stopAll(); setMsg(t('audioLoadFailed'), true); };
     // SPEC §3: Avatar.speak(cues, timeSrc) — timeSrc may be HTMLAudioElement.
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
       try { window.Avatar.speak(cues || [], el); } catch (e) {}
@@ -383,7 +385,7 @@
         playNext();
       };
       el.onerror = function () {
-        if (token === state.playToken) { stopAll(); setMsg(t('playFailed'), true); }
+        if (token === state.playToken) { stopAll(); setMsg(t('audioLoadFailed'), true); }
       };
       state.speaking = true;
       setMsg(t('playing'));
@@ -483,9 +485,14 @@
       state.lastCues = cues;
       startAudioPlayback(result, cues);
     } else if (result.utterance) {
-      // Offline Web Speech path: synthetic cues, virtual clock.
+      // Offline Web Speech path: do NOT auto-speak here — browsers may block
+      // speechSynthesis without a fresh user gesture, and Generate's gesture
+      // may have expired during synthesis. Arm Play instead; replay() speaks.
       state.lastCues = [];
-      startWebSpeechPlayback(result);
+      if (hasModule('LipSync') && typeof window.LipSync.makeTalkingCues === 'function') {
+        try { state.lastCues = window.LipSync.makeTalkingCues(result.duration || 5) || []; } catch (e) {}
+      }
+      setMsg(t('readyTapPlay'));
     } else if (result.engine === 'google' && result.url) {
       // Google <audio>-element path (API.md §3): no byte access, but the
       // mouth still moves via text-timing cues — never a dead mouth.

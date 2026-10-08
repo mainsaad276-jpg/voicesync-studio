@@ -45,6 +45,8 @@
       status_exporting_video: 'Exporting video…',
       status_error: 'Something went wrong. Please try again.',
       status_no_text: 'Please type some text first.',
+      audioLoadFailed: 'Audio failed to load in this browser — the built-in voice will be used instead. Tap Play.',
+      readyTapPlay: 'Voice ready — tap Play to hear it.',
       status_no_voice: 'Please pick a voice first.',
       footer_text: '100% free — no API keys, no sign-up.',
       footer_tech: 'Edge Neural → Google → Web Speech fallbacks'
@@ -83,6 +85,8 @@
       status_exporting_video: 'ویڈیو ایکسپورٹ ہو رہی ہے…',
       status_error: 'کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔',
       status_no_text: 'پہلے کچھ متن لکھیں۔',
+      audioLoadFailed: 'اس براؤزر میں آڈیو لوڈ نہیں ہوئی — بلٹ ان آواز استعمال ہوگی۔ Play دبائیں۔',
+      readyTapPlay: 'آواز تیار ہے — سننے کے لیے Play دبائیں۔',
       status_no_voice: 'پہلے آواز منتخب کریں۔',
       footer_text: '100٪ مفت — کوئی API کیز نہیں، کوئی سائن اپ نہیں۔',
       footer_tech: 'Edge Neural → Google → Web Speech فال بیک'

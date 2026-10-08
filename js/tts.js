@@ -365,7 +365,11 @@
     });
     return Promise.all(jobs).then(function (ds) {
       var total = ds.reduce(function (a, b) { return a + b; }, 0);
-      return total > 0.5 ? total : _estimateDurationSec(text);
+      var okCount = ds.filter(function (d) { return d > 0; }).length;
+      return {
+        duration: total > 0.5 ? total : _estimateDurationSec(text),
+        okCount: okCount // how many chunk URLs actually preloaded
+      };
     });
   }
 
@@ -397,15 +401,18 @@
         }
       } catch (e) { /* voice matching is best-effort */ }
       var t0 = Date.now();
-      utter.onend = function () {
-        resolve({ spokenSec: (Date.now() - t0) / 1000 });
-      };
-      utter.onerror = function (ev) {
-        reject(new Error('Web Speech error: ' + ((ev && ev.error) || 'unknown')));
-      };
+      // Do NOT speak here — app.js speaks on Play via startWebSpeechPlayback,
+      // so the utterance always starts from a real user gesture (browsers may
+      // block speechSynthesis without one). Return the utterance for later.
       if (_cancelled) { reject(new Error('cancelled')); return; }
-      speechSynthesis.cancel(); // clear any stale queue
-      speechSynthesis.speak(utter);
+      resolve({
+        audioBuffer: null,
+        blob: null,
+        url: null,
+        duration: _estimateDurationSec(text),
+        engine: 'webspeech',
+        utterance: utter
+      });
     });
   }
 
@@ -536,14 +543,20 @@
       // mouth from LipSync.makeTalkingCues). Edge failure stays a silent,
       // normal step of the chain (Bilal finding #2 — confirmed by design).
       if (typeof Audio !== 'undefined') {
-        return _googlePreloadDurations(gurls, text).then(function (dur) {
+        return _googlePreloadDurations(gurls, text).then(function (info) {
           if (_cancelled) return Promise.reject(new Error('cancelled'));
+          // If NONE of the chunk URLs preloaded, the audio is unloadable in
+          // this browser (blocked network/region) — reject so the chain falls
+          // through to Web Speech instead of returning a dead, silent result.
+          if (!info.okCount) {
+            return Promise.reject(new Error('Google TTS audio unreachable in this browser'));
+          }
           return {
             audioBuffer: null, // CORS: Google MP3 bytes are unreadable from JS
             blob: null,
             url: gurls[0],
             urls: gurls,       // chunk playlist — app.js plays them in order
-            duration: dur,
+            duration: info.duration,
             engine: 'google'
           };
         });
