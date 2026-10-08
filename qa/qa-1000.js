@@ -641,6 +641,22 @@ async function main() {
   t('fallback_preview_compares_engine', !!prevSrc && prevSrc.indexOf('r.engine !== wantEngine') !== -1);
   t('fallback_onGenerate_compares_engine', !!genSrc && genSrc.indexOf('result.engine !== wantEngine') !== -1);
 
+  /* 99. Quick-fix round (Team 2 R7): ghost UI, touch targets, mic badge, dialogue flag. */
+  // FIX 1: [hidden] must beat author display rules.
+  t('hidden_important', css.indexOf('[hidden]') !== -1 && css.indexOf('display: none !important') !== -1);
+  // FIX 2: 44px minimum touch targets on .btn and .btn-small.
+  t('btn_minheight', /\.btn\s*\{[^}]*min-height:\s*44px/.test(css));
+  t('btnsmall_minheight', /\.btn-small\s*\{[^}]*min-height:\s*44px/.test(css));
+  // FIX 4: finishRecording refreshes the engine badge + clears stale note.
+  t('mic_badge_refresh', appjs.indexOf('state.lastEngineNote = null;') !== -1 &&
+    /finishRecording[\s\S]{0,2000}updateEngineBadge\(\)/.test(appjs));
+  // FIX 5: dialogue flag snapshotted on the result; caption code uses the flag.
+  t('dialogue_flag_snapshot', appjs.indexOf('result.dialogue = !!state.dialogueMode') !== -1);
+  t('captionblocks_flag_param', appjs.indexOf('function getCaptionBlocks(text, dur, stripMarkers)') !== -1);
+  t('captionblocks_no_live_state', !/function getCaptionBlocks[\s\S]{0,300}state\.dialogueMode/.test(appjs));
+  t('srt_uses_result_flag', appjs.indexOf('r ? !!r.dialogue : state.dialogueMode') !== -1);
+  t('shorts_uses_result_flag', appjs.indexOf('getCaptionBlocks(capText, capDur, !!(r && r.dialogue))') !== -1);
+
   console.log('\n==== 1000-TEST QA RESULT ====');
   console.log('PASSED: ' + pass + ' / ' + n);
   if (fails.length) { console.log('FAILED (' + fails.length + '):'); fails.forEach(function (f) { console.log('  ' + f); }); }

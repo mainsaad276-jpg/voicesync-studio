@@ -1837,6 +1837,10 @@
 
     releaseLastAudio();
     state.lastResult = result;
+    // MINOR (Team 2 R7): snapshot whether THIS result was generated in
+    // dialogue mode — caption code must use this flag, never the live
+    // state.dialogueMode (toggling it off post-generate leaked 1:/2: into SRT).
+    try { result.dialogue = !!state.dialogueMode; } catch (e) {}
     // MINOR (Team 3): snapshot the GENERATED text on the result — SRT and
     // burnt-in captions must use this, never the live textbox (the user may
     // edit it after generating).
@@ -2231,6 +2235,10 @@
     };
     state.lastUrl = url;
     state.lastCues = audioBuffer ? await getCues(audioBuffer) : [];
+    // MINOR (Team 2 R7): refresh the engine badge — a stale fallback warning
+    // from a previous generation must not linger after a mic recording.
+    state.lastEngineNote = null;
+    try { updateEngineBadge(); } catch (e) {}
     // Hand the recording to the Chatterbox engine as a clone reference too.
     if (window.TTS && typeof window.TTS.setReferenceAudio === 'function') {
       try { window.TTS.setReferenceAudio(blob); } catch (e) {}
@@ -2375,7 +2383,7 @@
       var capText = (r && typeof r.text === 'string' && r.text.trim()) ? r.text.trim()
         : (box ? box.value.trim() : '');
       var capDur = (r.duration || 5) / (state.speed || 1);
-      var caps = getCaptionBlocks(capText, capDur);
+      var caps = getCaptionBlocks(capText, capDur, !!(r && r.dialogue));
       outCanvas = document.createElement('canvas');
       outCanvas.width = 720; outCanvas.height = 1280;
       var octx = outCanvas.getContext('2d');
@@ -2513,8 +2521,10 @@
 
   // Shared caption blocks for SRT export AND Shorts burnt-in captions.
   // Returns [{start, end, text}] timed across dur seconds.
-  function getCaptionBlocks(text, dur) {
-    if (state.dialogueMode) text = text.replace(/^[ \t]*[12]:[ \t]*/gm, '');
+  // stripMarkers: snapshot from the generating run (result.dialogue) — never
+  // the live toggle, which the user may flip after generating.
+  function getCaptionBlocks(text, dur, stripMarkers) {
+    if (stripMarkers) text = text.replace(/^[ \t]*[12]:[ \t]*/gm, '');
     var sens = text.replace(/\s+/g, ' ').split(/(?<=[.!?؟۔])\s+/);
     var blocks = [], cur = '';
     sens.forEach(function (s) {
@@ -2544,7 +2554,9 @@
     var dur = (r && r.duration) ? r.duration : Math.max(1, text.length / 14);
     // Match the user's playback speed: at 2x the voice finishes in half the time.
     dur = dur / (state.speed || 1);
-    var blocks = getCaptionBlocks(text, dur);
+    // Strip dialogue markers per the GENERATING run's flag (r.dialogue), not
+    // the live toggle; no result yet -> fall back to the live toggle.
+    var blocks = getCaptionBlocks(text, dur, r ? !!r.dialogue : state.dialogueMode);
     var out = blocks.map(function (b, i) {
       return (i + 1) + '\n' + fmtSrt(b.start) + ' --> ' + fmtSrt(b.end) + '\n' + wrapSrtLine(b.text) + '\n';
     });

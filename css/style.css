@@ -395,6 +395,14 @@ body.easy-mode .lang-card {
   display: none;
 }
 
+/* ============ Quick-fix round (Team 2 R7) ============ */
+/* FIX 1: author display rules must never override [hidden] — kills ghost UI. */
+[hidden] { display: none !important; }
+
+/* FIX 2: 44px minimum touch targets. */
+.btn { min-height: 44px; }
+.btn-small { min-height: 44px; }
+
 /* ===== Attractive polish (user request 2026-10-08) ===== */
 .pill { box-shadow: 0 2px 6px rgba(29,92,77,.12); transition: transform .15s ease; }
 .pill:hover { transform: translateY(-2px); }
