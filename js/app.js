@@ -81,7 +81,7 @@
 
   var state = {
     lang: 'en',          // UI language (I18N)
-    ttsLang: 'ur',       // synthesis language
+    ttsLang: 'en',       // synthesis language (auto-detected from text on Generate)
     voiceId: null,
     lastResult: null,    // last TTS.synthesize result
     lastCues: [],        // last LipSync cue list
@@ -575,6 +575,26 @@
 
     stopAll();
     setBusy(true);
+    // Auto-detect the text's script so pasted text always gets the right
+    // voice: Urdu text with English selected (or vice versa) switches the
+    // language dropdown automatically. Only switches across script families —
+    // a manually chosen Latin-script language (French, German…) is untouched.
+    try {
+      if (window.TTS && typeof window.TTS._guessLang === 'function') {
+        var detected = String(window.TTS._guessLang(text)).split('-')[0].toLowerCase();
+        var cur = state.ttsLang || 'en';
+        var want = null;
+        if (detected === 'ur' && ['ur', 'ar', 'fa'].indexOf(cur) === -1) want = 'ur';
+        else if (detected === 'hi' && cur !== 'hi') want = 'hi';
+        else if (detected === 'en' && ['ur', 'ar', 'fa', 'hi'].indexOf(cur) !== -1) want = 'en';
+        if (want && want !== cur) {
+          state.ttsLang = want;
+          var tlSel = $('ttsLang');
+          if (tlSel) tlSel.value = want;
+          await loadVoices();
+        }
+      }
+    } catch (e) {}
     // Chatterbox is human-like but slow (free shared GPU) — set expectations.
     setMsg(state.voiceId && state.voiceId.indexOf('chatterbox:') === 0 ? t('chatterboxWorking') : t('generating'));
     var result = null;
