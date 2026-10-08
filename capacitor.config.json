@@ -1,0 +1,22 @@
+{
+  "appId": "pk.voicesync.studio",
+  "appName": "VoiceSync Studio",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#1d5c4d",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "backgroundColor": "#1d5c4d",
+      "style": "DARK",
+      "overlaysWebView": false
+    }
+  }
+}

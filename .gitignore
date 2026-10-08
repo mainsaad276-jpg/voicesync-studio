@@ -17,3 +17,7 @@ build/
 progress/*.local.md
 *.swp
 *~
+
+# Android build (generated in CI)
+www/
+android/

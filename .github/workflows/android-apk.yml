@@ -1,0 +1,84 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, apk-build-test]
+    paths-ignore: ['progress/**', '**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: QA gate
+        run: bash qa/run-qa.sh
+
+      - name: Prepare web assets
+        run: node scripts/build-www.js
+
+      - name: Create Android project
+        run: |
+          npx cap add android
+          npx capacitor-assets generate --android \
+            --iconBackgroundColor '#1d5c4d' --iconBackgroundColorDark '#1d5c4d' \
+            --splashBackgroundColor '#1d5c4d' --splashBackgroundColorDark '#1d5c4d'
+          node scripts/patch-android.js
+          npx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/VoiceSync-Studio.apk
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VoiceSync-Studio-apk
+          path: out/VoiceSync-Studio.apk
+
+      - name: Publish to apk branch and release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/apk-build-test'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SRC: ${{ github.ref_name }}
+        run: |
+          TAG=android-latest
+          [ "$SRC" != "main" ] && TAG=android-test
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" out/VoiceSync-Studio.apk \
+            --title "VoiceSync Studio Android (build ${{ github.run_number }})" \
+            --notes "APK built from ${{ github.sha }} on branch $SRC. Install: download VoiceSync-Studio.apk on the phone and open it." \
+            --target "${{ github.sha }}" $([ "$SRC" != "main" ] && echo --prerelease)
+          BR=apk; [ "$SRC" != "main" ] && BR=apk-test
+          cd out
+          git init -q -b "$BR"
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          echo "Built from ${{ github.sha }} (run ${{ github.run_number }})" > BUILD.txt
+          git add -A && git commit -qm "APK build ${{ github.run_number }}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "$BR"

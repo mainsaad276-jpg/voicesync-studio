@@ -1,0 +1,26 @@
+{
+  "name": "voicesync-studio",
+  "private": true,
+  "version": "1.0.0",
+  "description": "VoiceSync Studio: free voiceover + lip-sync (web + Android).",
+  "scripts": {
+    "build:www": "node scripts/build-www.js",
+    "qa": "bash qa/run-qa.sh"
+  },
+  "dependencies": {
+    "@capacitor/android": "6.2.2",
+    "@capacitor/app": "6.0.3",
+    "@capacitor/clipboard": "6.0.3",
+    "@capacitor/core": "6.2.2",
+    "@capacitor/filesystem": "6.0.4",
+    "@capacitor/share": "6.0.4",
+    "@capacitor/splash-screen": "6.0.4",
+    "@capacitor/status-bar": "6.0.3",
+    "@capacitor-community/speech-recognition": "6.0.1",
+    "@capacitor-community/text-to-speech": "5.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "6.2.2"
+  }
+}
