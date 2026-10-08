@@ -70,6 +70,12 @@
     useWavForMic: 'For your recording use Download WAV (MP3 encoding is not available for mic audio).',
     chatterboxWorking: 'Making the human-like voice… (free shared server, may take a minute)',
     chatterboxBusy: 'Human-like voice server is busy right now — tap Play for the device voice, or try Chatterbox again later.',
+    recordSaved: 'Recording saved to Downloads — tap Play to hear it.',
+    btn_dictate: 'Voice to Text',
+    btn_stop_dictate: 'Stop Listening',
+    listening: 'Listening… speak now. Tap again to stop.',
+    sttUnsupported: 'Voice typing is not supported in this browser.',
+    sttError: 'Voice typing had a problem. Try again.',
     modulesLabel: 'Modules'
   };
 
@@ -91,6 +97,10 @@
     recordStream: null,   // microphone MediaStream
     recordT0: 0,          // recording start timestamp
     micUrl: null,         // object URL of last mic recording
+    dictating: false,     // speech-to-text in progress
+    dictater: null,       // active SpeechRecognition
+    dictateBase: '',      // text that was in the box when dictation started
+    dictateFinals: '',    // finalized transcripts this session
     rafId: 0             // timeline rAF id
   };
 
@@ -178,6 +188,92 @@
     var box = $('textInput');
     if (box) box.addEventListener('input', updateCharCount);
     updateCharCount();
+    var d = $('btnDictate');
+    if (d) d.addEventListener('click', toggleDictate);
+  }
+
+  /* ---------------- voice-to-text (dictation) ---------------- */
+  // Free, built-in: Chrome's SpeechRecognition transcribes the mic straight
+  // into the script box. No server, no key.
+
+  function toggleDictate() {
+    if (state.dictating) { stopDictate(); setMsg(t('stopped')); return; }
+    startDictate();
+  }
+
+  function sttLang() {
+    var b = state.ttsLang || 'en';
+    if (b === 'ur') return 'ur-PK';
+    if (b === 'en') return 'en-US';
+    if (b === 'zh') return 'zh-CN';
+    return b;
+  }
+
+  function startDictate() {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setMsg(t('sttUnsupported'), true); return; }
+    stopAll();
+    var rec;
+    try { rec = new SR(); } catch (e) { setMsg(t('sttUnsupported'), true); return; }
+    rec.lang = sttLang();
+    rec.continuous = true;
+    rec.interimResults = true;
+    var box0 = $('textInput');
+    state.dictateBase = box0 ? box0.value : '';
+    if (state.dictateBase && !/[\s\n]$/.test(state.dictateBase)) state.dictateBase += ' ';
+    state.dictateFinals = '';
+    rec.onresult = function (ev) {
+      var interim = '', finals = '';
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var tr = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finals += tr + ' ';
+        else interim += tr;
+      }
+      if (finals) state.dictateFinals += finals;
+      var box = $('textInput');
+      if (box) {
+        box.value = state.dictateBase + state.dictateFinals + interim;
+        updateCharCount();
+      }
+    };
+    rec.onerror = function (ev) {
+      var err = ev && ev.error;
+      if (err === 'not-allowed' || err === 'service-not-allowed') setMsg(t('micDenied'), true);
+      else if (err && err !== 'aborted' && err !== 'no-speech') setMsg(t('sttError'), true);
+      stopDictate();
+    };
+    rec.onend = function () {
+      // Chrome auto-stops after a pause; resume while the toggle is on.
+      if (state.dictating) { try { rec.start(); } catch (e) { stopDictate(); } }
+    };
+    state.dictater = rec;
+    state.dictating = true;
+    try { rec.start(); }
+    catch (e) { stopDictate(); setMsg(t('sttError'), true); return; }
+    updateDictateBtn();
+    setMsg(t('listening'));
+  }
+
+  function stopDictate() {
+    state.dictating = false;
+    if (state.dictater) {
+      try { state.dictater.onend = null; state.dictater.stop(); } catch (e) {}
+    }
+    state.dictater = null;
+    updateDictateBtn();
+  }
+
+  function updateDictateBtn() {
+    var b = $('btnDictate');
+    if (!b) return;
+    var label = b.querySelector('[data-i18n="btn_dictate"]') || b.querySelector('span:last-child');
+    if (state.dictating) {
+      b.classList.add('btn-recording');
+      if (label) label.textContent = t('btn_stop_dictate');
+    } else {
+      b.classList.remove('btn-recording');
+      if (label) label.textContent = t('btn_dictate');
+    }
   }
 
   /* ---------------- voices ---------------- */
@@ -187,7 +283,7 @@
     if (tl) {
       tl.value = state.ttsLang;
       tl.addEventListener('change', function () {
-        state.ttsLang = (tl.value === 'en') ? 'en' : 'ur';
+        state.ttsLang = tl.value || 'en';
         loadVoices();
       });
     }
@@ -274,6 +370,7 @@
   function stopAll() {
     state.playToken++; // invalidate any in-flight Google chunk chain
     if (state.recording) { stopRecording(); }
+    if (state.dictating) { stopDictate(); }
     try {
       if (hasModule('TTS') && typeof window.TTS.cancel === 'function') window.TTS.cancel();
     } catch (e) {}
@@ -662,7 +759,17 @@
     if (window.TTS && typeof window.TTS.setReferenceAudio === 'function') {
       try { window.TTS.setReferenceAudio(blob); } catch (e) {}
     }
-    setMsg(t('recordReady'));
+    // Auto-save: download the WAV straight to the Downloads folder, so the
+    // recording is a real file (not just in-memory).
+    var saved = false;
+    if (audioBuffer && hasModule('Exporter') && typeof window.Exporter.encodeWAV === 'function') {
+      try {
+        var wavBlob = await window.Exporter.encodeWAV(audioBuffer);
+        window.Exporter.downloadAudio(wavBlob, 'voicesync-recording.wav');
+        saved = true;
+      } catch (e) { saved = false; }
+    }
+    setMsg(t(saved ? 'recordSaved' : 'recordReady'));
     // No auto-play — the user taps Play (same pattern as the Web Speech path).
   }
 
