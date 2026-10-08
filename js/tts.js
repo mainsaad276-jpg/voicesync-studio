@@ -317,7 +317,12 @@
 
   // Rough script guess so synthesize() can pick a sensible default voice.
   function _guessLang(text) {
-    if (/[\u0600-\u06FF]/.test(text)) return 'ur-PK'; // Arabic-script: Urdu/Arabic
+    var t = String(text || '');
+    // Urdu-specific letters (ٹ ڈ ڑ ے ھ ں) never appear in Arabic: strong Urdu signal.
+    if (/[ٹڈڑےھں]/.test(t)) return 'ur-PK';
+    // Teh marbuta (ة) is the strongest Arabic signal; Urdu rarely uses it.
+    if (/[ة]/.test(t)) return 'ar-SA';
+    if (/[\u0600-\u06FF]/.test(t)) return 'ur-PK'; // ambiguous Arabic-script: user's default
     if (/[\u0900-\u097F]/.test(text)) return 'hi-IN'; // Devanagari: Hindi
     return 'en-US';
   }
