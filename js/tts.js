@@ -320,8 +320,9 @@
     var t = String(text || '');
     // Urdu-specific letters (ٹ ڈ ڑ ے ھ ں) never appear in Arabic: strong Urdu signal.
     if (/[ٹڈڑےھں]/.test(t)) return 'ur-PK';
-    // Teh marbuta (ة) is the strongest Arabic signal; Urdu rarely uses it.
-    if (/[ة]/.test(t)) return 'ar-SA';
+    // Arabic signals (Team 2 M12): teh marbuta (ة), hamza carriers (أ إ ؤ ئ),
+    // and Arabic diacritics — Urdu rarely uses these.
+    if (/[ةأإؤئً-ٟ]/.test(t)) return 'ar-SA';
     // Otherwise go by script dominance: a Hindi sentence with one Urdu
     // punctuation mark (؟) must still read as Hindi, and English with a
     // stray ؟ must still read as English.

@@ -217,7 +217,8 @@
   /* ---------------- background music ---------------- */
 
   function initMusic() {
-    var f = $('musicFile'), v = $('musicVol'), c = $('btnMusicClear');
+    var f = $('musicFile'), v = $('musicVol'), c = $('btnMusicClear'), p = $('btnMusicPick');
+    if (p && f) p.addEventListener('click', function () { f.click(); }); // Team 2 M13: keyboard access
     if (f) f.addEventListener('change', function () {
       var file = f.files && f.files[0];
       if (!file) return;
@@ -1086,7 +1087,9 @@
     if (audioBuffer && hasModule('Exporter') && typeof window.Exporter.encodeWAV === 'function') {
       try {
         var wavBlob = await window.Exporter.encodeWAV(audioBuffer);
-        window.Exporter.downloadAudio(wavBlob, 'voicesync-recording.wav');
+        // Team 2 M7: timestamped filename so 20 takes don't overwrite each other.
+        var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        window.Exporter.downloadAudio(wavBlob, 'voicesync-recording-' + stamp + '.wav');
         saved = true;
       } catch (e) { saved = false; }
     }

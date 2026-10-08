@@ -203,10 +203,11 @@
       </div>
 
       <div class="music-row">
-        <label class="btn btn-secondary btn-small" for="musicFile" style="cursor:pointer">
+        <!-- Team 2 M13: real button (keyboard-focusable) instead of label-only -->
+        <button type="button" class="btn btn-secondary btn-small" id="btnMusicPick">
           <span aria-hidden="true">&#127925;</span>
           <span data-i18n="btn_music">Music</span>
-        </label>
+        </button>
         <input type="file" id="musicFile" accept="audio/*" hidden>
         <input type="range" id="musicVol" min="0" max="50" value="20" aria-label="Music volume" title="Music volume">
         <span id="musicName" class="music-name"></span>

@@ -143,7 +143,35 @@
       readyTapPlay: 'آواز تیار ہے — سننے کے لیے Play دبائیں۔',
       status_no_voice: 'پہلے آواز منتخب کریں۔',
       footer_text: '100٪ مفت — کوئی API کیز نہیں، کوئی سائن اپ نہیں۔',
-      footer_tech: 'Edge Neural → Google → Web Speech فال بیک'
+      footer_tech: 'Edge Neural → Google → Web Speech فال بیک',
+      // Team 2 M4: status/runtime keys now fully translated (were English-only via FALLBACK)
+      enterText: 'پہلے کچھ متن لکھیں یا پیسٹ کریں۔',
+      ttsMissing: 'آواز والا ماڈیول ابھی لوڈ نہیں ہوا۔',
+      avatarMissing: 'اوتار ماڈیول لوڈ نہیں ہوا۔',
+      exporterMissing: 'ایکسپورٹ ماڈیول ابھی لوڈ نہیں ہوا۔',
+      generating: 'آواز بن رہی ہے…',
+      working: 'کام ہو رہا ہے…',
+      analyzing: 'لپ سنک کا تجزیہ ہو رہا ہے…',
+      playing: 'چل رہا ہے…',
+      done: 'مکمل ہو گیا۔',
+      stopped: 'روک دیا گیا۔',
+      ttsFailed: 'آواز بنانے میں ناکامی',
+      noAudio: 'آواز کا کوئی آڈیو نہیں ملا۔',
+      playFailed: 'براؤزر نے چلانے سے روک دیا۔ دوبارہ Play دبائیں۔',
+      nothingToPlay: 'پہلے آواز بنائیں، پھر Play دبائیں۔',
+      exportNeedsAudio: 'ابھی ایکسپورٹ کے لیے کچھ نہیں — پہلے آواز بنائیں۔',
+      lipsyncLoading: 'لپ سنک انجن لوڈ ہو رہا ہے…',
+      wavSaved: 'WAV ڈاؤن لوڈ ہو گئی۔',
+      mp3Saved: 'MP3 ڈاؤن لوڈ ہو گئی۔',
+      videoSaved: 'ویڈیو ڈاؤن لوڈ ہو گئی۔',
+      videoUnsupported: 'اس براؤزر میں ویڈیو ایکسپورٹ ممکن نہیں۔',
+      exportFailed: 'ایکسپورٹ ناکام ہوئی',
+      voicesLoading: 'آوازیں لوڈ ہو رہی ہیں…',
+      noVoices: 'اس زبان کے لیے کوئی آواز نہیں ملی۔',
+      projectSaved: 'پروجیکٹ محفوظ ہو گیا۔',
+      projectLoaded: 'پروجیکٹ لوڈ ہو گیا۔',
+      projectLoadFailed: 'پروجیکٹ فائل پڑھی نہیں جا سکی۔',
+      modulesLabel: 'ماڈیولز'
     }
   };
 
