@@ -45,5 +45,19 @@ if (!g.includes('voicesync-debug.keystore')) {
         }
     }`);
 }
+// Release signing (Play Store): only when the CI secrets provide a keystore.
+// The key never lives in the repo; see docs/RELEASE-SIGNING.md.
+if (process.env.RELEASE_KEYSTORE_PATH && !g.includes('signingConfigs.release')) {
+  g = g.replace(/signingConfigs\s*\{/, `signingConfigs {
+        release {
+            storeFile file(System.getenv("RELEASE_KEYSTORE_PATH"))
+            storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("RELEASE_KEY_ALIAS")
+            keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+        }`);
+  g = g.replace(/release\s*\{\s*\n(\s*)minifyEnabled false/, 'release {\n$1signingConfig signingConfigs.release\n$1minifyEnabled false');
+  if (!g.includes('signingConfig signingConfigs.release')) throw new Error('could not add release signing to build.gradle');
+  console.log('release signing configured');
+}
 fs.writeFileSync(gradle, g);
 console.log('android/ patched: permissions, signing, version 1.0.' + build);

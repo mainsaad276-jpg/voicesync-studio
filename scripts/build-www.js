@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
 const out = path.join(root, 'www');
-const include = ['index.html', 'css', 'js', 'assets', 'docs/VoiceSync-Studio-Terms-and-User-Guide.pdf'];
+const include = ['index.html', 'css', 'js', 'assets', 'docs/VoiceSync-Studio-Terms-and-User-Guide.pdf', 'docs/privacy.html'];
 
 fs.rmSync(out, { recursive: true, force: true });
 for (const rel of include) {

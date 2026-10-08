@@ -85,6 +85,7 @@
     }
 
     mirrorStatus();
+    watchNetwork();
 
     if (mq) {
       var onChange = function () { apply(); };
@@ -122,6 +123,31 @@
       timer = setTimeout(function () { chip.classList.remove('show'); }, 4500);
     }).observe(src, { childList: true, characterData: true, subtree: true, attributes: true });
     chip.addEventListener('click', function () { chip.classList.remove('show'); });
+  }
+
+  // Offline notice (website and app): only device voices work without internet.
+  function watchNetwork() {
+    var bar = document.createElement('div');
+    bar.id = 'netBanner';
+    bar.className = 'net-banner';
+    bar.setAttribute('role', 'alert');
+    document.body.insertBefore(bar, document.body.firstChild);
+    function text() {
+      var S = window.I18N && window.I18N.strings;
+      var lang = document.documentElement.lang === 'ur' ? 'ur' : 'en';
+      return (S && S[lang] && S[lang].net_offline) ||
+        'No internet: only device voices (Browser Voice) will work.';
+    }
+    function update() {
+      var off = navigator.onLine === false;
+      bar.textContent = off ? text() : '';
+      bar.classList.toggle('show', off);
+    }
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    // Re-translate when the UI language changes.
+    new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+    update();
   }
 
   window.VSTabs = {

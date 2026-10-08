@@ -37,7 +37,23 @@ jobs:
       - name: Prepare web assets
         run: node scripts/build-www.js
 
+      - name: Release keystore (only if secrets are set)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "Release signing: ON"
+          else
+            echo "Release signing: OFF (add ANDROID_KEYSTORE_BASE64 secret to enable)"
+          fi
+
       - name: Create Android project
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           npx cap add android
           npx capacitor-assets generate --android \
@@ -50,16 +66,28 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
+      - name: Build Play Store bundle (AAB, release-signed)
+        if: env.RELEASE_KEYSTORE_PATH != ''
+        working-directory: android
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
+
       - name: Collect APK
         run: |
           mkdir -p out
           cp android/app/build/outputs/apk/debug/app-debug.apk out/VoiceSync-Studio.apk
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab out/VoiceSync-Studio-PlayStore.aab
+          fi
           ls -l out
 
       - uses: actions/upload-artifact@v4
         with:
           name: VoiceSync-Studio-apk
-          path: out/VoiceSync-Studio.apk
+          path: out/
 
       - name: Publish to apk branch and release
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/apk-build-test'
@@ -70,7 +98,7 @@ jobs:
           TAG=android-latest
           [ "$SRC" != "main" ] && TAG=android-test
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" out/VoiceSync-Studio.apk \
+          gh release create "$TAG" out/VoiceSync-Studio.apk $(ls out/*.aab 2>/dev/null) \
             --title "VoiceSync Studio Android (build ${{ github.run_number }})" \
             --notes "APK built from ${{ github.sha }} on branch $SRC. Install: download VoiceSync-Studio.apk on the phone and open it." \
             --target "${{ github.sha }}" $([ "$SRC" != "main" ] && echo --prerelease)

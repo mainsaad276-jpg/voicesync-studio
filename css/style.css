@@ -600,3 +600,10 @@ body.tabbed .preview-card > .slider-card,
 body.tabbed .preview-card > .music-row,
 body.tabbed .preview-card > .transport-mini { order: 1; }
 body.tabbed .preview-card > .btn-big { width: 100%; }
+/* Offline notice */
+.net-banner { display: none; }
+.net-banner.show {
+  display: block; position: sticky; top: 0; z-index: 35;
+  background: #8a4b00; color: #fff; font-size: 14px; line-height: 1.4;
+  padding: 10px 14px; text-align: center;
+}
