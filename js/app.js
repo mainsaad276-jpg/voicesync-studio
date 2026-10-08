@@ -2001,7 +2001,7 @@
     } catch (e) {}
     try {
       var ap = $('audioPlayer');
-      if (ap && !ap.paused) { ap.pause(); state.pausedKind = 'audioPlayer'; pauseMusicForPause(); setMsg(t('paused')); return; }
+      if (ap && !ap.paused) { ap.pause(); stopAvatar(); state.pausedKind = 'audioPlayer'; pauseMusicForPause(); setMsg(t('paused')); return; }
     } catch (e) {}
     setMsg(t('nothing_to_pause'), true);
   }
