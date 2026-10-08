@@ -17,6 +17,11 @@
       "backgroundColor": "#1d5c4d",
       "style": "DARK",
       "overlaysWebView": false
+    },
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "DARK"
     }
   }
 }

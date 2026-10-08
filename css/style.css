@@ -709,3 +709,6 @@ input[type="range"] { touch-action: pan-y; }
 .timeline { touch-action: pan-y; }
 /* The text box: allow normal vertical panning while typing. */
 .text-input { touch-action: pan-y; }
+/* Android 15+ draws edge-to-edge: keep the header below the status bar. */
+.native-app .topbar { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
+.native-app .net-banner.show { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
