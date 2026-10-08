@@ -403,3 +403,14 @@ body.easy-mode .clone-card,
 body.easy-mode .lang-card {
   display: none;
 }
+
+/* ===== Attractive polish (user request 2026-10-08) ===== */
+.pill { box-shadow: 0 2px 6px rgba(29,92,77,.12); transition: transform .15s ease; }
+.pill:hover { transform: translateY(-2px); }
+.char-card { box-shadow: 0 3px 10px rgba(29,92,77,.10); transition: transform .15s ease, box-shadow .15s ease; }
+.char-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(29,92,77,.18); }
+.char-card.selected { border: 2px solid #1d5c4d; box-shadow: 0 6px 18px rgba(29,92,77,.25); }
+.section-title { display: flex; align-items: center; gap: 8px; }
+.btn-big { box-shadow: 0 4px 12px rgba(29,92,77,.25); transition: transform .12s ease; }
+.btn-big:hover { transform: translateY(-2px); }
+.btn-big:active { transform: translateY(0); }
