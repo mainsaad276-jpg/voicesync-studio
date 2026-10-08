@@ -123,3 +123,27 @@ Impl (`js/tts.js:162`) returns a plain array; SPEC §3 says `Promise<[...]>`. **
 
 ### QA verdict on v1.0 tag
 **Do NOT tag v1.0 final yet.** The tree is code-complete and 100% of VM-verifiable checks pass with evidence — but the user's bar is "100 percent thek", and six acceptance items (B1–B7) can only be proven in a real browser. Tag `v1.0-rc1` at most; final QA sign-off and the v1.0 tag wait for one human browser/phone run of Group B. Nothing was faked to reach this line.
+
+## OPEN — found in real user test 2026-10-08 (user's laptop, Chrome)
+
+### CRITICAL-08 — Silent playback + MP3 download 404 (Google TTS unreachable in user's browser)
+**Symptoms (user report):** Generate Voice completes (timeline shows full
+duration), Play produces no audio, Download MP3 opens a tab with "Error 404".
+YouTube audio works on the same laptop — system audio is fine.
+**Root cause:** In the browser the Google engine always "succeeded" because
+`_googlePreloadDurations` fell back to an estimated duration even when ZERO
+chunk URLs loaded — so a dead result (unplayable URLs) flowed into playback
+and download. The Web Speech fallback could never trigger, and it was itself
+broken: `_webspeechSpeak` spoke during Generate (not on Play) and resolved
+`{spokenSec}` without `utterance`, so app.js showed "no audio".
+**Fix (commit 1f782d0, local — push pending new GitHub auth):**
+1. `_googlePreloadDurations` now reports `okCount`; the Google browser path
+   REJECTS when zero chunks preload → engine chain falls through to Web Speech.
+2. `_webspeechSpeak` no longer speaks during Generate; returns
+   `{..., utterance}` for Play.
+3. Generate with a Web Speech result arms Play ("tap Play to hear it")
+   instead of auto-speaking (autoplay policy).
+4. Audio-load failures now show `audioLoadFailed`, distinct from the
+   autoplay-block `playFailed` message. New i18n keys en+ur.
+**Evidence:** `node --check` clean on all three edited files; full wiring test
+31/31 still passes. → Awaiting push + real-browser retest before FIXED.
