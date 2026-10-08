@@ -51,12 +51,12 @@ jobs:
           CLEAN=$(printf '%s' "$KS_B64" | sed 's/^[[:space:]]*Value:[[:space:]]*//' | tr -d ' \r\n\t')
           echo "Keystore text length after cleanup: ${#CLEAN} characters (expected about 3624)"
           if ! printf '%s' "$CLEAN" | base64 -d > "$RUNNER_TEMP/release.keystore" 2>/dev/null; then
-            echo "::error::ANDROID_KEYSTORE_BASE64 is not valid. Re-paste the WHOLE long line from GITHUB-SECRETS.txt (nothing else)."
-            exit 1
+            echo "::warning::Play Store signing skipped: ANDROID_KEYSTORE_BASE64 is not valid. Re-paste the WHOLE long line from GITHUB-SECRETS.txt (starts with MII, about 3624 characters). The test APK is still built."
+            exit 0
           fi
           if ! keytool -list -keystore "$RUNNER_TEMP/release.keystore" -storepass "$KS_PASS" -alias "${KS_ALIAS:-voicesync}" >/dev/null 2>&1; then
-            echo "::error::Keystore decoded, but password or alias does not match. Check ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS (voicesync)."
-            exit 1
+            echo "::warning::Play Store signing skipped: password or alias does not match the keystore. Check ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS (voicesync). The test APK is still built."
+            exit 0
           fi
           echo "Release signing: ON (keystore, password and alias verified)"
           echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
