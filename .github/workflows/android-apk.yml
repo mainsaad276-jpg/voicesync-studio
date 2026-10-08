@@ -96,12 +96,22 @@ jobs:
 
       - name: Build Play Store bundle (AAB, release-signed)
         if: env.RELEASE_KEYSTORE_PATH != ''
+        continue-on-error: true
         working-directory: android
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew bundleRelease --no-daemon
+          # PKCS12 keystores use one password for store and key.
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -o pipefail
+          if ! ./gradlew bundleRelease --no-daemon 2>&1 | tee "$RUNNER_TEMP/bundle.log"; then
+            # Surface the real reason as annotations (secrets are masked by GitHub).
+            grep -E "What went wrong|error:|Error:|Exception|FAILURE|> " "$RUNNER_TEMP/bundle.log" | grep -v "^> Task" | head -12 | while IFS= read -r line; do
+              echo "::warning::bundleRelease: $line"
+            done
+            exit 1
+          fi
 
       - name: Collect APK
         run: |
