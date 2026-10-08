@@ -115,6 +115,15 @@
     lastUrl: null,       // object URL of last audio (revoked on regenerate)
     audioEl: null,       // HTMLAudioElement for the audio playback path
     pausedKind: null,    // which playback path is paused (for resume toggle)
+    previewEngine: null, // engine that spoke the last voice preview (M15: badge only, never lastResult)
+    lastEngineNote: null, // M44: fallback note for the main pipeline (set by onGenerate)
+    previewing: false,   // M44: voice preview audio in flight (busy-guard)
+    previewEl: null,     // M44: HTMLAudioElement for preview playback (Google URL path)
+    previewCtx: null,    // M44: AudioContext for preview playback (buffer path)
+    previewSrc: null,     // M44: buffer source node for preview playback
+    speechClock: null,   // {clock, box} virtual clock for the Web Speech path (M3)
+    speechPausedAt: 0,   // performance.now() when speech was paused (M3)
+    musicWasPlaying: false, // music was audible when pause hit (M5)
     speaking: false,
     clockTimer: 0,       // interval id for the webspeech virtual clock
     playToken: 0,        // bumped by stopAll(); Google chunk chains check it
@@ -140,7 +149,14 @@
     dialogueMode: false,  // two-voice dialogue mode
     voiceId2: null,       // Voice 2 for dialogue mode
     romanUrdu: false,     // Roman Urdu -> Urdu script pre-pass
-    rafId: 0             // timeline rAF id
+    rafId: 0,             // timeline rAF id
+    voicesReq: 0,        // C4: loadVoices request token — stale responses are discarded
+    voicesPromise: null, // C4: latest loadVoices() promise (onGenerate awaits it)
+    generating: false,   // M17/C8: a generation run is in flight (voice frozen)
+    genRunId: null,      // C8: TTS run id of the in-flight generation
+    previewRunId: null,  // C8: TTS run id of the in-flight voice preview
+    recordTimer: 0,      // M27: auto-stop timer id for mic recording
+    recordAutoStopped: false // M27: recording hit the 10-minute cap
   };
 
   function t(key) {
@@ -151,17 +167,21 @@
 
   // Q1+Q2: always-visible engine badge — which engine actually spoke?
   // Shows on EVERY result path, not just Web Speech.
-  function updateEngineBadge() {
+  // M15: optional (engine, note) override lets the voice preview show its
+  // engine WITHOUT going through state.lastResult (the preview must never
+  // clobber the generated result). No-arg calls behave exactly as before.
+  function updateEngineBadge(engine, note) {
     var badge = $('engineBadge');
     if (!badge) return;
-    var r = state.lastResult;
+    var r = engine ? { engine: engine } : state.lastResult;
+    var engNote = (typeof note === 'undefined') ? state.lastEngineNote : note;
     if (!r || !r.engine) { badge.hidden = true; return; }
     var engineNames = {
       edge: 'Edge Neural', google: 'Google', webspeech: 'Device voice',
       chatterbox: 'Chatterbox', dialogue: 'Dialogue', mic: 'Recording'
     };
     var label = engineNames[r.engine] || r.engine;
-    var isFallback = !!state.lastEngineNote;
+    var isFallback = !!engNote;
     badge.textContent = (isFallback ? '⚠️ ' : '🔊 ') + label +
       (isFallback ? ' — ' + t('engineFallbackShort') : '');
     badge.className = 'engine-badge' + (isFallback ? ' warn' : '');
@@ -257,7 +277,11 @@
     if (pst) pst.addEventListener('click', function () {
       if (!box || !navigator.clipboard || !navigator.clipboard.readText) { setMsg(t('paste_unavail'), true); return; }
       navigator.clipboard.readText().then(function (tx) {
-        box.value = tx || ''; updateCharCount();
+        // M23: APPEND, never replace — and never wipe the box on an empty
+        // clipboard (the old code did `box.value = tx || ''`).
+        if (!tx) { setMsg(PASTE_EMPTY_NOTE); return; }
+        box.value = box.value ? box.value + '\n' + tx : tx;
+        updateCharCount();
       }).catch(function () { setMsg(t('paste_unavail'), true); });
     });
     if (cpy) cpy.addEventListener('click', function () {
@@ -270,7 +294,10 @@
       box.value = ''; updateCharCount();
       // Team 2 Fix Round: clear stale audio too — old result must not survive.
       stopAll();
-      state.lastResult = null; state.lastCues = []; state.lastUrl = null;
+      state.lastResult = null; state.lastCues = [];
+      // MINOR (Team 3): revoke the blob URL — stopAll() doesn't touch
+      // lastUrl, so Clear leaked one object URL per press.
+      releaseLastAudio();
       state.lastEngineNote = null; updateEngineBadge();
       ['btnPlay', 'btnListenBig'].forEach(function (id) {
         var b = $(id); if (b) b.disabled = true;
@@ -294,12 +321,23 @@
 
   /* ---------------- background music ---------------- */
 
+  // MINOR (Team 3): honest bilingual rejection for bad music files.
+  // (Bilingual constant — no new i18n keys, per M39.)
+  var MUSIC_FILE_REJECTED =
+    'That file is not audio — pick an MP3, WAV or other audio file. / وہ آڈیو فائل نہیں ہے — کوئی MP3 یا WAV فائل چنیں۔';
+  var MUSIC_FILE_TOO_BIG =
+    'That music file is too large (over 50 MB) — pick a smaller one. / وہ میوزک فائل بہت بڑی ہے (50 MB سے زیادہ) — چھوٹی فائل چنیں۔';
+
   function initMusic() {
     var f = $('musicFile'), v = $('musicVol'), c = $('btnMusicClear'), p = $('btnMusicPick');
     if (p && f) p.addEventListener('click', function () { f.click(); }); // Team 2 M13: keyboard access
     if (f) f.addEventListener('change', function () {
       var file = f.files && f.files[0];
       if (!file) return;
+      // MINOR (Team 3): validate type + size before accepting.
+      var ftype = String(file.type || '').toLowerCase();
+      if (ftype && ftype.indexOf('audio/') !== 0) { setMsg(MUSIC_FILE_REJECTED, true); f.value = ''; return; }
+      if (file.size && file.size > 50 * 1024 * 1024) { setMsg(MUSIC_FILE_TOO_BIG, true); f.value = ''; return; }
       if (state.musicUrl) { try { URL.revokeObjectURL(state.musicUrl); } catch (e) {} }
       stopMusic();
       state.musicUrl = URL.createObjectURL(file);
@@ -510,7 +548,21 @@
     var tl = $('ttsLang');
     if (tl) {
       tl.value = state.ttsLang;
+      // M19: restore the saved synthesis language BEFORE the first
+      // loadVoices() (it was written on every change but never read back).
+      var savedLang = null;
+      try { savedLang = localStorage.getItem('voicesync-ttsLang'); } catch (e) {}
+      if (savedLang) {
+        var okL = false, li;
+        for (li = 0; li < tl.options.length; li++) {
+          if (tl.options[li].value === savedLang) { okL = true; break; }
+        }
+        if (okL) { state.ttsLang = savedLang; tl.value = savedLang; }
+      }
       tl.addEventListener('change', function () {
+        // M17: language frozen while a generation runs — the run keeps the
+        // language it started with.
+        if (state.generating) { setMsg(t('generating')); tl.value = state.ttsLang; return; }
         state.ttsLang = tl.value || 'en';
         loadVoices();
         renderLangPills(); // Team 2 Fix: keep pills in sync
@@ -527,6 +579,9 @@
     if (!hasModule('TTS') || typeof window.TTS.synthesize !== 'function') return;
     var vid = voiceId || state.voiceId;
     if (!vid) { setMsg(t('noVoices'), true); return; }
+    // C8: never clobber an in-flight generation — no TTS cancel, no state
+    // writes, no overlapping audio. The user waits for the run to finish.
+    if (state.generating) { setMsg(t('generating')); return; }
     // Round 2: character pitch offset honored in preview (does not clobber state).
     var pit = (typeof pitchOverride === 'number') ? pitchOverride : (state.pitch || 0);
     // Q4: busy-guard — no overlapping previews.
@@ -548,20 +603,36 @@
     setMsg(t('previewing'));
     stopAll();
     state.previewing = true; // stopAll clears it; re-arm
+    // C8: per-run identity — the preview must never clobber a generation.
+    // Remember which generation (if any) was current when we started.
+    var genAtStart = state.genRunId;
     try {
-      var r = await window.TTS.synthesize(sample, vid);
-      if (!r || r.error) { setMsg(t('ttsFailed') + ': ' + ((r && r.error) || ''), true); state.previewing = false; return; }
-      // Q2: show which engine actually spoke the preview.
-      state.lastResult = { engine: r.engine };
-      state.lastEngineNote = null;
+      var pr = window.TTS.synthesize(sample, vid);
+      state.previewRunId = pr && pr.runId;
+      var r = await pr;
+      state.previewRunId = null; // this run settled
+      // C8: a generation started while we were synthesizing — abort now and
+      // touch NOTHING (no badge, no message, no state).
+      if (state.genRunId !== genAtStart) { state.previewing = false; return; }
+      if (!r || r.error) {
+        state.previewing = false;
+        if (r && isCancelled(r.error)) return; // superseded — clean abort
+        setMsg(t('ttsFailed') + ': ' + ((r && r.error) || ''), true);
+        return;
+      }
+      // Q2/M15: show which engine actually spoke the preview — via the
+      // separate state.previewEngine field. The preview must NEVER touch
+      // state.lastResult (it destroyed the generated result: Team 3 M15).
+      state.previewEngine = r.engine;
+      var previewEngineNote = null;
       if (r.engine && vid) {
-        var wantEngine = vid.split(':')[0];
+        var wantEngine = parseVoiceId(vid).engine;
         if (wantEngine && r.engine !== wantEngine) {
-          state.lastEngineNote = t('engineFallback').replace('{want}', wantEngine).replace('{got}', r.engine);
+          previewEngineNote = t('engineFallback').replace('{want}', wantEngine).replace('{got}', r.engine);
         }
       }
-      updateEngineBadge();
-      if (state.lastEngineNote) setMsg(state.lastEngineNote, true);
+      updateEngineBadge(state.previewEngine, previewEngineNote);
+      if (previewEngineNote) setMsg(previewEngineNote, true);
       // Q5: preview honors speed/pitch.
       var spd = state.speed || 1;
       // Play directly without touching the main pipeline.
@@ -575,7 +646,7 @@
           try { src.detune.value = pit * 100; } catch (e) {}
           src.connect(ctx.destination);
           src.onended = function () { try { ctx.close(); } catch (e) {} state.previewing = false; setMsg(t('done')); };
-          if (!state.lastEngineNote) setMsg(t('playing'));
+          if (!previewEngineNote) setMsg(t('playing'));
           src.start(0);
           state.previewCtx = ctx; state.previewSrc = src;
           return;
@@ -587,7 +658,7 @@
           r.utterance.pitch = Math.max(0, Math.min(2, 1 + pit / 12));
         } catch (e) {}
         r.utterance.onend = function () { state.previewing = false; };
-        if (!state.lastEngineNote) setMsg(t('playing'));
+        if (!previewEngineNote) setMsg(t('playing'));
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(r.utterance);
         return;
@@ -601,7 +672,7 @@
         state.previewEl = el;
         el.onended = function () { state.previewing = false; setMsg(t('done')); };
         el.onerror = function () { state.previewing = false; setMsg(t('noAudio'), true); };
-        if (!state.lastEngineNote) setMsg(t('playing'));
+        if (!previewEngineNote) setMsg(t('playing'));
         // Team 2 Round 4: catch play() rejection so the guard never sticks.
         try {
           var pp = el.play();
@@ -612,13 +683,24 @@
       state.previewing = false;
       setMsg(t('noAudio'), true);
     } catch (e) {
-      state.previewing = false;
+      state.previewing = false; state.previewRunId = null;
+      if (isCancelled(e)) return; // superseded by Generate — a clean abort, not an error
       setMsg(t('ttsFailed') + ': ' + (e && e.message || e), true);
     }
   }
 
   // SPEC §3: TTS.getVoices(lang) -> Promise<[{id,name,lang,gender,engine}]>
-  async function loadVoices() {
+  // C4: concurrency guard — callers fire-and-forget, so responses can resolve
+  // out of order (click card B then card A fast). Only the NEWEST request may
+  // write state; stale responses return without touching anything.
+  // state.voicesPromise always points at the latest call so onGenerate can
+  // await it before reading state.voiceId.
+  function loadVoices() {
+    var my = (state.voicesReq = (state.voicesReq || 0) + 1);
+    state.voicesPromise = _loadVoices(my);
+    return state.voicesPromise;
+  }
+  async function _loadVoices(my) {
     var sel = $('voiceSelect');
     if (!sel) return;
     sel.innerHTML = '';
@@ -635,6 +717,7 @@
     sel.appendChild(loading);
     var voices = [];
     try { voices = await window.TTS.getVoices(state.ttsLang); } catch (e) { voices = []; }
+    if (my !== state.voicesReq) return; // C4: stale — a newer load superseded this one; touch nothing
     sel.innerHTML = '';
     if (!voices || !voices.length) {
       var none = document.createElement('option');
@@ -674,11 +757,15 @@
           setMsg(t('voice_filtered_out'), true);
           state.selChar = null; // the character is gone from this language
           updateSelCharBox();
+          renderCharCards(); // C4: the CARDS must reflect the filtered list too, not just the info box
         }
       }
     } catch (e) {}
     refreshBrowserVoices(voices);
     sel.onchange = function () {
+      // M17: voice is frozen while a generation runs — the run keeps the
+      // voice it started with.
+      if (state.generating) { setMsg(t('generating')); if (state.voiceId) sel.value = state.voiceId; return; }
       state.voiceId = sel.value;
       // Team 2 Fix: re-derive the selected character from the dropdown pick.
       state.selChar = null;
@@ -729,13 +816,26 @@
       b.addEventListener('click', function () { setLangPill(L.code); });
       wrap.appendChild(b);
     });
+    // M17: re-applied on every render — a render during a generation run
+    // (auto-detect) must not resurrect enabled pills. setLangPill guards too.
+    if (state.generating) {
+      var pb = wrap.querySelectorAll('button');
+      for (var bi = 0; bi < pb.length; bi++) pb[bi].disabled = true;
+    }
+  }
+
+  // Team 3 M40-light: single voiceId-parsing helper. VoiceIds look like
+  // 'engine:locale-voice' (e.g. 'edge:ur-PK-AsadNeural').
+  function parseVoiceId(id) {
+    var parts = String(id).split(':');
+    return { engine: parts[0], parts: parts };
   }
 
   // Team 2 Fix (Medium 10): derive the language code from a character's voiceId.
   function charLangCode(c) {
     try {
-      var parts = String(c.voiceId).split(':'); // 'edge:ur-PK-AsadNeural'
-      if (parts.length > 1) return parts[1].split('-').slice(0, 2).join('-');
+      var v = parseVoiceId(c.voiceId); // 'edge:ur-PK-AsadNeural'
+      if (v.parts.length > 1) return v.parts[1].split('-').slice(0, 2).join('-');
     } catch (e) {}
     return 'en';
   }
@@ -764,6 +864,7 @@
   }
 
   function setLangPill(code) {
+    if (state.generating) { setMsg(t('generating')); return; } // M17: language frozen mid-run
     state.ttsLang = code;
     try { localStorage.setItem('voicesync-ttsLang', code); } catch (e) {}
     // Sync the full language dropdown (exact or base-language match).
@@ -950,6 +1051,9 @@
 
   // Clicking a card selects that voice for generation.
   function selectCharacter(c) {
+    // M17: voice frozen while a generation runs — the run keeps the voice it
+    // started with (syncLangUiToCode is only called from here, so it's covered).
+    if (state.generating) { setMsg(t('generating')); return; }
     state.voiceId = c.voiceId;
     state.selChar = c; // Team 2 Fix: track the CHARACTER, not just voiceId
     // Character pitch offset so shared base voices sound different.
@@ -1027,27 +1131,56 @@
     });
     sel.value = keep || '';
   }
+  // MINOR (Team 3): preset restore must clamp numerics to the slider
+  // ranges (speed 0.5–2.0, pitch -12–+12 per index.html), so a hand-edited
+  // or stale preset can never leave state out of range.
+  function clampNum(v, lo, hi) {
+    v = Number(v);
+    if (isNaN(v)) return lo;
+    return Math.min(hi, Math.max(lo, v));
+  }
+
   function applyPreset(name) {
     var p = getPresets()[name];
     if (!p) return;
     if (p.ttsLang) {
       state.ttsLang = p.ttsLang;
       var tl = $('ttsLang'); if (tl) tl.value = p.ttsLang;
+      renderLangPills(); // M18: pill highlight follows the restored language
     }
     var applyRest = function () {
+      // M18: validate the preset's voiceId against the LOADED voices — a stale
+      // preset must never set an invisible voiceId. Then persist it and
+      // re-render pills + cards + selChar + the info box so every layer agrees.
       if (p.voiceId) {
         var vs = $('voiceSelect');
-        if (vs) { vs.value = p.voiceId; state.voiceId = p.voiceId; }
+        var okV = false, vi;
+        if (vs) {
+          for (vi = 0; vi < vs.options.length; vi++) {
+            if (vs.options[vi].value === p.voiceId) { okV = true; break; }
+          }
+        }
+        if (okV) {
+          vs.value = p.voiceId;
+          state.voiceId = p.voiceId;
+          try { localStorage.setItem('voicesync-voice', p.voiceId); } catch (e) {}
+          state.selChar = null;
+          for (var ci = 0; ci < CHARACTERS.length; ci++) {
+            if (CHARACTERS[ci].voiceId === p.voiceId) { state.selChar = CHARACTERS[ci]; break; }
+          }
+          renderCharCards();
+          updateSelCharBox();
+        }
       }
       if (typeof p.speed === 'number') {
-        state.speed = p.speed;
-        var sr = $('speedRange'); if (sr) { sr.value = p.speed; }
-        var sl = $('speedVal'); if (sl) sl.textContent = p.speed + 'x';
+        state.speed = clampNum(p.speed, 0.5, 2);
+        var sr = $('speedRange'); if (sr) { sr.value = state.speed; }
+        var sl = $('speedVal'); if (sl) sl.textContent = state.speed + 'x';
       }
       if (typeof p.pitch === 'number') {
-        state.pitch = p.pitch;
-        var pr = $('pitchRange'); if (pr) { pr.value = p.pitch; }
-        var pl = $('pitchVal'); if (pl) pl.textContent = pitchDisplay(p.pitch);
+        state.pitch = Math.round(clampNum(p.pitch, -12, 12));
+        var pr = $('pitchRange'); if (pr) { pr.value = state.pitch; }
+        var pl = $('pitchVal'); if (pl) pl.textContent = pitchDisplay(state.pitch);
       }
       if (typeof p.dialogueMode === 'boolean') {
         state.dialogueMode = p.dialogueMode;
@@ -1128,7 +1261,11 @@
       if (hint) hint.hidden = !state.dialogueMode;
       if (state.dialogueMode) syncVoice2();
     });
-    if (s2) s2.addEventListener('change', function () { state.voiceId2 = s2.value; });
+    if (s2) s2.addEventListener('change', function () {
+      // M17: voice frozen while a generation runs.
+      if (state.generating) { setMsg(t('generating')); if (state.voiceId2) s2.value = state.voiceId2; return; }
+      state.voiceId2 = s2.value;
+    });
   }
 
   function syncVoice2() {
@@ -1176,12 +1313,18 @@
   }
 
   async function synthesizeDialogue(segments) {
+    // M24: markers present but every speaker empty — an honest message, not a
+    // raw createBuffer(…, sampleRate 0) browser error.
+    if (!segments || !segments.length) return { error: t('dialogueNeedMarkers') };
     var parts = [], rate = 0;
     for (var i = 0; i < segments.length; i++) {
       var seg = segments[i];
       var vid = seg.speaker === 2 ? (state.voiceId2 || state.voiceId) : state.voiceId;
       setMsg(t('generating') + ' (' + (i + 1) + '/' + segments.length + ')');
       var r = await window.TTS.synthesize(seg.text, vid);
+      // M12: a Stop mid-dialogue surfaces as 'cancelled' — report it cleanly
+      // instead of the misleading "needs downloadable audio".
+      if (r && r.error && isCancelled(r.error)) return { error: 'cancelled' };
       if (!r || r.error || !r.audioBuffer) {
         return { error: t('dialogueNeedAudio') };
       }
@@ -1252,7 +1395,7 @@
     }
   }
 
-  function stopAll() {
+  function stopAll(opts) {
     state.playToken++; // invalidate any in-flight Google chunk chain
     state.pausedKind = null; // any pause/resume state dies with playback
     if (state.recording) { stopRecording(); }
@@ -1269,7 +1412,11 @@
     stopMusic();
     cleanupPitched();
     try {
-      if (hasModule('TTS') && typeof window.TTS.cancel === 'function') window.TTS.cancel();
+      // C8: onGenerate pre-cancels only the stale preview run and passes
+      // skipTtsCancel — a bare cancel-all here could clobber an in-flight
+      // generation started from another path.
+      if (hasModule('TTS') && typeof window.TTS.cancel === 'function' &&
+          !(opts && opts.skipTtsCancel)) window.TTS.cancel();
     } catch (e) {}
     if (state.audioEl) {
       try { state.audioEl.pause(); state.audioEl.removeAttribute('src'); } catch (e) {}
@@ -1278,6 +1425,7 @@
     try { if (typeof window.speechSynthesis !== 'undefined') window.speechSynthesis.cancel(); } catch (e) {}
     stopAvatar();
     if (state.clockTimer) { clearInterval(state.clockTimer); state.clockTimer = 0; }
+    state.speechClock = null; state.speechPausedAt = 0; // M3: drop the frozen virtual clock
     stopTimeline();
     state.speaking = false;
   }
@@ -1316,9 +1464,12 @@
     el.onended = function () { stopMusic(); stopAvatar(); stopTimeline(); state.speaking = false; setMsg(t('done')); };
     el.onerror = function () { stopAll(); setMsg(t('audioLoadFailed'), true); };
     // SPEC §3: Avatar.speak(cues, timeSrc) — timeSrc may be HTMLAudioElement.
-    // el.currentTime is audio-time, same base as the cues: no scaling needed.
+    // Team 3 C3: Avatar.speak samples el.currentTime ONCE, then advances the
+    // mouth on WALL-CLOCK (avatar.js frame) — at speed != 1 the cue times
+    // must be scaled to the wall-clock base (the old "no scaling needed"
+    // note was wrong and desynced the mouth linearly).
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
-      try { window.Avatar.speak(cues || [], el); } catch (e) {}
+      try { window.Avatar.speak(scaleCues(cues, state.speed || 1), el); } catch (e) {}
     }
     state.speaking = true;
     setMsg(t('playing'));
@@ -1352,9 +1503,10 @@
     // The virtual clock advances in real time while the utterance speaks at
     // u.rate = speed, so cue times must be scaled to the real-time base.
     var clock = { currentTime: 0 };
-    var t0 = performance.now();
+    var clockBox = { t0: performance.now() }; // mutable: Team 3 M3 pause shifts t0
+    state.speechClock = { clock: clock, box: clockBox };
     state.clockTimer = setInterval(function () {
-      clock.currentTime = (performance.now() - t0) / 1000;
+      clock.currentTime = (performance.now() - clockBox.t0) / 1000;
     }, 50);
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
       try { window.Avatar.speak(scaleCues(cues, state.speed || 1), clock); } catch (e) {}
@@ -1409,7 +1561,9 @@
     var perChunk = dur / urls.length;
     var cues = [];
     if (hasModule('LipSync') && typeof window.LipSync.makeTalkingCues === 'function') {
-      try { cues = window.LipSync.makeTalkingCues(dur) || []; } catch (e) { cues = []; }
+      // Team 3 M8: dur may be an estimate — pad the synthetic cue stream
+      // ×1.5 so it never ends mid-utterance (which freezes the mouth).
+      try { cues = window.LipSync.makeTalkingCues(dur * 1.5) || []; } catch (e) { cues = []; }
     }
     state.lastCues = cues;
     var clock = { currentTime: 0 };
@@ -1420,8 +1574,10 @@
       clock.currentTime = offset + (el && typeof el.currentTime === 'number' ? el.currentTime : 0);
     }, 50);
 
+    // Team 3 C3: scale cue times to the wall-clock base — the audio plays
+    // at speed != 1 while the avatar mouth advances on wall-clock.
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
-      try { window.Avatar.speak(cues, clock); } catch (e) {}
+      try { window.Avatar.speak(scaleCues(cues, state.speed || 1), clock); } catch (e) {}
     }
 
     function playNext() {
@@ -1432,6 +1588,10 @@
       el.preload = 'auto';
       try { el.src = urls[idx]; } catch (e) { stopAll(); setMsg(t('playFailed'), true); return; }
       try { el.playbackRate = state.speed || 1; } catch (e) {}
+      // Team 3 M9: pitch is NOT applied here — a plain <audio> element cannot
+      // pitch-shift, and the Google URL is CORS-blocked from
+      // fetch->WebAudio->detune routing (same documented limitation as the
+      // voice preview). Speed works; the pitch slider is a no-op on this path.
       el.onended = function () {
         try { offset += (el.duration > 0 && isFinite(el.duration)) ? el.duration : perChunk; }
         catch (e) { offset += perChunk; }
@@ -1494,11 +1654,58 @@
 
   /* ---------------- generate flow ---------------- */
 
+  /* Team 3 state/UI fixes — shared constants.
+   * No new i18n keys (M39): these bilingual constants are defined ONCE here
+   * and reused, so nothing new enters the i18n dictionaries. */
+  var MAX_INPUT_CHARS = 5000; // M21/C6: soft cap — ~12 Edge chunks / ~25 Google URLs
+  var TEXT_TOO_LONG_ASK = 'This text is {n} characters (~{m} voice requests, several minutes). Generate anyway? / یہ متن {n} حروف پر مشتمل ہے (~{m} وائس درخواستیں، کئی منٹ لگیں گے)۔ پھر بھی بنائیں؟';
+  var TEXT_TOO_LONG_ERR = 'Text too long — please keep it under 5000 characters. / متن بہت لمبا ہے — براہ کرم 5000 حروف سے کم رکھیں۔';
+  var ROMAN_APPLIED_NOTE = 'Roman Urdu detected — the voiceover uses Urdu script (your text is unchanged). / رومن اردو پہچانی گئی — آواز اردو اسکرپٹ میں بنے گی (آپ کا متن ویسا ہی ہے)۔';
+  var PASTE_EMPTY_NOTE = 'Clipboard is empty — nothing pasted. / کلپ بورڈ خالی ہے — کچھ پیسٹ نہیں ہوا۔';
+  var MIC_AUTO_STOP_NOTE = 'Recording auto-stopped at the 10-minute limit. / ریکارڈنگ 10 منٹ کی حد پر خود بخود رک گئی۔';
+
+  // M12: 'cancelled' is a clean user stop, never an error.
+  function isCancelled(v) {
+    var s = String((v && v.message) || v || '').trim().toLowerCase();
+    return s === 'cancelled';
+  }
+
+  // C7: fraction of the original's Latin words the Roman-Urdu map rewrote.
+  // A word counts as "hit" when it no longer occurs verbatim in the converted
+  // text — the map only replaces whole words on [^A-Za-z] boundaries, so an
+  // untouched word always survives. Ordinary English scores low and passes
+  // through; real Roman Urdu scores high.
+  function romanUrduCoverage(orig, conv) {
+    var oWords = String(orig || '').toLowerCase().match(/[a-z]+/g) || [];
+    if (!oWords.length) return 0;
+    var c = String(conv || '').toLowerCase();
+    var hits = 0, i, w, re;
+    for (i = 0; i < oWords.length; i++) {
+      w = oWords[i];
+      re = new RegExp('(^|[^a-z])' + w + '([^a-z]|$)');
+      if (!re.test(c)) hits++;
+    }
+    return hits / oWords.length;
+  }
+
   function setBusy(busy) {
     ['btnGenerate', 'btnPlay', 'btnGenBig', 'btnListenBig'].forEach(function (id) {
       var b = $(id);
       if (b) b.disabled = !!busy;
     });
+    // M17: freeze the voice/language controls too, so the in-flight run keeps
+    // the voice it started with. Handler guards (voiceSelect/pills/cards)
+    // hold for the short message phase after setBusy(false); the auto-detect's
+    // own re-derivation is programmatic and unaffected.
+    ['voiceSelect', 'voiceSelect2', 'ttsLang'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.disabled = !!busy;
+    });
+    var pills = $('langPills');
+    if (pills) {
+      var btns = pills.querySelectorAll('button');
+      for (var pi = 0; pi < btns.length; pi++) btns[pi].disabled = !!busy;
+    }
   }
 
   // SPEC §3: TTS.synthesize(text, voiceId) -> Promise<Result | {error}>
@@ -1512,21 +1719,58 @@
     var box = $('textInput');
     var text = box ? box.value.trim() : '';
     if (!text) { setMsg(t('enterText'), true); return; }
-    // Feature 1: Roman Urdu pre-pass — convert to Urdu script, route to ur-PK.
+    // M20: emoji/punctuation-only "text" would synthesize silence — require at
+    // least one real letter or digit.
+    if (!/[\p{L}\p{N}]/u.test(text)) { setMsg(t('enterText'), true); return; }
+    // Feature 1: Roman Urdu pre-pass.
+    // C7: NEVER mutate the textbox — the old code overwrote box.value, which
+    // irreversibly destroyed ordinary English text. Transliterate a COPY for
+    // synthesis only, and only when the coverage gate says this is really
+    // Roman Urdu (ordinary English passes through untouched).
+    var synthText = text;
     if (state.romanUrdu && window.TTS && typeof window.TTS._romanToUrdu === 'function') {
-      text = window.TTS._romanToUrdu(text);
-      if (box) box.value = text; // show the user what will be spoken
+      var ruConv = window.TTS._romanToUrdu(text);
+      if (romanUrduCoverage(text, ruConv) >= 0.3) {
+        synthText = ruConv;
+        setMsg(ROMAN_APPLIED_NOTE);
+      }
+    }
+    // M21: soft input cap — 5000 chars is ~12 Edge chunks / ~25 Google URLs.
+    // (Dialogue mode skips the confirm: it has its own hard reject below.)
+    if (!state.dialogueMode && synthText.length > MAX_INPUT_CHARS) {
+      var estChunks = Math.max(1, Math.ceil(synthText.length / 400));
+      var go = false;
+      try {
+        go = window.confirm(
+          TEXT_TOO_LONG_ASK.replace('{n}', String(synthText.length))
+                           .replace('{m}', String(estChunks)));
+      } catch (e) { go = false; }
+      if (!go) return;
     }
 
-    stopAll();
+    // C8: cancel ONLY a stale preview run — never a bare cancel-all that could
+    // clobber an in-flight generation started from another path.
+    if (state.previewRunId) {
+      try {
+        if (hasModule('TTS') && typeof window.TTS.cancel === 'function') {
+          window.TTS.cancel(state.previewRunId);
+        }
+      } catch (e) {}
+      state.previewRunId = null;
+    }
+    stopAll({ skipTtsCancel: true });
+    state.generating = true; // M17/C8: from here the run owns the voice
     setBusy(true);
+    // C4: a fire-and-forget loadVoices() may still be in flight — await it
+    // before reading state.voiceId (a stale one resolves without writing).
+    if (state.voicesPromise) { try { await state.voicesPromise; } catch (e) {} }
     // Auto-detect the text's script so pasted text always gets the right
     // voice: Urdu text with English selected (or vice versa) switches the
     // language dropdown automatically. Only switches across script families —
     // a manually chosen Latin-script language (French, German…) is untouched.
     try {
       if (window.TTS && typeof window.TTS._guessLang === 'function') {
-        var detected = String(window.TTS._guessLang(text)).split('-')[0].toLowerCase();
+        var detected = String(window.TTS._guessLang(synthText)).split('-')[0].toLowerCase();
         var cur = state.ttsLang || 'en';
         var want = null;
         if (detected === 'ur' && ['ur', 'ar', 'fa'].indexOf(cur) === -1) want = 'ur';
@@ -1547,18 +1791,36 @@
     // Dialogue mode: synthesize each speaker's lines with their own voice,
     // merge into one buffer, then run the normal pipeline.
     if (state.dialogueMode) {
-      var segs = parseDialogue(text);
-      if (!segs) { setBusy(false); setMsg(t('dialogueNeedMarkers'), true); return; }
-      var dout = await synthesizeDialogue(segs);
-      setBusy(false);
+      var segs = parseDialogue(synthText);
+      // M24: markers present but every speaker empty — honest message.
+      if (!segs || !segs.length) { setBusy(false); state.generating = false; setMsg(t('dialogueNeedMarkers'), true); return; }
+      // C6: cap dialogue text — absurd input is rejected, never OOM'd.
+      var dlgLen = 0, di;
+      for (di = 0; di < segs.length; di++) dlgLen += segs[di].text ? segs[di].text.length : 0;
+      if (dlgLen > MAX_INPUT_CHARS) { setBusy(false); state.generating = false; setMsg(TEXT_TOO_LONG_ERR, true); return; }
+      var dout = null;
+      try {
+        dout = await synthesizeDialogue(segs);
+      } catch (e) {
+        // C6: a throw here used to skip setBusy(false) and soft-lock the UI.
+        dout = { error: String((e && e.message) || e) };
+      } finally {
+        setBusy(false); // C6: the busy flag is ALWAYS released
+      }
       if (!dout || dout.error || !dout.result) {
-        setMsg(t('ttsFailed') + ': ' + ((dout && dout.error) || 'unknown'), true);
+        var derr = (dout && dout.error) || 'unknown';
+        if (isCancelled(derr)) { state.generating = false; setMsg(t('stopped')); return; } // M12: clean stop
+        state.generating = false;
+        setMsg(t('ttsFailed') + ': ' + derr, true);
         return;
       }
       result = dout.result;
     } else {
+      // C8: the promise carries its run identity.
       try {
-        result = await window.TTS.synthesize(text, state.voiceId);
+        var genP = window.TTS.synthesize(synthText, state.voiceId);
+        state.genRunId = genP && genP.runId;
+        result = await genP;
       } catch (e) {
         result = { error: String((e && e.message) || e) };
       }
@@ -1566,31 +1828,32 @@
     }
 
     if (!result || result.error) {
-      setMsg(t('ttsFailed') + ': ' + ((result && result.error) || 'unknown'), true);
+      var rerr = (result && result.error) || 'unknown';
+      if (isCancelled(rerr)) { state.generating = false; setMsg(t('stopped')); return; } // M12: clean stop, not "failed: cancelled"
+      state.generating = false;
+      setMsg(t('ttsFailed') + ': ' + rerr, true);
       return;
     }
 
     releaseLastAudio();
     state.lastResult = result;
+    // MINOR (Team 3): snapshot the GENERATED text on the result — SRT and
+    // burnt-in captions must use this, never the live textbox (the user may
+    // edit it after generating).
+    try { result.text = synthText; } catch (e) {}
     if (result.url) state.lastUrl = result.url;
     if (result.url) showAudioPlayer(result.url);
     // Honesty: if the selected voice's engine failed and a fallback produced
     // the audio, say so — e.g. all Edge voices collapse to one Google voice.
     try {
-      var selVoice = null;
-      var vsel = $('voiceSelect');
-      if (vsel && vsel.selectedOptions && vsel.selectedOptions[0]) {
-        selVoice = vsel.selectedOptions[0].textContent || '';
-      }
       state.lastEngineNote = null;
       if (result.engine && state.voiceId) {
-        var wantEngine = state.voiceId.split(':')[0];
+        var wantEngine = parseVoiceId(state.voiceId).engine;
         if (wantEngine && result.engine !== wantEngine && result.engine !== 'dialogue' && result.engine !== 'mic') {
           state.lastEngineNote = t('engineFallback')
             .replace('{want}', wantEngine).replace('{got}', result.engine);
         }
       }
-      state.lastVoiceLabel = selVoice;
     } catch (e) {}
     updateEngineBadge(); // Q1: visible on EVERY path
 
@@ -1629,6 +1892,7 @@
     } else {
       setMsg(t('noAudio'), true);
     }
+    state.generating = false; // M17/C8: run fully done — voice controls live again
   }
 
   function replay() {
@@ -1665,49 +1929,146 @@
     if (state.pausedKind) { resumePlayback(); return; }
     try {
       if (state.audioEl && !state.audioEl.paused) {
-        state.audioEl.pause(); state.pausedKind = 'audioEl'; setMsg(t('paused')); return;
+        state.audioEl.pause(); state.pausedKind = 'audioEl'; pauseMusicForPause(); setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
       if (state.previewEl && !state.previewEl.paused) {
-        state.previewEl.pause(); state.pausedKind = 'previewEl'; setMsg(t('paused')); return;
+        state.previewEl.pause(); state.pausedKind = 'previewEl'; pauseMusicForPause(); setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
       if (state.previewCtx && state.previewCtx.state === 'running') {
-        state.previewCtx.suspend(); state.pausedKind = 'previewCtx'; setMsg(t('paused')); return;
+        state.previewCtx.suspend(); state.pausedKind = 'previewCtx'; pauseMusicForPause(); setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
       if (state.audioCtx && state.audioCtx.state === 'running') {
-        state.audioCtx.suspend(); state.pausedKind = 'audioCtx'; setMsg(t('paused')); return;
+        state.audioCtx.suspend(); state.pausedKind = 'audioCtx'; pauseMusicForPause(); setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
       if (window.speechSynthesis && window.speechSynthesis.speaking &&
           !window.speechSynthesis.paused) {
-        window.speechSynthesis.pause(); state.pausedKind = 'speech'; setMsg(t('paused')); return;
+        window.speechSynthesis.pause();
+        // Team 3 M3: freeze the virtual clock so lip-sync/timeline stay
+        // aligned — the interval must not keep ticking while paused.
+        if (state.clockTimer) { clearInterval(state.clockTimer); state.clockTimer = 0; }
+        state.speechPausedAt = performance.now();
+        stopAvatar(); // mouth must not keep moving on its wall-clock while paused
+        state.pausedKind = 'speech'; pauseMusicForPause(); setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
       var ap = $('audioPlayer');
-      if (ap && !ap.paused) { ap.pause(); state.pausedKind = 'audioPlayer'; setMsg(t('paused')); return; }
+      if (ap && !ap.paused) { ap.pause(); state.pausedKind = 'audioPlayer'; pauseMusicForPause(); setMsg(t('paused')); return; }
     } catch (e) {}
     setMsg(t('nothing_to_pause'), true);
   }
 
+  // Team 3 M5: pause background music together with the voice; remember
+  // whether it was audible so resume can restart it (and only then).
+  function pauseMusicForPause() {
+    state.musicWasPlaying = false;
+    try {
+      if (state.musicEl && !state.musicEl.paused) {
+        state.musicEl.pause();
+        state.musicWasPlaying = true;
+      }
+    } catch (e) {}
+  }
+  function restartMusicAfterResume() {
+    if (!state.musicWasPlaying) return;
+    state.musicWasPlaying = false;
+    try {
+      if (state.musicEl) {
+        var p = state.musicEl.play();
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+      }
+    } catch (e) {}
+  }
+
+  // Team 3 C10: never drop the play()/resume() promise. A rejected resume
+  // RESTORES pausedKind (so the user can retry it) and shows playFailed;
+  // pausedKind is cleared ONLY on success. Team 3 M2: re-arm the avatar mouth
+  // on the <audio> paths — the 'pause' event stopped it and nothing restarts it.
   function resumePlayback() {
     var k = state.pausedKind;
-    state.pausedKind = null;
+    if (!k) { setMsg(t('nothing_to_pause'), true); return; }
+    var done = function () {
+      state.pausedKind = null;
+      restartMusicAfterResume(); // M5: music back only if it was playing
+      setMsg(t('playing'));
+    };
+    var fail = function () {
+      state.pausedKind = k; // keep pause state — resume stays retryable
+      setMsg(t('playFailed'), true);
+    };
     try {
-      if (k === 'audioEl' && state.audioEl) { state.audioEl.play(); setMsg(t('playing')); return; }
-      if (k === 'previewEl' && state.previewEl) { state.previewEl.play(); setMsg(t('playing')); return; }
-      if (k === 'previewCtx' && state.previewCtx) { state.previewCtx.resume(); setMsg(t('playing')); return; }
-      if (k === 'audioCtx' && state.audioCtx) { state.audioCtx.resume(); setMsg(t('playing')); return; }
-      if (k === 'speech' && window.speechSynthesis) { window.speechSynthesis.resume(); setMsg(t('playing')); return; }
-      if (k === 'audioPlayer') { var ap = $('audioPlayer'); if (ap) { ap.play(); setMsg(t('playing')); return; } }
-    } catch (e) {}
+      if (k === 'audioEl' && state.audioEl) { resumeAudioEl(state.audioEl, done, fail, true); return; }
+      if (k === 'previewEl' && state.previewEl) { resumeAudioEl(state.previewEl, done, fail, false); return; }
+      if (k === 'previewCtx' && state.previewCtx) { settleResume(state.previewCtx.resume(), done, fail); return; }
+      if (k === 'audioCtx' && state.audioCtx) { settleResume(state.audioCtx.resume(), done, fail); return; }
+      if (k === 'speech' && window.speechSynthesis) {
+        window.speechSynthesis.resume();
+        restartSpeechClock(); // M3: realign the virtual clock + avatar mouth
+        done();
+        return;
+      }
+      if (k === 'audioPlayer') {
+        var ap = $('audioPlayer');
+        if (ap) { resumeAudioEl(ap, done, fail, true); return; }
+      }
+    } catch (e) { fail(); return; }
+    state.pausedKind = null;
     setMsg(t('nothing_to_pause'), true);
+  }
+
+  // C10: settle a play()/resume() promise — pausedKind clears only on success.
+  function settleResume(p, done, fail) {
+    if (p && typeof p.then === 'function') p.then(done, fail);
+    else done();
+  }
+  // M2: resume an <audio> element; on success re-arm the avatar mouth with
+  // the playback path's scaled cues, sampled at the current wall-clock
+  // position (media-time / speed — cues live in the wall-clock base).
+  function resumeAudioEl(el, done, fail, rearm) {
+    settleResume(el.play(), function () {
+      if (rearm) rearmAvatarForResume(el);
+      done();
+    }, fail);
+  }
+  function rearmAvatarForResume(el) {
+    if (!hasModule('Avatar') || typeof window.Avatar.speak !== 'function') return;
+    if (!state.lastCues || !state.lastCues.length) return;
+    var spd = state.speed || 1;
+    var mediaTime = (el && typeof el.currentTime === 'number') ? el.currentTime : 0;
+    try {
+      window.Avatar.speak(scaleCues(state.lastCues, spd), { currentTime: mediaTime / spd });
+    } catch (e) {}
+  }
+  // M3: the Web Speech virtual clock was frozen on pause — shift its t0
+  // forward by the paused gap, restart the tick, and re-arm the avatar mouth
+  // from the frozen wall-clock position so lip-sync stays aligned.
+  // (Avatar.speak samples the timeSrc once, then advances on wall-clock, so
+  // the virtual-clock t0 shift alone would NOT move the mouth back in line.)
+  function restartSpeechClock() {
+    var sc = state.speechClock;
+    if (!sc || !sc.box || !sc.clock) return;
+    sc.box.t0 += performance.now() - (state.speechPausedAt || performance.now());
+    sc.clock.currentTime = (performance.now() - sc.box.t0) / 1000;
+    if (!state.clockTimer) {
+      state.clockTimer = setInterval(function () {
+        sc.clock.currentTime = (performance.now() - sc.box.t0) / 1000;
+      }, 50);
+    }
+    if (hasModule('Avatar') && typeof window.Avatar.speak === 'function' &&
+        state.lastCues && state.lastCues.length) {
+      try {
+        window.Avatar.speak(scaleCues(state.lastCues, state.speed || 1),
+          { currentTime: sc.clock.currentTime });
+      } catch (e) {}
+    }
   }
 
   // Round 2: selected-character info box under the Download button.
@@ -1799,6 +2160,17 @@
       rec.onstop = function () { finishRecording(); };
       try { rec.start(); }
       catch (e) { cleanupRecording(); setMsg(t('micUnsupported'), true); return; }
+      // M27: hard cap — a forgotten recording stops itself at 10 minutes
+      // (recordT0 was tracked but never enforced: a self-DoS).
+      if (state.recordTimer) { clearTimeout(state.recordTimer); state.recordTimer = 0; }
+      state.recordAutoStopped = false;
+      state.recordTimer = setTimeout(function () {
+        state.recordTimer = 0;
+        if (state.recording) {
+          state.recordAutoStopped = true;
+          stopRecording(); // -> rec.onstop -> finishRecording reports the cap
+        }
+      }, 10 * 60 * 1000);
       updateRecordBtn();
       setMsg(t('recording'));
     }, function () {
@@ -1813,6 +2185,7 @@
   }
 
   function cleanupRecording() {
+    if (state.recordTimer) { clearTimeout(state.recordTimer); state.recordTimer = 0; } // M27
     if (state.recordStream) {
       try { state.recordStream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) {}
     }
@@ -1824,6 +2197,8 @@
   }
 
   async function finishRecording() {
+    var autoStopped = state.recordAutoStopped; // M27: capture before cleanup clears it
+    state.recordAutoStopped = false;
     var chunks = state.recordChunks.slice();
     var mime = (state.recorder && state.recorder.mimeType) || 'audio/webm';
     cleanupRecording();
@@ -1872,11 +2247,49 @@
         saved = true;
       } catch (e) { saved = false; }
     }
-    setMsg(t(saved ? 'recordSaved' : 'recordReady'));
+    setMsg((autoStopped ? MIC_AUTO_STOP_NOTE + ' ' : '') + t(saved ? 'recordSaved' : 'recordReady'));
     // No auto-play — the user taps Play (same pattern as the Web Speech path).
   }
 
   /* ---------------- export ---------------- */
+
+  // C1/C2/C11 (Team 3): export honesty — never assume the container.
+  // No new i18n keys (M39): local bilingual constants, each defined once.
+  var TUNE_EXPORT_NOTE = 'Note: speed/pitch apply at playback only — the exported audio uses the base voice. / نوٹ: اسپیڈ/پچ صرف چلانے پر لگتی ہے — ایکسپورٹ شدہ آڈیو میں اصل آواز ہوگی۔';
+  var PITCH_VIDEO_NOTE = 'Note: pitch shift applies at playback only — the exported video uses the base voice pitch (speed is baked into the video). / نوٹ: پچ صرف چلانے پر لگتی ہے — ایکسپورٹ شدہ ویڈیو میں اصل پچ ہوگی (اسپیڈ ویڈیو میں شامل ہے)۔';
+  var AUDIO_SAVED_MSG = 'Audio downloaded. / آڈیو ڈاؤن لوڈ ہوگئی۔';
+
+  // MINOR (Team 3): timestamped export filenames — without a timestamp,
+  // repeated downloads collide and overwrite each other on mobile.
+  function stampedName(base, ext) {
+    var d = new Date();
+    function p(x) { return (x < 10 ? '0' : '') + x; }
+    var ts = d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+             p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+    return base + '-' + ts + '.' + ext;
+  }
+
+  // C1: the download extension (and the saved message) follows the blob's
+  // REAL MIME type — Edge yields audio/mpeg, Chatterbox/dialogue yield
+  // audio/wav. Never assume MP3.
+  function audioExtForType(mime) {
+    var m = String(mime || '').toLowerCase().split(';')[0].trim();
+    if (m === 'audio/wav' || m === 'audio/x-wav' || m === 'audio/wave') return 'wav';
+    if (m === 'audio/webm') return 'webm';
+    if (m === 'audio/mp4' || m === 'audio/m4a' || m === 'audio/x-m4a') return 'm4a';
+    return 'mp3'; // audio/mpeg and anything unknown: the historical default name
+  }
+
+  // C11: honest notice when the export cannot sound like the tuned playback.
+  // Audio exports bake neither speed nor pitch; video exports bake speed
+  // (playbackRate on the export element) but never pitch — so the video
+  // notice fires on pitch only.
+  function withTuneNote(baseMsg, forVideo) {
+    var tuned = forVideo ? (state.pitch !== 0)
+                         : (state.speed !== 1 || state.pitch !== 0);
+    if (!tuned) return baseMsg;
+    return baseMsg + ' ' + (forVideo ? PITCH_VIDEO_NOTE : TUNE_EXPORT_NOTE);
+  }
 
   async function exportWav() {
     if (!hasModule('Exporter')) { setMsg(t('exporterMissing'), true); return; }
@@ -1885,7 +2298,7 @@
     setMsg(t('working'));
     try {
       var blob = await window.Exporter.encodeWAV(r.audioBuffer);
-      window.Exporter.downloadAudio(blob, 'voicesync-voice.wav');
+      window.Exporter.downloadAudio(blob, stampedName('voicesync-voice', 'wav'));
       setMsg(t('wavSaved'));
     } catch (e) {
       setMsg(t('exportFailed') + ': ' + (e && e.message ? e.message : e), true);
@@ -1897,12 +2310,15 @@
     var r = state.lastResult;
     // Mic recordings: the blob is webm/opus, not MP3 — WAV is the honest export.
     if (r && r.engine === 'mic') { setMsg(t('useWavForMic'), true); return; }
-    // SPEC §3: synthesize blob is the engine's native container (MP3 for Edge).
+    // SPEC §3: synthesize blob is the engine's native container (MP3 for Edge,
+    // WAV for Chatterbox/dialogue). C1: the extension follows the blob's real
+    // MIME type — never assume MP3 (the old code named WAV bytes ".mp3").
     if (r && r.blob) {
       setMsg(t('working'));
       try {
-        window.Exporter.downloadAudio(r.blob, 'voicesync-voice.mp3');
-        setMsg(t('mp3Saved'));
+        var ext = audioExtForType(r.blob.type);
+        window.Exporter.downloadAudio(r.blob, stampedName('voicesync-voice', ext));
+        setMsg(withTuneNote(ext === 'wav' ? t('wavSaved') : ext === 'mp3' ? t('mp3Saved') : AUDIO_SAVED_MSG));
       } catch (e) {
         setMsg(t('exportFailed') + ': ' + (e && e.message ? e.message : e), true);
       }
@@ -1910,8 +2326,8 @@
     }
     // Google path: no bytes (CORS) — download straight from the TTS URL (API.md §3).
     if (r && r.engine === 'google' && r.url) {
-      downloadUrl(r.url, 'voicesync-voice.mp3');
-      setMsg(t('mp3Saved'));
+      downloadUrl(r.url, stampedName('voicesync-voice', 'mp3'));
+      setMsg(withTuneNote(t('mp3Saved')));
       return;
     }
     setMsg(t('exportNeedsAudio'), true);
@@ -1923,7 +2339,7 @@
   function downloadUrl(url, filename) {
     var a = document.createElement('a');
     a.href = url;
-    a.download = filename || 'voicesync-download.mp3';
+    a.download = filename || stampedName('voicesync-download', 'mp3');
     a.target = '_blank';
     a.rel = 'noopener';
     document.body.appendChild(a);
@@ -1954,7 +2370,10 @@
     var outCanvas = canvas, captionTimer = null, audioRef = { el: null };
     if (portrait) {
       var box = $('textInput');
-      var capText = box ? box.value.trim() : '';
+      // MINOR (Team 3): prefer the generated-text snapshot (state.lastResult.text)
+      // over the live textbox for burnt-in captions too.
+      var capText = (r && typeof r.text === 'string' && r.text.trim()) ? r.text.trim()
+        : (box ? box.value.trim() : '');
       var capDur = (r.duration || 5) / (state.speed || 1);
       var caps = getCaptionBlocks(capText, capDur);
       outCanvas = document.createElement('canvas');
@@ -1970,7 +2389,11 @@
           var dw = aw * s, dh = ah * s;
           octx.drawImage(canvas, (720 - dw) / 2, (720 - dh) / 2, dw, dh);
           // Caption bar at bottom
-          var now = audioRef.el && typeof audioRef.el.currentTime === 'number' ? audioRef.el.currentTime : 0;
+          // Team 3 M6: blocks are built on the WALL-CLOCK base (dur/speed),
+          // but currentTime advances in media-time at playbackRate=speed —
+          // divide by speed so the lookup reads wall-clock time.
+          var now = audioRef.el && typeof audioRef.el.currentTime === 'number'
+            ? audioRef.el.currentTime / (state.speed || 1) : 0;
           var cur = null;
           for (var i = 0; i < caps.length; i++) {
             if (now >= caps[i].start && now <= caps[i].end) { cur = caps[i]; break; }
@@ -2008,13 +2431,15 @@
           audioRef.el = audioEl;
           // Team 2 round 3: match captions — play export audio at user speed.
           try { audioEl.playbackRate = state.speed || 1; } catch (e) {}
-          try { window.Avatar.speak(cues, audioEl); } catch (e) {}
+          // Team 3 C3: scale cue times to the wall-clock base at speed != 1,
+          // or the exported video bakes the lip-sync desync into the file.
+          try { window.Avatar.speak(scaleCues(cues, state.speed || 1), audioEl); } catch (e) {}
         }
       });
       if (captionTimer) cancelAnimationFrame(captionTimer);
       stopAvatar();
-      window.Exporter.downloadAudio(blob, portrait ? 'voicesync-shorts-9x16.webm' : 'voicesync-video.webm');
-      setMsg(t('videoSaved'));
+      window.Exporter.downloadAudio(blob, stampedName(portrait ? 'voicesync-shorts-9x16' : 'voicesync-video', 'webm'));
+      setMsg(withTuneNote(t('videoSaved'), true)); // C11: pitch is playback-only on video
     } catch (e) {
       if (captionTimer) cancelAnimationFrame(captionTimer);
       stopAvatar();
@@ -2036,18 +2461,27 @@
     var r = state.lastResult;
     if (!r || !r.audioBuffer) { setMsg(t('exportNeedsAudio'), true); return; }
     try {
+      // C2: share HONEST files — the filename and MIME follow the blob's real
+      // type. Mic blobs are webm/opus, which most share targets (WhatsApp)
+      // cannot play, so re-encode those to real WAV when the decoded buffer
+      // exists; otherwise share the honest .webm name/type.
       var blob = r.blob;
-      if (!blob && hasModule('Exporter') && typeof window.Exporter.encodeWAV === 'function') {
-        blob = await window.Exporter.encodeWAV(r.audioBuffer);
+      var wantWav = !blob || r.engine === 'mic' ||
+        /^audio\/webm/i.test(String((blob && blob.type) || ''));
+      if (wantWav && r.audioBuffer && hasModule('Exporter') && typeof window.Exporter.encodeWAV === 'function') {
+        try { blob = await window.Exporter.encodeWAV(r.audioBuffer); }
+        catch (e2) { blob = r.blob; } // fall back to the original, honestly named
       }
       if (!blob) { setMsg(t('exportFailed'), true); return; }
-      var file = new File([blob], 'voicesync-voice.wav', { type: 'audio/wav' });
+      var shExt = audioExtForType(blob.type);
+      var shName = stampedName('voicesync-voice', shExt);
+      var file = new File([blob], shName, { type: blob.type || 'application/octet-stream' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'VoiceSync Studio' });
         setMsg(t('shared'));
       } else {
         // Fallback: just download it.
-        window.Exporter.downloadAudio(blob, 'voicesync-voice.wav');
+        window.Exporter.downloadAudio(blob, shName);
         setMsg(t('shareFallback'));
       }
     } catch (e) {
@@ -2100,10 +2534,13 @@
   }
 
   function exportSrt() {
-    var box = $('textInput');
-    var text = box ? box.value.trim() : '';
-    if (!text) { setMsg(t('enterText'), true); return; }
     var r = state.lastResult;
+    var box = $('textInput');
+    var boxText = box ? box.value.trim() : '';
+    // MINOR (Team 3): prefer the GENERATED-text snapshot over the live
+    // textbox — the user may have edited the box after generating.
+    var text = (r && typeof r.text === 'string' && r.text.trim()) ? r.text.trim() : boxText;
+    if (!text) { setMsg(t('enterText'), true); return; }
     var dur = (r && r.duration) ? r.duration : Math.max(1, text.length / 14);
     // Match the user's playback speed: at 2x the voice finishes in half the time.
     dur = dur / (state.speed || 1);
@@ -2113,7 +2550,7 @@
     });
     try {
       var blob = new Blob(['\ufeff' + out.join('\n')], { type: 'text/plain;charset=utf-8' });
-      window.Exporter.downloadAudio(blob, 'voicesync-subtitles.srt');
+      window.Exporter.downloadAudio(blob, stampedName('voicesync-subtitles', 'srt'));
       setMsg(t('srtSaved'));
     } catch (e) {
       setMsg(t('exportFailed') + ': ' + (e && e.message ? e.message : e), true);
@@ -2236,6 +2673,10 @@
     applyI18n();
     probeLipSync();
   }
+
+  // MINOR (Team 3): audio must not survive back-navigation — stop
+  // everything when the page is hidden/unloaded.
+  window.addEventListener('pagehide', function () { try { stopAll(); } catch (e) {} });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

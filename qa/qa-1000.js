@@ -7,6 +7,7 @@ var ttsjs = fs.readFileSync(P + 'js/tts.js', 'utf8');
 var i18njs = fs.readFileSync(P + 'js/i18n.js', 'utf8');
 var html = fs.readFileSync(P + 'index.html', 'utf8');
 var css = fs.readFileSync(P + 'css/style.css', 'utf8');
+var expsrc = fs.readFileSync(P + 'js/exporter.js', 'utf8');
 
 var n = 0, pass = 0, fails = [];
 function t(name, cond) {
@@ -28,6 +29,30 @@ async function main() {
   var wrapSrtLine = grab(appjs, 'wrapSrtLine');
   var resampleLinear = grab(appjs, 'resampleLinear');
   var scaleCues = grab(appjs, 'scaleCues');
+
+  /* i18n key extraction (M39): real key sets for en / ur / FALLBACK.
+     Delimiter-based (not brace-matching) — verified unique in js/i18n.js. */
+  function blockBetween(src, startDelim, endDelim) {
+    var s = src.indexOf(startDelim);
+    if (s === -1) return null;
+    var e = src.indexOf(endDelim, s + startDelim.length);
+    if (e === -1) return null;
+    return src.slice(s + startDelim.length, e);
+  }
+  function dictKeys(block) {
+    var out = {}, dm, dre = /^\s*([A-Za-z0-9_]+)\s*:/gm;
+    while ((dm = dre.exec(block))) out[dm[1]] = 1;
+    return out;
+  }
+  var enBlock = blockBetween(i18njs, '    en: {', '\n    },\n    ur: {');
+  var urBlockFull = blockBetween(i18njs, '    ur: {', '\n    }\n  };');
+  var enKeys = enBlock ? dictKeys(enBlock) : {};
+  var urKeys = urBlockFull ? dictKeys(urBlockFull) : {};
+  var fbBlockM = appjs.match(/var FALLBACK = \{([\s\S]*?)\n  \};/);
+  var fbKeysFull = fbBlockM ? dictKeys(fbBlockM[1]) : {};
+  t('i18n_extract_en', Object.keys(enKeys).length > 100);
+  t('i18n_extract_ur', Object.keys(urKeys).length > 100);
+  t('i18n_extract_fb', Object.keys(fbKeysFull).length > 10);
 
   /* 1. _chunkText — 200 cases */
   var seeds = ['hello world ', 'یہ اردو متن ہے۔ ', 'यह हिंदी पाठ है। ', 'a ', 'word ', 'Supercalifragilisticexpialidocious '];
@@ -137,14 +162,50 @@ async function main() {
     t('voices_' + vp, Array.isArray(vs) && vs.every(function (v) { return v.id && v.engine; }));
   }
 
-  /* 10. SSML escaping — 40 cases */
-  var escCases = ['a&b', '<tag>', 'a>b', '&&&', '<<<', 'نص & <عربي>', '100% & <sure>', '"quotes" & \'apost\''];
-  for (var ec = 0; ec < 40; ec++) {
-    var raw = escCases[ec % escCases.length] + ' #' + ec;
-    // replicate _escapeXml logic from tts.js
-    var esc = String(raw).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    var hasRaw = /&(?!amp;|lt;|gt;)|<|>/.test(esc.replace(/&amp;/g, '').replace(/&lt;/g, '').replace(/&gt;/g, ''));
-    t('escape_' + ec, !hasRaw && esc.indexOf(raw) === -1 || raw.indexOf('&') === -1 && raw.indexOf('<') === -1 && raw.indexOf('>') === -1 ? true : esc !== raw);
+  /* 10. _escapeXml — the REAL function via TTS._escapeXml (C9, adversarial).
+     The old suite tested a hand-copied replica; these call the real export. */
+  t('escape_xml_gate — TTS._escapeXml not exported', typeof TTS._escapeXml === 'function');
+  if (typeof TTS._escapeXml === 'function') {
+    var escReal = TTS._escapeXml;
+    var advCases = [
+      ['<script>alert("x")</script>', '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;', 'script_tag'],
+      ['a & b', 'a &amp; b', 'ampersand'],
+      ['"double" & \'single\' quotes', '&quot;double&quot; &amp; &#39;single&#39; quotes', 'quotes_escaped'],
+      ['<<nested>>', '&lt;&lt;nested&gt;&gt;', 'nested_angles'],
+      ['&&&&', '&amp;&amp;&amp;&amp;', 'amp_run'],
+      ['<b>bold</b> & <i>italic</i>', '&lt;b&gt;bold&lt;/b&gt; &amp; &lt;i&gt;italic&lt;/i&gt;', 'nested_tags'],
+      ['نص & <عربي>', 'نص &amp; &lt;عربي&gt;', 'arabic_unicode'],
+      ['اردو "اقتباس" & <ٹیگ>', 'اردو &quot;اقتباس&quot; &amp; &lt;ٹیگ&gt;', 'urdu_unicode'],
+      ['🔊 <loud> & clear', '🔊 &lt;loud&gt; &amp; clear', 'emoji'],
+      ['', '', 'empty'],
+      ['plain text, no specials', 'plain text, no specials', 'plain_passthrough'],
+      ['&amp; already escaped', '&amp;amp; already escaped', 'double_escape'],
+      ['&lt;', '&amp;lt;', 'pre_escaped_lt'],
+      ['a>b<c', 'a&gt;b&lt;c', 'mixed'],
+      ['line1\nline2 <x>', 'line1\nline2 &lt;x&gt;', 'newline_kept']
+    ];
+    advCases.forEach(function (c) {
+      t('escape_real_' + c[2], escReal(c[0]) === c[1]);
+    });
+    // structural: after removing the 5 entities, no raw XML metachar may remain
+    ['<img src=x>', 'a&b<c>d"e\'f', '<<<&&&>>>'].forEach(function (raw, ix) {
+      var out = escReal(raw);
+      var stripped = out.split('&amp;').join('').split('&lt;').join('').split('&gt;').join('')
+        .split('&quot;').join('').split('&#39;').join('');
+      t('escape_real_nometa_' + ix,
+        stripped.indexOf('&') === -1 && stripped.indexOf('<') === -1 && stripped.indexOf('>') === -1
+        && stripped.indexOf('"') === -1 && stripped.indexOf("'") === -1);
+    });
+    // escaping must be exactly invertible through the 5 entities
+    ['<a href="x&y">نص</a>', '<<<', '&&'].forEach(function (raw, ix) {
+      var out = escReal(raw);
+      var back = out.split('&lt;').join('<').split('&gt;').join('>').split('&quot;').join('"')
+        .split('&#39;').join("'").split('&amp;').join('&');
+      t('escape_real_roundtrip_' + ix, back === raw);
+    });
+    // non-string input is stringified, never throws
+    t('escape_real_num', escReal(123) === '123');
+    t('escape_real_null', escReal(null) === 'null');
   }
 
   /* 11. i18n keys ×2 — ~100 */
@@ -168,11 +229,28 @@ async function main() {
     t('html_i18n_' + ix, i18njs.indexOf(k + ':') !== -1);
   });
 
+  /* M39. i18n subset assertions: FALLBACK ⊆ en ⊆ ur, and every
+     data-i18n / data-i18n-ph key in index.html exists in both dicts. */
+  Object.keys(fbKeysFull).forEach(function (k) {
+    t('m39_fb_in_en_' + k, !!enKeys[k]);
+  });
+  Object.keys(enKeys).forEach(function (k) {
+    t('m39_en_in_ur_' + k, !!urKeys[k]);
+  });
+  var hk2 = {}, re5 = /data-i18n(?:-ph)?="([A-Za-z0-9_]+)"/g;
+  while ((m = re5.exec(html))) hk2[m[1]] = 1;
+  Object.keys(hk2).forEach(function (k) {
+    t('m39_html_en_' + k, !!enKeys[k]);
+    t('m39_html_ur_' + k, !!urKeys[k]);
+  });
+
   /* 13. synthesize error contracts — 10 */
   t('syn_empty', !!(await TTS.synthesize('', 'x')).error);
   t('syn_spaces', !!(await TTS.synthesize('   ', 'x')).error);
   t('syn_null', !!(await TTS.synthesize(null, 'x')).error);
-  t('syn_number', !!(await TTS.synthesize(12345, 'x')).error || true); // numbers stringified or error: both fine
+  // non-string input: the contract is resolve-with-result-or-{error}, never hang/throw/undefined
+  var rn = await TTS.synthesize(12345, 'x');
+  t('syn_number', !!(rn && (rn.engine || rn.error)));
   var r5 = await TTS.synthesize('hello world test', 'edge:en-US-AriaNeural');
   t('syn_resolves', !!(r5 && (r5.engine || r5.error)));
 
@@ -192,7 +270,8 @@ async function main() {
   t('inv_no_console_log', (appjs.match(/console\.log/g) || []).length === 0);
   t('inv_pitch_detune', appjs.indexOf('detune.value') !== -1);
   t('inv_speed_audio', appjs.indexOf('playbackRate') !== -1);
-  t('inv_wav_header', true);
+  t('inv_wav_header', expsrc.indexOf("writeAscii(view, 0, 'RIFF')") !== -1 &&
+    expsrc.indexOf("writeAscii(view, 8, 'WAVE')") !== -1);
   t('inv_i18n_ur', /ur\s*:/.test(i18njs));
   t('inv_html_lang_toggle', html.indexOf('langToggle') !== -1 || html.indexOf('data-i18n') !== -1);
   t('inv_record_btn', html.indexOf('btnRecord') !== -1);
@@ -348,11 +427,7 @@ async function main() {
    'char_title', 'char_search_ph', 'char_preview', 'char_no_match', 'char_selected'
   ].forEach(function (k) {
     t('char_i18n_en_' + k, new RegExp(k + ":\\s*'").test(i18njs));
-    t('char_i18n_ur_' + k, true); // ur block checked below as a whole
-  });
-  var urBlock = i18njs.match(/ur:\s*\{([\s\S]*?)\n    \}/);
-  ['pill_free', 'char_title', 'char_search_ph', 'char_no_match', 'char_selected'].forEach(function (k) {
-    t('char_i18n_ur_real_' + k, !!urBlock && urBlock[1].indexOf(k + ':') !== -1);
+    t('char_i18n_ur_' + k, !!urKeys[k]);
   });
 
   // ---- Team 2 Fix Round: 15 issues ----
@@ -365,15 +440,19 @@ async function main() {
   t('fix_pausedKind_state', appjs.indexOf('pausedKind: null,') !== -1);
   // 3: btn-accent readable text
   t('fix_accent_color', /\.btn-accent \{[^}]*color: #fff/.test(css));
-  // 4: Clear nulls lastResult + disables transport
-  t('fix_clear_nulls', appjs.indexOf('state.lastResult = null; state.lastCues = []; state.lastUrl = null;') !== -1);
+  // 4: Clear nulls lastResult + revokes the blob URL (MINOR: stopAll() does
+  // not touch lastUrl, so Clear now calls releaseLastAudio() instead of
+  // bare-nulling it — the URL is revoked AND nulled in one place).
+  t('fix_clear_nulls', appjs.indexOf('state.lastResult = null; state.lastCues = [];') !== -1);
+  t('fix_clear_revokes_blob', /stopAll\(\);\s*\n\s*state\.lastResult = null; state\.lastCues = \[\];\s*\n[\s\S]{0,200}?releaseLastAudio\(\);/.test(appjs));
+  t('fix_clear_lastUrl_nulled', appjs.indexOf('state.lastUrl = null;') !== -1);
   t('fix_clear_disables', /'\btnPlay', 'btnListenBig'/.test(appjs) || appjs.indexOf("'btnPlay', 'btnListenBig'") !== -1);
   t('fix_clear_i18n', i18njs.indexOf('cleared:') !== -1);
   // 5: parts divisor 400
   t('fix_parts_400', appjs.indexOf('Math.ceil(txt.length / 400)') !== -1);
   t('fix_parts_no2000', appjs.indexOf('/ 2000)') === -1 || appjs.indexOf('txt.length / 2000') === -1);
   // 6: renderLangPills in 3 paths
-  t('fix_pills_dropdown', /tl\.addEventListener\('change', function \(\) \{\s*\n?\s*state\.ttsLang = tl\.value \|\| 'en';\s*\n?\s*loadVoices\(\);\s*\n?\s*renderLangPills\(\);/.test(appjs));
+  t('fix_pills_dropdown', /tl\.addEventListener\('change', function \(\) \{(?:\s*\/\/[^\n]*|\s*if \(state\.generating\)[^\n]*)*\s*state\.ttsLang = tl\.value \|\| 'en';\s*\n?\s*loadVoices\(\);\s*\n?\s*renderLangPills\(\);/.test(appjs));
   t('fix_pills_autodetect', /await loadVoices\(\);\s*\n?\s*renderLangPills\(\); \/\/ Team 2 Fix: pills follow auto-detect/.test(appjs));
   t('fix_pills_preset', appjs.indexOf("tl.value = p.ttsLang; renderLangPills();") !== -1);
   // 7: filtered-out voice warning
@@ -397,6 +476,170 @@ async function main() {
   // 14: visible player IS the playback element
   t('fix_google_visible', appjs.indexOf('if (ap) { try { ap.hidden = false; } catch (e) {} }') !== -1);
   t('fix_google_no_double', appjs.indexOf('el = ap || new Audio();') !== -1);
+
+  /* Team 3 QA addition: preset + project localStorage round-trips.
+     No DOM in this harness, so tests run at schema level: the real
+     key names, the real JSON shape, and the real save/load functions
+     (extracted from app.js / exporter.js) against an in-memory stub. */
+  var memStore = {};
+  var lsStub = {
+    getItem: function (k) { return Object.prototype.hasOwnProperty.call(memStore, k) ? memStore[k] : null; },
+    setItem: function (k, v) { memStore[k] = String(v); },
+    removeItem: function (k) { delete memStore[k]; },
+    clear: function () { for (var kk in memStore) delete memStore[kk]; }
+  };
+  function grabSrc(src, name) {
+    var mm = src.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n  \\}'));
+    return mm ? mm[0] : null;
+  }
+
+  // ---- presets (app.js: PRESET_KEY = 'voicesync-presets') ----
+  var presetKeyM = appjs.match(/var PRESET_KEY = '([^']+)'/);
+  t('preset_key_name', !!presetKeyM && presetKeyM[1] === 'voicesync-presets');
+  var getP = null, setP = null;
+  try {
+    var gSrc = grabSrc(appjs, 'getPresets'), sSrc = grabSrc(appjs, 'setPresets');
+    if (gSrc && sSrc && presetKeyM) {
+      getP = new Function('PRESET_KEY', 'localStorage', 'return (' + gSrc + ');')(presetKeyM[1], lsStub);
+      setP = new Function('PRESET_KEY', 'localStorage', 'return (' + sSrc + ');')(presetKeyM[1], lsStub);
+    }
+  } catch (e) { getP = setP = null; }
+  t('preset_fns_grabbed', typeof getP === 'function' && typeof setP === 'function');
+  if (typeof getP === 'function' && typeof setP === 'function') {
+    lsStub.clear();
+    t('preset_empty', JSON.stringify(getP()) === '{}');
+    var samplePreset = {
+      'My Preset': { ttsLang: 'ur', voiceId: 'edge:ur-PK-AsadNeural', speed: 1.25,
+                     pitch: -3, dialogueMode: true, voiceId2: 'edge:ur-PK-GulNeural' }
+    };
+    setP(samplePreset);
+    var rawStored = lsStub.getItem('voicesync-presets');
+    var back = null; try { back = JSON.parse(rawStored); } catch (e) { back = null; }
+    t('preset_stored_json', !!back && typeof back === 'object');
+    t('preset_roundtrip', JSON.stringify(getP()) === JSON.stringify(samplePreset));
+    t('preset_shape_fields', !!back && !!back['My Preset'] &&
+      back['My Preset'].ttsLang === 'ur' &&
+      back['My Preset'].voiceId === 'edge:ur-PK-AsadNeural' &&
+      back['My Preset'].speed === 1.25 &&
+      back['My Preset'].pitch === -3 &&
+      back['My Preset'].dialogueMode === true &&
+      back['My Preset'].voiceId2 === 'edge:ur-PK-GulNeural');
+    lsStub.setItem('voicesync-presets', '###corrupt###');
+    t('preset_corrupt', JSON.stringify(getP()) === '{}');
+    lsStub.setItem('voicesync-presets', '42');
+    t('preset_nonobject', JSON.stringify(getP()) === '{}');
+    lsStub.clear();
+  } else {
+    t('preset_roundtrip_unavailable', false);
+  }
+  // applyPreset reads each field with a type guard (schema contract)
+  t('preset_apply_ttsLang', appjs.indexOf('if (p.ttsLang)') !== -1);
+  t('preset_apply_voiceId', appjs.indexOf('if (p.voiceId)') !== -1);
+  t('preset_apply_speed_num', appjs.indexOf("typeof p.speed === 'number'") !== -1);
+  t('preset_apply_pitch_num', appjs.indexOf("typeof p.pitch === 'number'") !== -1);
+  t('preset_apply_dialogue_bool', appjs.indexOf("typeof p.dialogueMode === 'boolean'") !== -1);
+  t('preset_apply_voiceId2', appjs.indexOf('p.voiceId2') !== -1);
+
+  // ---- projects (exporter.js: STORAGE_KEY = 'voicesync-studio.project.v1') ----
+  t('project_key_name', M._storageKey === 'voicesync-studio.project.v1');
+  // minimal browser stubs so Exporter.saveProject's download path runs in Node
+  globalThis.localStorage = lsStub;
+  if (typeof globalThis.document === 'undefined') {
+    globalThis.document = {
+      createElement: function () { return { click: function () {} }; },
+      body: { appendChild: function () {} }
+    };
+  }
+  if (typeof globalThis.window === 'undefined') { globalThis.window = { setTimeout: setTimeout }; }
+  var proj = { app: 'voicesync-studio', v: 1, text: 'hello world', ttsLang: 'ur',
+               voiceId: 'edge:ur-PK-AsadNeural', uiLang: 'en', savedAt: '2026-10-08T12:00:00.000Z' };
+  var savedJson = null, saveThrew = null;
+  try { savedJson = M.Exporter.saveProject(proj); } catch (e) { saveThrew = e; }
+  t('project_save_no_throw', saveThrew === null);
+  var savedOk = false;
+  try { savedOk = !!savedJson && JSON.stringify(JSON.parse(savedJson)) === JSON.stringify(proj); } catch (e) {}
+  t('project_save_returns_json', savedOk);
+  var loadedProj = null;
+  try { loadedProj = M.Exporter.loadProject(); } catch (e) { loadedProj = 'THREW'; }
+  t('project_roundtrip', JSON.stringify(loadedProj) === JSON.stringify(proj));
+  t('project_stored_key', lsStub.getItem('voicesync-studio.project.v1') === savedJson);
+  lsStub.setItem('voicesync-studio.project.v1', '###corrupt###');
+  t('project_corrupt_null', M.Exporter.loadProject() === null);
+  lsStub.removeItem('voicesync-studio.project.v1');
+  t('project_empty_null', M.Exporter.loadProject() === null);
+  // collectProject schema (real function, stubbed $/state)
+  var collectProject = null;
+  try {
+    var cSrc = grabSrc(appjs, 'collectProject');
+    if (cSrc) collectProject = new Function('$', 'state', 'return (' + cSrc + ');')(
+      function () { return null; }, { ttsLang: 'ur', voiceId: 'edge:ur-PK-AsadNeural', lang: 'en' });
+  } catch (e) { collectProject = null; }
+  t('project_collect_grabbed', typeof collectProject === 'function');
+  if (typeof collectProject === 'function') {
+    var cp = collectProject();
+    t('project_collect_app', cp.app === 'voicesync-studio');
+    t('project_collect_v', cp.v === 1);
+    t('project_collect_fields', cp.ttsLang === 'ur' && cp.voiceId === 'edge:ur-PK-AsadNeural' &&
+      cp.uiLang === 'en' && typeof cp.text === 'string');
+    t('project_collect_savedAt', !isNaN(Date.parse(cp.savedAt)));
+  }
+  // applyProject validates untrusted fields before touching state (schema contract)
+  t('project_apply_validates_ttsLang', appjs.indexOf("typeof p.ttsLang === 'string'") !== -1);
+  t('project_apply_validates_voiceId', appjs.indexOf("typeof p.voiceId === 'string'") !== -1);
+  t('project_apply_validates_uiLang', appjs.indexOf("p.uiLang === 'en' || p.uiLang === 'ur'") !== -1);
+
+  /* Team 3 QA: pause/resume state-machine — pure-logic unit tests plus
+     source-level transition assertions (harness style). */
+  var pauseSrc = grabSrc(appjs, 'pausePlayback');
+  var resumeSrc = grabSrc(appjs, 'resumePlayback');
+  var stopAllSrc = grabSrc(appjs, 'stopAll');
+  t('pause_fns_grabbed', typeof pauseSrc === 'string' && typeof resumeSrc === 'string' && typeof stopAllSrc === 'string');
+  // Pause sets pausedKind per playback path (pause is a toggle to resume).
+  ['audioEl', 'previewEl', 'previewCtx', 'audioCtx', 'speech', 'audioPlayer'].forEach(function (k) {
+    t('pause_sets_' + k, !!pauseSrc && pauseSrc.indexOf("state.pausedKind = '" + k + "'") !== -1);
+  });
+  t('pause_toggle_resume', !!pauseSrc && pauseSrc.indexOf('if (state.pausedKind) { resumePlayback(); return; }') !== -1);
+  // stopAll resets the whole state machine.
+  t('stopAll_resets_pausedKind', !!stopAllSrc && stopAllSrc.indexOf('state.pausedKind = null') !== -1);
+  // Resume clears pausedKind ONLY on success; failure restores it (retryable).
+  t('resume_done_clears', !!resumeSrc && /var done = function \(\) \{\s*\n\s*state\.pausedKind = null;/.test(resumeSrc));
+  t('resume_fail_restores', !!resumeSrc && resumeSrc.indexOf('state.pausedKind = k;') !== -1);
+  // settleResume is pure — unit-test it for real.
+  var settleSrc = grabSrc(appjs, 'settleResume');
+  var settleResumeFn = null;
+  try { if (settleSrc) settleResumeFn = new Function('return (' + settleSrc + ');')(); } catch (e) {}
+  t('settleResume_grabbed', typeof settleResumeFn === 'function');
+  if (typeof settleResumeFn === 'function') {
+    var settleLog = [];
+    var tick = function () { return new Promise(function (r) { setTimeout(r, 10); }); };
+    settleResumeFn(Promise.resolve(), function () { settleLog.push('done'); }, function () { settleLog.push('fail'); });
+    await tick();
+    settleResumeFn(Promise.reject(), function () { settleLog.push('done'); }, function () { settleLog.push('fail'); });
+    await tick();
+    settleResumeFn(null, function () { settleLog.push('done'); }, function () { settleLog.push('fail'); });
+    t('settleResume_resolve_clears', settleLog[0] === 'done');
+    t('settleResume_reject_restores', settleLog[1] === 'fail');
+    t('settleResume_nonpromise_clears', settleLog[2] === 'done');
+  }
+
+  /* Team 3 QA: engine-fallback parity — previewVoice vs onGenerate must use
+     the same fallback computation (same helper, same i18n note, same badge). */
+  var prevSrc = grabSrc(appjs, 'previewVoice');
+  var genSrc = grabSrc(appjs, 'onGenerate');
+  t('fallback_fns_grabbed', typeof prevSrc === 'string' && typeof genSrc === 'string');
+  // Both derive the wanted engine through parseVoiceId (M40-light).
+  t('fallback_preview_parseVoiceId', !!prevSrc && prevSrc.indexOf('parseVoiceId(vid).engine') !== -1);
+  t('fallback_onGenerate_parseVoiceId', !!genSrc && genSrc.indexOf('parseVoiceId(state.voiceId).engine') !== -1);
+  // Both build the note from the same i18n key.
+  t('fallback_preview_same_key', !!prevSrc && prevSrc.indexOf("t('engineFallback')") !== -1);
+  t('fallback_onGenerate_same_key', !!genSrc && genSrc.indexOf("t('engineFallback')") !== -1);
+  t('fallback_key_used_twice', (appjs.match(/t\('engineFallback'\)/g) || []).length >= 2);
+  // Both surface it through the shared engine badge.
+  t('fallback_preview_badge', !!prevSrc && prevSrc.indexOf('updateEngineBadge(state.previewEngine, previewEngineNote)') !== -1);
+  t('fallback_onGenerate_badge', !!genSrc && genSrc.indexOf('updateEngineBadge()') !== -1);
+  // Both compare against the ACTUAL engine that spoke (no silent substitution).
+  t('fallback_preview_compares_engine', !!prevSrc && prevSrc.indexOf('r.engine !== wantEngine') !== -1);
+  t('fallback_onGenerate_compares_engine', !!genSrc && genSrc.indexOf('result.engine !== wantEngine') !== -1);
 
   console.log('\n==== 1000-TEST QA RESULT ====');
   console.log('PASSED: ' + pass + ' / ' + n);

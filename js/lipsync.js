@@ -15,12 +15,26 @@
 
   // Pinned CDN build, verified live 2026-10-08 (HTTP 200, content-type ok, CORS *):
   //   - ESM entry:  https://cdn.jsdelivr.net/npm/lip-sync-engine@1.0.3/dist/index.mjs
+  //                 sha256 of the exact served bytes (11,416 bytes):
+  //                 bc9b36a83ea3707cdda4ecaf47d37ebff00a12b2764607c60a5cdb47f9cef198
+  //                 -> runtime-verified by verifiedImport() before execution.
   //   - WASM glue:  https://cdn.jsdelivr.net/npm/lip-sync-engine@1.0.3/dist/wasm/lip-sync-engine.js
   //   - WASM bin:   https://cdn.jsdelivr.net/npm/lip-sync-engine@1.0.3/dist/wasm/lip-sync-engine.wasm
-  // "lip-sync-engine" is a WASM port of Rhubarb Lip Sync; mouthCues use Rhubarb
-  // cue format {start, end, value} with visemes A..H + X.
+  //                 sha256 of the exact served bytes (1,890,181 bytes):
+  //                 1846795c8f25b5069416d00f5053c40514725ad0899a9c3e2da6065dce54fa5a
+  // The wasm binary is fetched internally by the glue script itself — there is
+  // no import-boundary hook to verify it at runtime without duplicating the
+  // ~1.9MB download, so its hash is verified out-of-band by the maintainer:
+  //     curl -sL https://cdn.jsdelivr.net/npm/lip-sync-engine@1.0.3/dist/wasm/lip-sync-engine.wasm | sha256sum
+  // must print the value above. The version is pinned in the URL, so the bytes
+  // are immutable; any drift fails init and ready() honestly reports 'heuristic'.
   var CDN_BASE   = 'https://cdn.jsdelivr.net/npm/lip-sync-engine@1.0.3';
   var ENGINE_URL = CDN_BASE + '/dist/index.mjs';
+  // Pinned hash of the ESM entry bytes (sha256, hex). Mismatch -> throw, so
+  // ready() degrades honestly to the heuristic instead of running tampered code.
+  var ENGINE_SHA256 = 'bc9b36a83ea3707cdda4ecaf47d37ebff00a12b2764607c60a5cdb47f9cef198';
+  // "lip-sync-engine" is a WASM port of Rhubarb Lip Sync; mouthCues use Rhubarb
+  // cue format {start, end, value} with visemes A..H + X.
 
   var TARGET_RATE = 16000;        // Rhubarb-class engines expect 16 kHz mono PCM
   var READY_TIMEOUT_MS = 25000;   // then honestly report 'heuristic' instead of hanging
@@ -143,11 +157,41 @@
 
   /* ---------------- Rhubarb WASM (primary) ---------------- */
 
-  // Lazy dynamic import via new Function so this classic script stays parseable
-  // everywhere; the import itself only runs when ready() is called.
-  function dynamicImport(url) {
-    var f = new Function('u', 'return import(u)');
-    return f(url);
+  // Native dynamic import() — lazy, only runs when ready() is called; the
+  // classic-script wrapper stays parseable everywhere and no 'unsafe-eval'
+  // (new Function) is used, so strict CSPs keep working.
+  function verifiedImport(url) {
+    return fetch(url).then(function (res) {
+      if (!res || !res.ok) throw new Error('rhubarb: entry fetch failed');
+      return res.arrayBuffer();
+    }).then(function (buf) {
+      if (typeof crypto !== 'undefined' && crypto.subtle &&
+          typeof crypto.subtle.digest === 'function') {
+        return crypto.subtle.digest('SHA-256', buf).then(function (digest) {
+          if (hexOf(new Uint8Array(digest)) !== ENGINE_SHA256) {
+            throw new Error('rhubarb: entry integrity mismatch');
+          }
+          return buf;
+        });
+      }
+      return buf; // non-secure context: crypto.subtle unavailable, import unchecked
+    }).then(function (buf) {
+      // Import the VERIFIED bytes (self-contained bundle, no relative
+      // sub-imports — checked 2026-10-08). The WASM glue resolves its binary
+      // relative to its own CDN URL, unaffected by the blob base.
+      // CSP note: a policy that blocks blob: scripts makes this reject, and
+      // ready() then honestly reports 'heuristic'.
+      return import(URL.createObjectURL(new Blob([buf], { type: 'text/javascript' })));
+    });
+  }
+
+  function hexOf(bytes) {
+    var out = '', i, b;
+    for (i = 0; i < bytes.length; i++) {
+      b = bytes[i].toString(16);
+      out += (b.length === 1 ? '0' + b : b);
+    }
+    return out;
   }
 
   function withTimeout(promise, ms) {
@@ -164,12 +208,7 @@
   }
 
   function loadRhubarb() {
-    var p;
-    try {
-      p = dynamicImport(ENGINE_URL);
-    } catch (e) {
-      p = Promise.reject(e);
-    }
+    var p = verifiedImport(ENGINE_URL);
     return withTimeout(p, READY_TIMEOUT_MS).then(function (mod) {
       if (!mod) throw new Error('rhubarb: module load failed or timed out');
       var inst = null;

@@ -3,7 +3,7 @@
 # Runs on every `git push` via the pre-push hook. Blocks the push if any check fails.
 cd "$(dirname "$0")/.."
 echo "=== VoiceSync QA: syntax ==="
-for f in js/app.js js/i18n.js js/tts.js js/exporter.js; do
+for f in js/*.js; do
   node --check "$f" || { echo "SYNTAX FAIL: $f"; exit 1; }
 done
 echo "syntax OK"

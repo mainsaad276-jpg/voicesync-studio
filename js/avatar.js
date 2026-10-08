@@ -242,14 +242,29 @@ function advanceCues(t) {
 
 function frame(now) {
   if (!state.mounted) return;
+  state.raf = 0; // this tick consumed; re-armed below only while speaking
   if (state.speaking) {
+    var t = (now - state.t0) / 1000;
     if (state.audio && state.audio.ended) {
       Avatar.stop();
-    } else {
-      state.bobPhase += 0.12;
-      advanceCues((now - state.t0) / 1000);
+      return;
     }
+    if (cueStreamEnded(t)) {
+      Avatar.stop();
+      return;
+    }
+    state.bobPhase += 0.12;
+    advanceCues(t);
   }
+  paintFrame();
+  if (state.speaking && hasRAF()) state.raf = requestAnimationFrame(frame);
+}
+
+/* M35: the rAF loop runs ONLY while speaking. startLoop/cancelLoop manage the
+ * handle; speak() starts it (double-start safe), stop() cancels it, and the
+ * loop self-terminates when the audio utterance ends or the cue stream runs
+ * out — so idle tabs never pay 60fps full-canvas repaints. */
+function paintFrame() {
   var bobY = state.speaking ? Math.sin(state.bobPhase) * 4 : 0;
   var bobR = state.speaking ? Math.sin(state.bobPhase * 0.7) * 1.6 : 0;
   if (state.headG) {
@@ -261,7 +276,22 @@ function frame(now) {
   if (state.canvas) {
     drawAvatarCanvas(state.canvas.getContext('2d'), state.canvas.width, state.canvas.height);
   }
-  if (hasRAF()) state.raf = requestAnimationFrame(frame);
+}
+
+function startLoop() {
+  if (!hasRAF() || state.raf || !state.mounted) return; // guard against double-start
+  state.raf = requestAnimationFrame(frame);
+}
+
+function cancelLoop() {
+  if (hasRAF() && state.raf) cancelAnimationFrame(state.raf);
+  state.raf = 0;
+}
+
+function cueStreamEnded(t) {
+  var cues = state.cues;
+  if (!cues || !cues.length) return false;
+  return t > cues[cues.length - 1].end;
 }
 
 /* ------------------------------------------------------------------ */
@@ -393,7 +423,7 @@ var Avatar = {
     if (!el) throw new Error('Avatar.mount: element required');
     // Re-mount cleanly.
     if (state.blinkTimer) clearTimeout(state.blinkTimer);
-    if (hasRAF() && state.raf) cancelAnimationFrame(state.raf);
+    cancelLoop();
     state.mounted = false;
     state.eyesOpen = [];
     state.eyesClosed = [];
@@ -411,7 +441,7 @@ var Avatar = {
     state.bobPhase = 0;
 
     scheduleBlink();
-    if (hasRAF()) state.raf = requestAnimationFrame(frame);
+    paintFrame(); // single static paint; the rAF loop starts on speak() (M35)
     return state.svg;
   },
 
@@ -446,6 +476,7 @@ var Avatar = {
       var first = state.cues[0];
       Avatar.setViseme(isValidViseme(first.viseme) ? first.viseme : 'X');
     }
+    startLoop(); // M35: run the rAF loop only while speaking (double-start safe)
   },
 
   stop: function () {
@@ -453,14 +484,15 @@ var Avatar = {
       state.audio.removeEventListener('ended', state.onAudioEnd);
       state.audio.removeEventListener('pause', state.onAudioEnd);
     }
+    cancelLoop(); // M35: stop the rAF loop
     state.audio = null;
     state.onAudioEnd = null;
     state.speaking = false;
     state.cues = [];
     state.cueIdx = 0;
     state.bobPhase = 0;
-    if (state.headG) state.headG.setAttribute('transform', 'translate(0 0) rotate(0 160 160)');
     Avatar.setViseme('X');
+    paintFrame(); // one final rest-state paint so SVG/canvas settle (headG reset too)
   },
 
   getCanvas: function () {

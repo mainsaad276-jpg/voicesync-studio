@@ -8,10 +8,11 @@
  *   2. Google Translate TTS  https://translate.google.com/translate_tts?client=tw-ob
  *   3. Browser Web Speech API (offline, no network needed)
  *
- * Contract (SPEC.md — exact):
+ * Contract (SPEC.md — exact, plus Team 1/C5 extension):
  *   TTS.getVoices(lang)            -> [{id, name, lang, gender, engine}]
  *     (lang is a PREFIX filter: 'ur' matches 'ur-PK' and 'ur-IN')
- *   TTS.synthesize(text, voiceId)  -> Promise<Result | {error}>
+ *   TTS.synthesize(text, voiceId, opts) -> Promise<Result | {error}> carrying .runId
+ *     opts.onProgress(done, total) is invoked per settled chunk (M13).
  *     Result shapes:
  *       edge:    {audioBuffer, blob(MP3), url, duration, engine:'edge'}
  *       google:  {audioBuffer:null, blob:null, url, urls, duration, engine:'google'}
@@ -19,7 +20,10 @@
  *                unreadable — playback via <audio> element; see API.md §3.
  *                In Node (no CORS) the fetch/byte path is kept for testing.)
  *       webspeech:{audioBuffer:null, blob:null, url:null, duration, engine:'webspeech', utterance}
- *   TTS.cancel()                   -> void
+ *       chatterbox:{audioBuffer, blob(WAV, audio/wav), url, duration, engine:'chatterbox'}
+ *     Failure: {error, errors:[{engine, error}]} (M11); mixed-script input
+ *       adds {mixedScript:true, note} to successful results (M22).
+ *   TTS.cancel(runId)              -> void  (no arg = cancel all runs)
  *
  * Rules: never throws to UI — total failure resolves {error: <message>}.
  * Browser-only APIs (WebSocket, AudioContext, speechSynthesis, URL.createObjectURL)
@@ -275,24 +279,93 @@
     'sm', 'st', 'sn', 'sd', 'tg', 'xh', 'yi', 'yo', 'eo', 'haw', 'jw']; // jw = Javanese alt code
 
   /* ------------------------------------------------------------------ */
-  /* Internal state                                                      */
+  /* Internal state — per-run cancellation identity (C5). There is NO      */
+  /* module-global "cancelled" flag anymore: every synthesize() call gets */
+  /* its own run record, and cancel(runId) touches only that run.         */
   /* ------------------------------------------------------------------ */
-  var _cancelled = false;
-  var _activeWS = null;
-  var _activeControllers = []; // AbortControllers for in-flight fetches
+  var _runs = {};              // runId -> { id, cancelled, ws, cancelWatchers:[], settled }
+  var _activeControllers = []; // {ctrl, runId} — AbortControllers for in-flight fetches
   var _sharedCtx = null;       // lazily created AudioContext
+  var _watchdog = null;        // {timer, runId} — module-slot safety-net timer (C5)
 
-  function _markActive(ctrl) { _activeControllers.push(ctrl); }
+  function _newRun() {
+    var run = { id: _uuid(), cancelled: false, ws: null, cancelWatchers: [], settled: false };
+    _runs[run.id] = run;
+    return run;
+  }
+  function _settleRun(run) {
+    if (!run || run.settled) return;
+    run.settled = true;
+    try { if (run.ws) run.ws.close(); } catch (e) {}
+    run.ws = null;
+    run.cancelWatchers.length = 0;
+    delete _runs[run.id];
+  }
+  // Abort a run's in-flight work and mark it cancelled (C5/M10).
+  function _cancelRun(run) {
+    if (!run || run.settled || run.cancelled) return;
+    run.cancelled = true;
+    try { if (run.ws) { run.ws.close(); } } catch (e) {}
+    run.ws = null;
+    _abortControllers(run.id);
+    for (var i = 0; i < run.cancelWatchers.length; i++) {
+      try { run.cancelWatchers[i](new Error('cancelled')); } catch (e) {}
+    }
+    run.cancelWatchers.length = 0;
+  }
+  // Clear the module-slot watchdog (C5: never outlives a cancel/new run/settle).
+  function _clearWatchdog() {
+    if (_watchdog) { try { clearTimeout(_watchdog.timer); } catch (e) {} _watchdog = null; }
+  }
+
+  function _markActive(ctrl, runId) { _activeControllers.push({ ctrl: ctrl, runId: runId || null }); }
   function _unmarkActive(ctrl) {
-    var i = _activeControllers.indexOf(ctrl);
-    if (i !== -1) _activeControllers.splice(i, 1);
+    for (var i = _activeControllers.length - 1; i >= 0; i--) {
+      if (_activeControllers[i].ctrl === ctrl) _activeControllers.splice(i, 1);
+    }
+  }
+  function _abortControllers(runId) { // runId undefined => abort all
+    for (var i = _activeControllers.length - 1; i >= 0; i--) {
+      var e = _activeControllers[i];
+      if (runId === undefined || e.runId === runId) {
+        try { e.ctrl.abort(); } catch (x) {}
+        _activeControllers.splice(i, 1);
+      }
+    }
+  }
+  // Race a promise against this run's cancellation. For APIs with no
+  // AbortSignal (e.g. gradio client.predict) the late result is ignored and
+  // the chain stops at the next awaited chunk boundary (M10).
+  function _raceCancel(promise, run) {
+    if (!run || run.cancelled) return promise;
+    return Promise.race([promise, new Promise(function (_, reject) {
+      run.cancelWatchers.push(reject);
+    })]);
+  }
+  // M36: one chunk failure must not discard the whole synthesis — retry twice.
+  // A cancelled run never retries: bail out between attempts.
+  function _retryChunk(fn, retriesLeft, run) {
+    return fn().catch(function (err) {
+      if (run && run.cancelled) throw new Error('cancelled');
+      if (retriesLeft > 0) return _retryChunk(fn, retriesLeft - 1, run);
+      throw err;
+    });
+  }
+  // M13: progress callback, invoked per settled chunk.
+  function _reportProgress(opts, doneN, total) {
+    try {
+      if (opts && typeof opts.onProgress === 'function') opts.onProgress(doneN, total);
+    } catch (e) {}
   }
 
   /* ------------------------------------------------------------------ */
   /* Small helpers                                                       */
   /* ------------------------------------------------------------------ */
+  // C9: exported as TTS._escapeXml so QA tests the REAL function.
+  // MINOR: also escapes quotes (was: only & < >).
   function _escapeXml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function _uuid() {
@@ -417,9 +490,32 @@
     return list.length ? list[0].id : null;
   }
 
+  function _resolveVoice(text, voiceId) {
+    return _findVoice(voiceId) || _findVoice(_defaultVoiceId(String(text || '')));
+  }
+
+  // M22: detect text that mixes scripts (e.g. Arabic + Latin). Full per-chunk
+  // routing is out of scope — synthesize() flags the result honestly instead.
+  function _isMixedScript(text) {
+    var t = String(text || '');
+    var n = 0;
+    if (/[\u0600-\u06FF]/.test(t)) n++;
+    if (/[\u0900-\u097F]/.test(t)) n++;
+    if (/[A-Za-z]/.test(t)) n++;
+    return n >= 2;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Text chunking (>400 chars per SPEC; <=200 for Google)               */
   /* ------------------------------------------------------------------ */
+  // MINOR: hard-split on CODE-POINT boundaries so surrogate pairs
+  // (emoji, rare CJK) are never torn apart by _chunkText.
+  function _splitCodePoints(s, limit) {
+    var cps = Array.from(String(s)); // iterates code points, not UTF-16 units
+    var out = [];
+    for (var i = 0; i < cps.length; i += limit) out.push(cps.slice(i, i + limit).join(''));
+    return out.length ? out : [''];
+  }
   function _chunkText(text, limit) {
     var clean = String(text).replace(/\s+/g, ' ').trim();
     if (!clean) return [];
@@ -433,8 +529,9 @@
       } else {
         if (cur) chunks.push(cur);
         // Hard-split an over-long single sentence.
-        while (s.length > limit) { chunks.push(s.slice(0, limit)); s = s.slice(limit); }
-        cur = s;
+        var hard = _splitCodePoints(s, limit);
+        for (var h = 0; h < hard.length - 1; h++) chunks.push(hard[h]);
+        cur = hard[hard.length - 1];
       }
     }
     if (cur) chunks.push(cur);
@@ -444,7 +541,7 @@
   /* ------------------------------------------------------------------ */
   /* Engine 1: Edge Neural via WebSocket                                 */
   /* ------------------------------------------------------------------ */
-  function _edgeSynthesizeChunk(shortName, lang, chunk) {
+  function _edgeSynthesizeChunk(shortName, lang, chunk, run) {
     return new Promise(function (resolve, reject) {
       if (typeof WebSocket === 'undefined') {
         reject(new Error('WebSocket not available in this environment'));
@@ -453,7 +550,7 @@
       var ws;
       try { ws = new WebSocket(EDGE_WS_URL); }
       catch (e) { reject(e); return; }
-      _activeWS = ws;
+      if (run) run.ws = ws; // C5: per-run socket tracking (was: single module slot)
       ws.binaryType = 'arraybuffer';
       var audioParts = [];
       var done = false;
@@ -465,13 +562,13 @@
         if (done) return;
         done = true;
         clearTimeout(timer);
-        if (_activeWS === ws) _activeWS = null;
+        if (run && run.ws === ws) run.ws = null; // C5: per-run slot
         try { ws.close(); } catch (e) {}
         if (err) reject(err); else resolve(data);
       }
 
       ws.onopen = function () {
-        if (_cancelled) { finish(new Error('cancelled')); return; }
+        if (run && run.cancelled) { finish(new Error('cancelled')); return; }
         var date = new Date().toUTCString();
         var config = 'X-Timestamp:' + date + '\r\n' +
           'Content-Type:application/json; charset=utf-8\r\n' +
@@ -575,7 +672,7 @@
   /* Engine 3: Web Speech API (offline; speaks aloud, no capturable       */
   /* buffer — returns timing only so the chain never dead-ends)          */
   /* ------------------------------------------------------------------ */
-  function _webspeechSpeak(text, voiceId) {
+  function _webspeechSpeak(text, voiceId, run) {
     return new Promise(function (resolve, reject) {
       try {
         if (typeof speechSynthesis === 'undefined' || typeof SpeechSynthesisUtterance === 'undefined') {
@@ -602,7 +699,7 @@
       // Do NOT speak here — app.js speaks on Play via startWebSpeechPlayback,
       // so the utterance always starts from a real user gesture (browsers may
       // block speechSynthesis without one). Return the utterance for later.
-      if (_cancelled) { reject(new Error('cancelled')); return; }
+      if (run && run.cancelled) { reject(new Error('cancelled')); return; }
       resolve({
         audioBuffer: null,
         blob: null,
@@ -677,69 +774,125 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* TTS.synthesize(text, voiceId)                                       */
+  /* TTS.synthesize(text, voiceId, opts) — inner (per-run identity)      */
   /* ------------------------------------------------------------------ */
-  function synthesize(text, voiceId) {
-    _cancelled = false;
+  function synthesize(text, voiceId, opts, run) {
+    run = run || _newRun(); // standalone callers get their own run identity
+    opts = opts || {};
     var clean = String(text == null ? '' : text).trim();
     if (!clean) return Promise.resolve({ error: 'Empty text — nothing to synthesize.' });
 
-    var voice = _findVoice(voiceId) || _findVoice(_defaultVoiceId(clean));
+    var voice = _resolveVoice(clean, voiceId);
     var preferredEngine = voice ? voice.engine : 'edge';
 
-    // Engine order: the explicitly chosen voice's engine first, then the rest.
+    // Engine order: the explicitly chosen voice's engine first, then the rest
+    // (M16: chatterbox joins the automatic fallback, after webspeech).
     var order = [preferredEngine];
-    ['edge', 'google', 'webspeech'].forEach(function (e) {
+    ['edge', 'google', 'webspeech', 'chatterbox'].forEach(function (e) {
       if (order.indexOf(e) === -1) order.push(e);
     });
 
     var lastError = null;
+    var errors = []; // M11: keep EVERY engine's error, not just the last
     var chain = Promise.resolve(null);
 
     order.forEach(function (engine) {
       chain = chain.then(function (result) {
-        if (result || _cancelled) return result; // already succeeded / cancelled
-        return _runEngine(engine, clean, voice).then(
+        if (result || run.cancelled) return result; // already succeeded / cancelled
+        return _runEngine(engine, clean, voice, run, opts).then(
           function (r) { return r; },
-          function (err) { lastError = err; return null; }
+          function (err) {
+            lastError = err;
+            errors.push({ engine: engine, error: err && err.message ? err.message : String(err) });
+            return null;
+          }
         );
       });
     });
 
     return chain.then(function (result) {
-      if (_cancelled) return { error: 'cancelled' };
+      _settleRun(run);
+      if (run.cancelled) return { error: 'cancelled' };
       if (result) return result;
       var msg = lastError ? (lastError.message || String(lastError)) : 'all TTS engines failed';
-      return { error: msg };
+      return { error: msg, errors: errors };
     });
   }
 
-  // Safety net: synthesize() must NEVER hang forever. If the whole chain
-  // (all engines + fallbacks) takes longer than this, give up with a clear
-  // error so the UI can re-enable the buttons and tell the user.
-  var SYNTHESIZE_TIMEOUT_MS = 90000;
+  // Safety net: synthesize() must NEVER hang forever. C5: one module-slot
+  // watchdog, cleared on new synthesize(), on cancel(), and on settle, so a
+  // stale timer can never kill a later run. M13: the timeout scales with the
+  // chunk count — long texts need longer. The returned promise carries its
+  // unique .runId (C5); TTS.cancel(runId) aborts only that run.
+  var SYNTHESIZE_TIMEOUT_MS = 90000;   // base safety net for a single chunk
+  var SYNTHESIZE_PER_CHUNK_MS = 20000; // extra budget per additional chunk (M13)
+  var SYNTHESIZE_MAX_MS = 600000;      // hard cap: 10 minutes
   var _synthesizeInner = synthesize;
-  synthesize = function (text, voiceId) {
-    return new Promise(function (resolve) {
+  synthesize = function (text, voiceId, opts) {
+    _clearWatchdog(); // C5: a new run replaces any stale watchdog
+    var run = _newRun(); // C5: unique per-call identity
+    opts = opts || {};
+    var clean = String(text == null ? '' : text).trim();
+    var engine = _preferredEngine(clean, voiceId);
+    var timeoutMs;
+    if (engine === 'chatterbox') {
+      // M14: Chatterbox is chunked (<=250 chars each) with its own 120s
+      // per-chunk bound — exempt from the global watchdog so legitimate
+      // multi-chunk requests are never killed mid-flight. (Safer than a
+      // ">250 chars rejected" warning, which would undo the shipped
+      // multi-chunk behavior; per-chunk timeouts still prevent hangs.)
+      timeoutMs = 0;
+    } else {
+      var limit = _chunkLimitForEngine(engine);
+      var nChunks = Math.max(1, Math.ceil(clean.length / limit));
+      timeoutMs = Math.min(SYNTHESIZE_MAX_MS,
+        SYNTHESIZE_TIMEOUT_MS + Math.max(0, nChunks - 1) * SYNTHESIZE_PER_CHUNK_MS);
+    }
+    var p = new Promise(function (resolve) {
       var done = false;
-      var timer = setTimeout(function () {
-        if (!done) {
-          done = true;
-          try { cancel(); } catch (e) {} // abort in-flight WebSocket/fetch
-          resolve({ error: 'Timed out after 90s — check your internet connection and try again.' });
+      var timer = null;
+      function settle(r) {
+        if (done) return;
+        done = true;
+        if (_watchdog && _watchdog.timer === timer) _clearWatchdog(); // C5: cleared on settle
+        _settleRun(run);
+        // M22: honest flag when the text mixes scripts but got one voice.
+        if (r && !r.error && _isMixedScript(clean)) {
+          r.mixedScript = true;
+          r.note = (r.note ? r.note + ' ' : '') +
+            'Text mixes scripts (e.g. Arabic + Latin) — one voice was used for the whole text.';
         }
-      }, SYNTHESIZE_TIMEOUT_MS);
-      _synthesizeInner(text, voiceId).then(function (r) {
-        if (!done) { done = true; clearTimeout(timer); resolve(r); }
-      }, function (err) {
-        if (!done) { done = true; clearTimeout(timer); resolve({ error: String((err && err.message) || err) }); }
+        resolve(r);
+      }
+      if (timeoutMs > 0) {
+        timer = setTimeout(function () {
+          try { cancel(run.id); } catch (e) {} // abort only THIS run's in-flight work
+          settle({ error: 'Timed out after ' + Math.round(timeoutMs / 1000) +
+            's — check your internet connection and try again.' });
+        }, timeoutMs);
+        _watchdog = { timer: timer, runId: run.id };
+      }
+      _synthesizeInner(clean, voiceId, opts, run).then(settle, function (err) {
+        settle({ error: String((err && err.message) || err) });
       });
     });
+    p.runId = run.id; // C5: the promise carries its run identity
+    return p;
   };
+
+  function _preferredEngine(clean, voiceId) {
+    var voice = _resolveVoice(clean, voiceId);
+    return voice ? voice.engine : 'edge';
+  }
+  function _chunkLimitForEngine(engine) {
+    if (engine === 'google') return GOOGLE_CHUNK_LIMIT;
+    if (engine === 'chatterbox') return CHATTERBOX_CHUNK;
+    return EDGE_CHUNK_LIMIT; // edge; webspeech and the Google browser path handle whole text in one shot
+  }
 
   // One engine attempt. Resolves the full SPEC result object, or rejects so
   // the chain can try the next engine.
-  function _runEngine(engine, text, voice) {
+  function _runEngine(engine, text, voice, run, opts) {
     if (engine === 'edge') {
       var shortName = voice && voice.engine === 'edge'
         ? voice.id.slice('edge:'.length)
@@ -748,17 +901,20 @@
       var chunks = _chunkText(text, EDGE_CHUNK_LIMIT);
       var parts = [];
       var seq = Promise.resolve();
+      var done = 0;
       chunks.forEach(function (ch) {
         seq = seq.then(function () {
-          if (_cancelled) throw new Error('cancelled');
-          return _edgeSynthesizeChunk(shortName, lang, ch);
+          if (run.cancelled) throw new Error('cancelled');
+          // M36: retry the failed chunk twice before failing the run.
+          return _retryChunk(function () { return _edgeSynthesizeChunk(shortName, lang, ch, run); }, 2, run);
         }).then(function (u8) {
           if (!u8 || !u8.length) throw new Error('Edge returned no audio');
           parts.push(u8);
+          _reportProgress(opts, ++done, chunks.length); // M13
         });
       });
       return seq.then(function () {
-        return _finishMp3Result(_concatU8(parts), parts, text, 'edge');
+        return _finishMp3Result(_concatU8(parts), parts, text, 'edge', run);
       });
     }
 
@@ -777,7 +933,7 @@
       // normal step of the chain (Bilal finding #2 — confirmed by design).
       if (typeof Audio !== 'undefined') {
         return _googlePreloadDurations(gurls, text).then(function (info) {
-          if (_cancelled) return Promise.reject(new Error('cancelled'));
+          if (run.cancelled) return Promise.reject(new Error('cancelled'));
           // If NONE of the chunk URLs preloaded, the audio is unloadable in
           // this browser (blocked network/region) — reject so the chain falls
           // through to Web Speech instead of returning a dead, silent result.
@@ -798,36 +954,43 @@
       // path — this is what keeps the module verifiable off-browser.
       var gparts = [];
       var gseq = Promise.resolve();
+      var gdone = 0;
       gchunks.forEach(function (ch) {
         gseq = gseq.then(function () {
-          if (_cancelled) throw new Error('cancelled');
-          var ctrl = null;
-          try {
-            if (typeof AbortController !== 'undefined') {
-              ctrl = new AbortController();
-              _markActive(ctrl);
-              setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, FETCH_TIMEOUT_MS);
-            }
-          } catch (e) { ctrl = null; }
-          return _googleSynthesizeChunk(tl, ch, ctrl ? ctrl.signal : undefined)
-            .then(function (u8) {
-              if (ctrl) _unmarkActive(ctrl);
-              if (!u8 || !u8.length) throw new Error('Google returned no audio');
-              gparts.push(u8);
-            }, function (err) {
-              if (ctrl) _unmarkActive(ctrl);
-              throw err;
-            });
+          if (run.cancelled) throw new Error('cancelled');
+          // M36: fresh AbortController per attempt (a timed-out attempt's
+          // signal is already aborted and must not be reused), retry twice.
+          return _retryChunk(function () {
+            var ctrl = null;
+            try {
+              if (typeof AbortController !== 'undefined') {
+                ctrl = new AbortController();
+                _markActive(ctrl, run.id); // C5: per-run tracking
+                setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, FETCH_TIMEOUT_MS);
+              }
+            } catch (e) { ctrl = null; }
+            var attempt = _googleSynthesizeChunk(tl, ch, ctrl ? ctrl.signal : undefined).then(
+              function (u8) { if (ctrl) _unmarkActive(ctrl); return u8; },
+              function (err) { if (ctrl) _unmarkActive(ctrl); throw err; }
+            );
+            // C5: race the attempt against run cancellation so even a
+            // signal-ignoring fetch cannot hang a cancelled run.
+            return _raceCancel(attempt, run);
+          }, 2, run).then(function (u8) {
+            if (!u8 || !u8.length) throw new Error('Google returned no audio');
+            gparts.push(u8);
+            _reportProgress(opts, ++gdone, gchunks.length); // M13
+          });
         });
       });
       return gseq.then(function () {
-        return _finishMp3Result(_concatU8(gparts), gparts, text, 'google');
+        return _finishMp3Result(_concatU8(gparts), gparts, text, 'google', run);
       });
     }
 
     if (engine === 'webspeech') {
       var vid = voice && voice.engine === 'webspeech' ? voice.id : null;
-      return _webspeechSpeak(text, vid).then(function (info) {
+      return _webspeechSpeak(text, vid, run).then(function (info) {
         return {
           audioBuffer: null, // Web Speech has no capturable buffer; app may synthesize silence of this duration for lip-sync
           blob: null,
@@ -841,7 +1004,7 @@
 
     if (engine === 'chatterbox') {
       var cblang = voice && voice.lang ? voice.lang : _guessLang(text);
-      return _chatterboxSynthesize(text, cblang);
+      return _chatterboxSynthesize(text, cblang, run, opts);
     }
 
     return Promise.reject(new Error('unknown engine: ' + engine));
@@ -894,7 +1057,7 @@
     ]);
   }
 
-  function _chatterboxChunk(client, clang, chunk, refPath) {
+  function _chatterboxChunk(client, clang, chunk, refPath, run) {
     var payload = {
       text_input: chunk,
       language_id: clang,
@@ -904,17 +1067,37 @@
       seed_num_input: 0,
       cfgw_input: 0.5
     };
-    return _withTimeout(client.predict('/generate_tts_audio', payload), CHATTERBOX_TIMEOUT_MS, 'Chatterbox')
-      .then(function (res) {
-        var f = res && res.data && res.data[0];
-        var url = f && (f.url || f.path);
-        if (!url) throw new Error('Chatterbox returned no audio');
-        if (url.charAt(0) === '/') url = CHATTERBOX_ORIGIN + url;
-        return _withTimeout(fetch(url).then(function (r) {
+    // M10: gradio client.predict takes no AbortSignal — race it against run
+    // cancellation so a cancelled run rejects immediately (late results ignored).
+    var predictP = _raceCancel(
+      _withTimeout(client.predict('/generate_tts_audio', payload), CHATTERBOX_TIMEOUT_MS, 'Chatterbox'), run);
+    return predictP.then(function (res) {
+      var f = res && res.data && res.data[0];
+      var url = f && (f.url || f.path);
+      if (!url) throw new Error('Chatterbox returned no audio');
+      if (url.charAt(0) === '/') url = CHATTERBOX_ORIGIN + url;
+      // C5: AbortController on the audio fetch, registered in
+      // _activeControllers so cancel(runId) aborts it.
+      var ctrl = null;
+      try {
+        if (typeof AbortController !== 'undefined') {
+          ctrl = new AbortController();
+          _markActive(ctrl, run ? run.id : null);
+        }
+      } catch (e) { ctrl = null; }
+      var fetchP = _raceCancel(_withTimeout(
+        fetch(url, ctrl ? { signal: ctrl.signal } : undefined).then(function (r) {
           if (!r.ok) throw new Error('Chatterbox audio fetch failed: ' + r.status);
           return r.arrayBuffer();
-        }), 60000, 'Chatterbox audio download');
+        }), 60000, 'Chatterbox audio download'), run);
+      return fetchP.then(function (ab) {
+        if (ctrl) _unmarkActive(ctrl);
+        return ab;
+      }, function (err) {
+        if (ctrl) _unmarkActive(ctrl);
+        throw err;
       });
+    });
   }
 
   function _resampleLinear(data, fromRate, toRate) {
@@ -947,7 +1130,7 @@
     return new Uint8Array(buf);
   }
 
-  function _chatterboxSynthesize(text, lang) {
+  function _chatterboxSynthesize(text, lang, run, opts) {
     var clang = _chatterboxLang(lang);
     var chunks = _chunkText(text, CHATTERBOX_CHUNK);
     if (!chunks.length) return Promise.reject(new Error('Empty text'));
@@ -956,16 +1139,22 @@
       var refPath = null;
       if (_chatterboxRefBlob) {
         seq = seq.then(function () {
-          return _withTimeout(client.upload([_chatterboxRefBlob]), 60000, 'Reference upload')
+          return _raceCancel(
+            _withTimeout(client.upload([_chatterboxRefBlob]), 60000, 'Reference upload'), run)
             .then(function (paths) { refPath = paths && paths[0]; })
             .catch(function () { refPath = null; }); // cloning optional; default voice otherwise
         });
       }
       var bufs = [];
+      var done = 0;
       chunks.forEach(function (ch) {
         seq = seq.then(function () {
-          if (_cancelled) throw new Error('cancelled');
-          return _chatterboxChunk(client, clang, ch, refPath).then(function (ab) { bufs.push(ab); });
+          if (run.cancelled) throw new Error('cancelled');
+          // M36: retry the failed chunk twice before failing the run.
+          return _retryChunk(function () { return _chatterboxChunk(client, clang, ch, refPath, run); }, 2, run);
+        }).then(function (ab) {
+          bufs.push(ab);
+          _reportProgress(opts, ++done, chunks.length); // M13
         });
       });
       return seq.then(function () {
@@ -984,14 +1173,15 @@
           }
           var out = new Float32Array(total), off = 0;
           for (i = 0; i < parts.length; i++) { out.set(parts[i], off); off += parts[i].length; }
-          return _finishMp3Result(_encodeWavBytes(out, rate), [], text, 'chatterbox');
+          // C1: Chatterbox output is PCM WAV — own builder, honest audio/wav type.
+          return _finishWavResult(_encodeWavBytes(out, rate), text, 'chatterbox', run);
         });
       });
     });
   }
 
-  function _finishMp3Result(allBytes, chunkList, text, engineName) {
-    if (_cancelled) return Promise.reject(new Error('cancelled'));
+  function _finishMp3Result(allBytes, chunkList, text, engineName, run) {
+    if (run && run.cancelled) return Promise.reject(new Error('cancelled'));
     return _decodeMp3(allBytes, chunkList).then(function (audioBuffer) {
       var blob = null, url = null;
       try {
@@ -1012,21 +1202,56 @@
     });
   }
 
-  /* ------------------------------------------------------------------ */
-  /* TTS.cancel() — abort in-flight synthesis on every engine            */
-  /* ------------------------------------------------------------------ */
-  function cancel() {
-    _cancelled = true;
-    try {
-      if (_activeWS) { _activeWS.close(); _activeWS = null; }
-    } catch (e) {}
-    _activeControllers.slice().forEach(function (c) {
-      try { c.abort(); } catch (e) {}
+  // C1 (tts.js part): Chatterbox produces PCM WAV bytes — its own result
+  // builder with an honest audio/wav type, never audio/mpeg.
+  function _finishWavResult(wavBytes, text, engineName, run) {
+    if (run && run.cancelled) return Promise.reject(new Error('cancelled'));
+    return _decodeWavBytes(wavBytes).then(function (audioBuffer) {
+      var blob = null, url = null;
+      try {
+        if (typeof Blob !== 'undefined') {
+          blob = new Blob([wavBytes], { type: 'audio/wav' });
+          if (typeof URL !== 'undefined' && URL.createObjectURL) {
+            url = URL.createObjectURL(blob);
+          }
+        }
+      } catch (e) { blob = null; url = null; }
+      return {
+        audioBuffer: audioBuffer, // decoded PCM for lip-sync/playback (null where AudioContext is unavailable)
+        blob: blob,
+        url: url,
+        duration: audioBuffer ? audioBuffer.duration : _estimateDurationSec(text),
+        engine: engineName
+      };
     });
-    _activeControllers.length = 0;
-    try {
-      if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
-    } catch (e) {}
+  }
+
+  function _decodeWavBytes(u8) {
+    var ctx = _getAudioContext();
+    if (!ctx) return Promise.resolve(null);
+    return _decodeOne(ctx, u8).then(function (b) { return b; }, function () { return null; });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* TTS.cancel(runId) — per-run identity (C5)                           */
+  /* cancel(runId) aborts ONLY that run's WebSocket/fetch work.          */
+  /* cancel() with no argument cancels ALL runs (back-compat:            */
+  /* previewVoice/stopAll in app.js call it bare).                       */
+  /* ------------------------------------------------------------------ */
+  function cancel(runId) {
+    _clearWatchdog(); // C5: watchdog never outlives a cancel
+    if (runId === undefined || runId === null) {
+      var ids = Object.keys(_runs);
+      for (var i = 0; i < ids.length; i++) _cancelRun(_runs[ids[i]]);
+      _abortControllers(); // all
+      try {
+        if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+      } catch (e) {}
+    } else {
+      _cancelRun(_runs[runId]);
+      // speechSynthesis is inherently global — a targeted cancel leaves it
+      // alone so other runs' playback is not disturbed.
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -1115,6 +1340,7 @@
     // underscore helpers for QA/unit tests (not part of the UI contract)
     _chunkText: _chunkText,
     _guessLang: _guessLang,
+    _escapeXml: _escapeXml, // C9: QA must test the REAL function, not a copy
     _romanToUrdu: _romanToUrdu
   };
 });

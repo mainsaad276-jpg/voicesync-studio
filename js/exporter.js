@@ -138,7 +138,10 @@
 
   // Route the playing <audio> element into the captured stream so the WebM
   // includes the voiceover. Best-effort: failures keep video-only export.
+  // Returns the created AudioContext (or null) so the caller can close it
+  // when the export finishes (M4: prevents one-leak-per-export).
   function muxAudioIntoStream(stream, audioEl, musicEl, musicVolume) {
+    var ctx = null; // hoisted so fail paths can still return it for close()
     try {
       var AC =
         typeof AudioContext !== 'undefined'
@@ -146,8 +149,8 @@
           : typeof webkitAudioContext !== 'undefined'
             ? webkitAudioContext
             : null;
-      if (!AC) return;
-      var ctx = new AC();
+      if (!AC) return null;
+      ctx = new AC();
       var src = ctx.createMediaElementSource(audioEl);
       var dest = ctx.createMediaStreamDestination();
       src.connect(dest);
@@ -165,10 +168,12 @@
       }
       var tracks = dest.stream.getAudioTracks();
       if (tracks.length > 0) stream.addTrack(tracks[0]);
+      return ctx;
     } catch (e) {
       if (typeof console !== 'undefined' && console.warn) {
         console.warn('[Exporter] voiceover audio not embedded in video:', e.message);
       }
+      return ctx;
     }
   }
 
@@ -224,11 +229,27 @@
         var audioEl = null;
         var musicEl = null;
         var recorder = null;
+        var audioCtx = null; // AudioContext from muxAudioIntoStream — closed in onstop/fail (M4)
 
         function clearTimer() {
           if (safetyTimer) {
             clearTimeout(safetyTimer);
             safetyTimer = null;
+          }
+        }
+
+        // M4: close the mux AudioContext exactly once (guard against
+        // double-close from onstop-after-fail and AudioContext.close() quirks).
+        function closeAudioCtx() {
+          var c = audioCtx;
+          audioCtx = null; // null first: makes this safe to call twice
+          if (c && typeof c.close === 'function') {
+            try {
+              var p = c.close();
+              if (p && typeof p.catch === 'function') p.catch(function () {});
+            } catch (e) {
+              /* already closed / closing — ignore */
+            }
           }
         }
 
@@ -250,6 +271,7 @@
           settled = true;
           clearTimer();
           stopRecorder();
+          closeAudioCtx(); // M4: no leak on error paths
           if (audioEl) {
             try {
               audioEl.pause();
@@ -295,6 +317,7 @@
                 /* ignore */
               }
             }
+            closeAudioCtx(); // M4: release the mux AudioContext on completion
             resolve(new Blob(chunks, { type: 'video/webm' }));
           };
           recorder.onerror = function (ev) {
@@ -316,7 +339,19 @@
                 musicEl.volume = 1; // level is set by the mixer's gain node
               } catch (e) { musicEl = null; }
             }
-            muxAudioIntoStream(stream, audioEl, musicEl, opts.musicVolume); // embed voiceover in the WebM
+            audioCtx = muxAudioIntoStream(stream, audioEl, musicEl, opts.musicVolume); // embed voiceover in the WebM
+            // M1: SPEC §3 onAudio hook — app.js attaches live lip-sync
+            // (Avatar.speak) and drives Shorts captions off this element.
+            // Called before play() so the hook can set playbackRate first.
+            if (typeof opts.onAudio === 'function') {
+              try {
+                opts.onAudio(audioEl);
+              } catch (e) {
+                if (typeof console !== 'undefined' && console.warn) {
+                  console.warn('[Exporter] onAudio hook failed:', e.message);
+                }
+              }
+            }
             audioEl.onended = function () {
               if (musicEl) { try { musicEl.pause(); } catch (e) {} }
               finish();
