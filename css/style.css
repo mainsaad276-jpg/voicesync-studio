@@ -115,6 +115,7 @@ body {
   width: 100%; background: var(--bg-soft); color: var(--ink);
   border: 1px solid var(--card-edge); border-radius: 10px;
   padding: 10px 12px; font-size: 15px; font-family: inherit;
+  min-height: 44px; /* Team 3: 44px touch target */
 }
 .select:focus { outline: 2px solid var(--accent); }
 
@@ -272,7 +273,7 @@ body.easy-mode #easyToggle {
 }
 .char-play {
   position: absolute; top: 12px; inset-inline-end: 12px;
-  width: 40px; height: 40px; border-radius: 50%;
+  width: 44px; height: 44px; border-radius: 50%; /* Team 3: 44px touch target */
   border: 1px solid var(--card-edge); background: var(--bg-soft); color: var(--ink-dim);
   font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
@@ -297,6 +298,7 @@ body.easy-mode #easyToggle {
   color: var(--ink);
   border-radius: 999px;
   padding: 10px 18px;
+  min-height: 44px; /* Team 3: 44px touch target */
   font-size: 15px;
   cursor: pointer;
   transition: background .15s, color .15s;

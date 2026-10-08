@@ -165,6 +165,16 @@
     return FALLBACK[key] || key;
   }
 
+  // Team 3 M29: translated character lang/gender/style for Urdu UI mode.
+  // The char_*_ur maps (i18n.js) were dead — wire them here so cards show
+  // translated text instead of hardcoded English in Urdu mode.
+  function charI18n(mapKey, value) {
+    if (state.lang !== 'ur') return value;
+    var map = safeGet(function () { return window.I18N.strings.ur[mapKey]; }, null);
+    if (map && typeof map === 'object' && map[value]) return map[value];
+    return value;
+  }
+
   // Q1+Q2: always-visible engine badge — which engine actually spoke?
   // Shows on EVERY result path, not just Web Speech.
   // M15: optional (engine, note) override lets the voice preview show its
@@ -432,6 +442,7 @@
     };
     state.audioCtx = ctx;
     state.audioSrc = src;
+    state.pitchedTimeSrc = timeSrc; // Team 3 M2: resume re-arms the mouth from here
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
       try { window.Avatar.speak(scaleCues(cues, state.speed || 1), timeSrc); } catch (e) {}
     }
@@ -647,6 +658,10 @@
           src.connect(ctx.destination);
           src.onended = function () { try { ctx.close(); } catch (e) {} state.previewing = false; setMsg(t('done')); };
           if (!previewEngineNote) setMsg(t('playing'));
+          // Team 3 M6: iOS creates the AudioContext in 'suspended' state when
+          // `new AC()` runs after an await (outside the user gesture) — resume
+          // it or the preview is silent on iOS Safari.
+          try { if (ctx.state === 'suspended') await ctx.resume(); } catch (e) {}
           src.start(0);
           state.previewCtx = ctx; state.previewSrc = src;
           return;
@@ -1002,7 +1017,8 @@
       card.className = 'char-card' + (isSel ? ' selected' : '');
       card.setAttribute('role', 'option');
       card.setAttribute('aria-selected', isSel ? 'true' : 'false');
-      card.setAttribute('aria-label', c.name + ' — ' + c.lang + ' ' + c.gender);
+      card.setAttribute('aria-label', c.name + ' — ' +
+        charI18n('char_lang_ur', c.lang) + ' ' + charI18n('char_gender_ur', c.gender));
 
       var avatar = document.createElement('span');
       avatar.className = 'char-avatar';
@@ -1013,11 +1029,21 @@
       var play = document.createElement('span');
       play.className = 'char-play';
       play.setAttribute('role', 'button');
+      // Team 3 M32: keyboard-reachable + activatable (a <button> can't nest
+      // inside the card's <button>, so the span gets tabindex + keydown).
+      play.setAttribute('tabindex', '0');
       play.setAttribute('aria-label', t('char_preview') + ' ' + c.name);
       play.textContent = '▶';
-      play.addEventListener('click', function (ev) {
+      var doPreview = function (ev) {
         ev.stopPropagation();
         previewVoice(c.voiceId, c.pitch || 0);
+      };
+      play.addEventListener('click', doPreview);
+      play.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          doPreview(ev);
+        }
       });
       card.appendChild(play);
 
@@ -1028,7 +1054,9 @@
 
       var desc = document.createElement('p');
       desc.className = 'char-desc';
-      desc.textContent = c.lang + ' • ' + c.gender + ' • ' + c.style;
+      // Team 3 M29: translated lang/gender/style in Urdu mode.
+      desc.textContent = charI18n('char_lang_ur', c.lang) + ' • ' +
+        charI18n('char_gender_ur', c.gender) + ' • ' + charI18n('char_style_ur', c.style);
       card.appendChild(desc);
 
       var tags = document.createElement('div');
@@ -1299,17 +1327,10 @@
     return hasMarkers ? segs : null;
   }
 
+  // Team 3 M40: single shared implementation — delegates to TTS._resampleLinear.
+  // (tts.js is always loaded with app.js; the old local copy was byte-identical.)
   function resampleLinear(data, fromRate, toRate) {
-    if (fromRate === toRate) return data;
-    var ratio = fromRate / toRate;
-    var len = Math.max(1, Math.floor(data.length / ratio));
-    var out = new Float32Array(len);
-    for (var i = 0; i < len; i++) {
-      var pos = i * ratio, i0 = Math.floor(pos), frac = pos - i0;
-      var a = data[i0] || 0, b = data[i0 + 1] || 0;
-      out[i] = a + (b - a) * frac;
-    }
-    return out;
+    return window.TTS._resampleLinear(data, fromRate, toRate);
   }
 
   async function synthesizeDialogue(segments) {
@@ -1592,6 +1613,8 @@
       // pitch-shift, and the Google URL is CORS-blocked from
       // fetch->WebAudio->detune routing (same documented limitation as the
       // voice preview). Speed works; the pitch slider is a no-op on this path.
+      // The user-facing notice is shown via pitchNoop at playback start.
+      var pitchNoop = (state.pitch || 0) !== 0;
       el.onended = function () {
         try { offset += (el.duration > 0 && isFinite(el.duration)) ? el.duration : perChunk; }
         catch (e) { offset += perChunk; }
@@ -1602,7 +1625,8 @@
         if (token === state.playToken) { stopAll(); setMsg(t('audioLoadFailed'), true); }
       };
       state.speaking = true;
-      setMsg(t('playing'));
+      // Team 3 M9: honest user-facing notice when pitch can't apply on this path.
+      if (pitchNoop) setMsg(t('pitch_noop_google')); else setMsg(t('playing'));
       var p = el.play();
       if (p && typeof p.catch === 'function') {
         p.catch(function () {
@@ -1701,6 +1725,14 @@
       var el = $(id);
       if (el) el.disabled = !!busy;
     });
+    // Team 3 M17 (residual): also freeze the browser-voice select and the
+    // dialogue-mode checkbox during generation.
+    ['browserVoiceSelect'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.disabled = !!busy;
+    });
+    var dm = $('dialogueMode');
+    if (dm) dm.disabled = !!busy;
     var pills = $('langPills');
     if (pills) {
       var btns = pills.querySelectorAll('button');
@@ -1821,6 +1853,8 @@
         var genP = window.TTS.synthesize(synthText, state.voiceId);
         state.genRunId = genP && genP.runId;
         result = await genP;
+        // Null the run id when THIS run finishes — a newer run's id survives.
+        if (genP && state.genRunId === genP.runId) state.genRunId = null;
       } catch (e) {
         result = { error: String((e && e.message) || e) };
       }
@@ -1948,7 +1982,9 @@
     } catch (e) {}
     try {
       if (state.audioCtx && state.audioCtx.state === 'running') {
-        state.audioCtx.suspend(); state.pausedKind = 'audioCtx'; pauseMusicForPause(); setMsg(t('paused')); return;
+        state.audioCtx.suspend(); state.pausedKind = 'audioCtx';
+        stopAvatar(); // Team 3 M2: mouth must not keep moving while paused
+        pauseMusicForPause(); setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
@@ -2012,7 +2048,20 @@
       if (k === 'audioEl' && state.audioEl) { resumeAudioEl(state.audioEl, done, fail, true); return; }
       if (k === 'previewEl' && state.previewEl) { resumeAudioEl(state.previewEl, done, fail, false); return; }
       if (k === 'previewCtx' && state.previewCtx) { settleResume(state.previewCtx.resume(), done, fail); return; }
-      if (k === 'audioCtx' && state.audioCtx) { settleResume(state.audioCtx.resume(), done, fail); return; }
+      // Team 3 M2: re-arm the avatar mouth on pitched-path resume — the
+      // 'pause' stopped it and ctx.resume() alone doesn't restart it.
+      if (k === 'audioCtx' && state.audioCtx) {
+        settleResume(state.audioCtx.resume(), function () {
+          try {
+            if (hasModule('Avatar') && typeof window.Avatar.speak === 'function' &&
+                state.lastCues && state.lastCues.length && state.pitchedTimeSrc) {
+              window.Avatar.speak(scaleCues(state.lastCues, state.speed || 1), state.pitchedTimeSrc);
+            }
+          } catch (e) {}
+          done();
+        }, fail);
+        return;
+      }
       if (k === 'speech' && window.speechSynthesis) {
         window.speechSynthesis.resume();
         restartSpeechClock(); // M3: realign the virtual clock + avatar mouth
@@ -2087,7 +2136,9 @@
       var b = document.createElement('b'); b.textContent = c.name;
       box.appendChild(b);
       box.appendChild(document.createTextNode(
-        ' selected \u2014 ' + c.lang + ' \u2022 ' + c.gender + ' \u2022 ' + c.style +
+        // Team 3 M29: translated lang/gender/style in Urdu mode.
+        ' selected \u2014 ' + charI18n('char_lang_ur', c.lang) + ' \u2022 ' +
+        charI18n('char_gender_ur', c.gender) + ' \u2022 ' + charI18n('char_style_ur', c.style) +
         '. ' + t('selchar_hint')));
     } else {
       box.textContent = t('selchar_none');
@@ -2397,7 +2448,7 @@
           var dw = aw * s, dh = ah * s;
           octx.drawImage(canvas, (720 - dw) / 2, (720 - dh) / 2, dw, dh);
           // Caption bar at bottom
-          // Team 3 M6: blocks are built on the WALL-CLOCK base (dur/speed),
+          // Captions: blocks are built on the WALL-CLOCK base (dur/speed),
           // but currentTime advances in media-time at playbackRate=speed —
           // divide by speed so the lookup reads wall-clock time.
           var now = audioRef.el && typeof audioRef.el.currentTime === 'number'

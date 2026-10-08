@@ -1341,6 +1341,7 @@
     _chunkText: _chunkText,
     _guessLang: _guessLang,
     _escapeXml: _escapeXml, // C9: QA must test the REAL function, not a copy
+    _resampleLinear: _resampleLinear, // Team 3 M40: single shared implementation
     _romanToUrdu: _romanToUrdu
   };
 });

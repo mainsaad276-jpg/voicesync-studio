@@ -27,7 +27,10 @@ async function main() {
   var parseDialogue = grab(appjs, 'parseDialogue');
   var fmtSrt = grab(appjs, 'fmtSrt');
   var wrapSrtLine = grab(appjs, 'wrapSrtLine');
-  var resampleLinear = grab(appjs, 'resampleLinear');
+  // Team 3 M40: resampleLinear now delegates to the single shared
+  // TTS._resampleLinear — test the canonical implementation directly
+  // (app.js's alias references window, which doesn't exist in Node).
+  var resampleLinear = TTS._resampleLinear;
   var scaleCues = grab(appjs, 'scaleCues');
 
   /* i18n key extraction (M39): real key sets for en / ur / FALLBACK.
@@ -656,6 +659,40 @@ async function main() {
   t('captionblocks_no_live_state', !/function getCaptionBlocks[\s\S]{0,300}state\.dialogueMode/.test(appjs));
   t('srt_uses_result_flag', appjs.indexOf('r ? !!r.dialogue : state.dialogueMode') !== -1);
   t('shorts_uses_result_flag', appjs.indexOf('getCaptionBlocks(capText, capDur, !!(r && r.dialogue))') !== -1);
+
+  /* 100. Team 3 re-audit fix round 3: 4 majors claimed-fixed but not + residuals. */
+  // M6: preview buffer path resumes a suspended AudioContext (iOS silence fix).
+  t('m6_preview_resume', /previewVoice[\s\S]{0,4000}ctx\.state === 'suspended'[\s\S]{0,200}await ctx\.resume\(\)/.test(appjs));
+  // M9: user-facing pitch notice on the Google path (not just a code comment).
+  t('m9_pitch_notice_key_en', i18njs.indexOf("pitch_noop_google: 'Note: pitch has no effect") !== -1);
+  t('m9_pitch_notice_key_ur', i18njs.indexOf('pitch_noop_google:') !== -1 && i18njs.indexOf('گوگل آوازوں پر سر') !== -1);
+  t('m9_pitch_notice_shown', appjs.indexOf("t('pitch_noop_google')") !== -1);
+  t('m9_pitch_notice_gated', appjs.indexOf('pitchNoop') !== -1 && appjs.indexOf('(state.pitch || 0) !== 0') !== -1);
+  // M29: char translation maps are actually referenced (were dead).
+  t('m29_chari18n_helper', appjs.indexOf('function charI18n(mapKey, value)') !== -1);
+  t('m29_lang_map_used', appjs.indexOf("charI18n('char_lang_ur'") !== -1);
+  t('m29_gender_map_used', appjs.indexOf("charI18n('char_gender_ur'") !== -1);
+  t('m29_style_map_used', appjs.indexOf("charI18n('char_style_ur'") !== -1);
+  t('m29_card_desc_uses_maps', /char-desc[\s\S]{0,500}charI18n/.test(appjs));
+  // M32: card preview is keyboard-operable (focusable + Enter/Space).
+  t('m32_preview_tabindex', appjs.indexOf("play.setAttribute('tabindex', '0')") !== -1);
+  t('m32_preview_keydown', appjs.indexOf("play.addEventListener('keydown'") !== -1);
+  t('m32_preview_enter_space', /keydown[\s\S]{0,300}ev\.key === 'Enter'/.test(appjs) && /keydown[\s\S]{0,300}ev\.key === ' '/.test(appjs));
+  // Residual M17: browserVoiceSelect + dialogueMode frozen during generation.
+  t('m17_browservoice_guard', appjs.indexOf("'browserVoiceSelect'") !== -1 && /setBusy[\s\S]{0,1500}browserVoiceSelect/.test(appjs));
+  t('m17_dialogue_guard', /setBusy[\s\S]{0,1500}\$\('dialogueMode'\)/.test(appjs));
+  // Residual M2: pitched-path pause stops the mouth; resume re-arms it.
+  t('m2_pitched_pause_stops_mouth', /pausedKind = 'audioCtx'[\s\S]{0,200}stopAvatar\(\)/.test(appjs));
+  t('m2_pitched_resume_rearms', /k === 'audioCtx'[\s\S]{0,600}Avatar\.speak/.test(appjs));
+  // Residual touch targets: 44px on char-play, lang-pill, select.
+  t('touch_charplay_44', /\.char-play\s*\{[^}]*width:\s*44px/.test(css));
+  t('touch_langpill_44', /\.lang-pill\s*\{[^}]*min-height:\s*44px/.test(css));
+  t('touch_select_44', /\.select\s*\{[^}]*min-height:\s*44px/.test(css));
+  // Residual M40: single shared resampleLinear (delegates to TTS).
+  t('m40_resample_delegates', appjs.indexOf('window.TTS._resampleLinear(data, fromRate, toRate)') !== -1);
+  t('m40_resample_exported', ttsjs.indexOf('_resampleLinear: _resampleLinear') !== -1);
+  // Trivial: genRunId nulled when the run finishes.
+  t('genrunid_nulled', appjs.indexOf('state.genRunId = null') !== -1);
 
   console.log('\n==== 1000-TEST QA RESULT ====');
   console.log('PASSED: ' + pass + ' / ' + n);

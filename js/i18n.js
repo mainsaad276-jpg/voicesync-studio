@@ -204,6 +204,8 @@
       ttsFailed: 'Voice generation failed',
       noAudio: 'TTS returned no audio and no utterance.',
       playFailed: 'Playback was blocked by the browser. Tap Play to try again.',
+      // Team 3 M9: honest notice — pitch can't apply on the Google <audio> path.
+      pitch_noop_google: 'Note: pitch has no effect on Google voices — speed still works.',
       nothingToPlay: 'Generate a voiceover first, then press Play.',
       exportNeedsAudio: 'Nothing to export yet — generate a voiceover first. (Browser-voice playback has no audio file to export; pick a neural voice with internet on.)',
       lipsyncLoading: 'Loading lip-sync engine (one-time download)…',
@@ -426,6 +428,8 @@
       ttsFailed: 'آواز بنانے میں ناکامی',
       noAudio: 'آواز کا کوئی آڈیو نہیں ملا۔',
       playFailed: 'براؤزر نے چلانے سے روک دیا۔ دوبارہ Play دبائیں۔',
+      // Team 3 M9: honest notice — pitch can't apply on the Google <audio> path.
+      pitch_noop_google: 'نوٹ: گوگل آوازوں پر سر (pitch) کا اثر نہیں ہوتا — رفتار کام کرے گی۔',
       nothingToPlay: 'پہلے آواز بنائیں، پھر Play دبائیں۔',
       exportNeedsAudio: 'ابھی ایکسپورٹ کے لیے کچھ نہیں — پہلے آواز بنائیں۔',
       lipsyncLoading: 'لپ سنک انجن لوڈ ہو رہا ہے…',
