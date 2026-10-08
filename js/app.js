@@ -82,6 +82,18 @@
     musicLoaded: 'Music loaded — it will play softly under the voice.',
     btn_srt: 'Subtitles (SRT)',
     srtSaved: 'Subtitles downloaded.',
+    shared: 'Shared.',
+    shareFallback: 'Sharing not supported here — downloaded instead.',
+    preset_label: 'Preset',
+    preset_none: '— No preset —',
+    preset_save: 'Save',
+    presetLoaded: 'Preset loaded.',
+    presetSaved: 'Preset saved.',
+    presetDeleted: 'Preset deleted.',
+    presetNamePrompt: 'Name this preset:',
+    easy_mode: 'Easy Mode',
+    easyOn: 'Easy Mode on — just Type, Generate, Play, Save.',
+    easyOff: 'Easy Mode off — all options visible.',
     dialogue_mode: 'Dialogue mode (two voices)',
     dialogue_hint: 'Start lines with 1: for Voice 1 and 2: for Voice 2.',
     dialogueNeedMarkers: 'Dialogue mode: start lines with 1: and 2: to assign voices.',
@@ -121,6 +133,7 @@
     musicFileName: '',
     dialogueMode: false,  // two-voice dialogue mode
     voiceId2: null,       // Voice 2 for dialogue mode
+    romanUrdu: false,     // Roman Urdu -> Urdu script pre-pass
     rafId: 0             // timeline rAF id
   };
 
@@ -210,6 +223,9 @@
     updateCharCount();
     var d = $('btnDictate');
     if (d) d.addEventListener('click', toggleDictate);
+    // Feature 1: Roman Urdu toggle
+    var ru = $('romanUrdu');
+    if (ru) ru.addEventListener('change', function () { state.romanUrdu = !!ru.checked; });
     initTuning();
     initMusic();
   }
@@ -490,6 +506,129 @@
   // Lines starting with "1:" use Voice 1, "2:" use Voice 2. Each segment is
   // synthesized with its own voice, then merged into one audio buffer so the
   // normal playback / lip-sync / export pipeline just works.
+
+  /* ---------------- Feature 4: named presets ---------------- */
+  var PRESET_KEY = 'voicesync-presets';
+
+  function getPresets() {
+    try {
+      var raw = localStorage.getItem(PRESET_KEY);
+      var p = raw ? JSON.parse(raw) : {};
+      return (p && typeof p === 'object') ? p : {};
+    } catch (e) { return {}; }
+  }
+  function setPresets(p) {
+    try { localStorage.setItem(PRESET_KEY, JSON.stringify(p)); } catch (e) {}
+  }
+  function refreshPresetList() {
+    var sel = $('presetSelect');
+    if (!sel) return;
+    var keep = sel.value;
+    sel.innerHTML = '';
+    var none = document.createElement('option');
+    none.value = '';
+    none.textContent = t('preset_none');
+    sel.appendChild(none);
+    var presets = getPresets();
+    Object.keys(presets).sort().forEach(function (name) {
+      var o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      sel.appendChild(o);
+    });
+    sel.value = keep || '';
+  }
+  function applyPreset(name) {
+    var p = getPresets()[name];
+    if (!p) return;
+    if (p.ttsLang) {
+      state.ttsLang = p.ttsLang;
+      var tl = $('ttsLang'); if (tl) tl.value = p.ttsLang;
+    }
+    var applyRest = function () {
+      if (p.voiceId) {
+        var vs = $('voiceSelect');
+        if (vs) { vs.value = p.voiceId; state.voiceId = p.voiceId; }
+      }
+      if (typeof p.speed === 'number') {
+        state.speed = p.speed;
+        var sr = $('speedRange'); if (sr) { sr.value = p.speed; }
+        var sl = $('speedVal'); if (sl) sl.textContent = p.speed + 'x';
+      }
+      if (typeof p.pitch === 'number') {
+        state.pitch = p.pitch;
+        var pr = $('pitchRange'); if (pr) { pr.value = p.pitch; }
+        var pl = $('pitchVal'); if (pl) pl.textContent = (p.pitch > 0 ? '+' : '') + p.pitch;
+      }
+      if (typeof p.dialogueMode === 'boolean') {
+        state.dialogueMode = p.dialogueMode;
+        var cb = $('dialogueMode'); if (cb) cb.checked = p.dialogueMode;
+        var s2 = $('voiceSelect2'), hint = $('dialogueHint');
+        if (s2) s2.hidden = !p.dialogueMode;
+        if (hint) hint.hidden = !p.dialogueMode;
+        if (p.dialogueMode && p.voiceId2) {
+          syncVoice2();
+          if (s2) { s2.value = p.voiceId2; state.voiceId2 = p.voiceId2; }
+        }
+      }
+      setMsg(t('presetLoaded'));
+    };
+    if (p.ttsLang && p.ttsLang !== state.ttsLang) {
+      loadVoices().then(applyRest, applyRest);
+    } else applyRest();
+  }
+  /* ---------------- Feature 5: Easy Mode ---------------- */
+  function initEasyMode() {
+    var tgl = $('easyToggle');
+    if (!tgl) return;
+    var saved = false;
+    try { saved = localStorage.getItem('voicesync-easy') === '1'; } catch (e) {}
+    if (saved) {
+      document.body.classList.add('easy-mode');
+      tgl.setAttribute('aria-pressed', 'true');
+    }
+    tgl.addEventListener('click', function () {
+      var on = document.body.classList.toggle('easy-mode');
+      tgl.setAttribute('aria-pressed', on ? 'true' : 'false');
+      try { localStorage.setItem('voicesync-easy', on ? '1' : '0'); } catch (e) {}
+      setMsg(t(on ? 'easyOn' : 'easyOff'));
+    });
+  }
+
+  function initPresets() {
+    refreshPresetList();
+    var sel = $('presetSelect'), sv = $('btnPresetSave'), del = $('btnPresetDelete');
+    if (sel) sel.addEventListener('change', function () {
+      if (sel.value) applyPreset(sel.value);
+    });
+    if (sv) sv.addEventListener('click', function () {
+      var name = null;
+      try { name = window.prompt(t('presetNamePrompt'), ''); } catch (e) {}
+      if (!name || !(name = name.trim())) return;
+      var presets = getPresets();
+      presets[name] = {
+        ttsLang: state.ttsLang,
+        voiceId: state.voiceId,
+        speed: state.speed,
+        pitch: state.pitch,
+        dialogueMode: state.dialogueMode,
+        voiceId2: state.voiceId2
+      };
+      setPresets(presets);
+      refreshPresetList();
+      var s2 = $('presetSelect'); if (s2) s2.value = name;
+      setMsg(t('presetSaved'));
+    });
+    if (del) del.addEventListener('click', function () {
+      var s2 = $('presetSelect');
+      var name = s2 ? s2.value : '';
+      if (!name) return;
+      var presets = getPresets();
+      delete presets[name];
+      setPresets(presets);
+      refreshPresetList();
+      setMsg(t('presetDeleted'));
+    });
+  }
 
   function initDialogue() {
     var cb = $('dialogueMode'), s2 = $('voiceSelect2'), hint = $('dialogueHint');
@@ -856,6 +995,11 @@
     var box = $('textInput');
     var text = box ? box.value.trim() : '';
     if (!text) { setMsg(t('enterText'), true); return; }
+    // Feature 1: Roman Urdu pre-pass — convert to Urdu script, route to ur-PK.
+    if (state.romanUrdu && window.TTS && typeof window.TTS._romanToUrdu === 'function') {
+      text = window.TTS._romanToUrdu(text);
+      if (box) box.value = text; // show the user what will be spoken
+    }
 
     stopAll();
     setBusy(true);
@@ -1169,33 +1313,109 @@
 
     setMsg(t('recording'));
     var cues = state.lastCues || [];
+    // Feature 2: 9:16 Shorts — composite canvas (avatar top + captions bottom).
+    var fmtSel = $('videoFormat');
+    var portrait = fmtSel && fmtSel.value === 'portrait';
+    var outCanvas = canvas, captionTimer = null, audioRef = { el: null };
+    if (portrait) {
+      var box = $('textInput');
+      var capText = box ? box.value.trim() : '';
+      var capDur = (r.duration || 5) / (state.speed || 1);
+      var caps = getCaptionBlocks(capText, capDur);
+      outCanvas = document.createElement('canvas');
+      outCanvas.width = 720; outCanvas.height = 1280;
+      var octx = outCanvas.getContext('2d');
+      var drawFrame = function () {
+        try {
+          // Background
+          octx.fillStyle = '#0b0f1a'; octx.fillRect(0, 0, 720, 1280);
+          // Avatar on top (720x720)
+          var aw = canvas.width || 480, ah = canvas.height || 480;
+          var s = Math.min(720 / aw, 720 / ah);
+          var dw = aw * s, dh = ah * s;
+          octx.drawImage(canvas, (720 - dw) / 2, (720 - dh) / 2, dw, dh);
+          // Caption bar at bottom
+          var now = audioRef.el && typeof audioRef.el.currentTime === 'number' ? audioRef.el.currentTime : 0;
+          var cur = null;
+          for (var i = 0; i < caps.length; i++) {
+            if (now >= caps[i].start && now <= caps[i].end) { cur = caps[i]; break; }
+          }
+          if (cur) {
+            octx.fillStyle = 'rgba(0,0,0,0.55)';
+            octx.fillRect(40, 880, 640, 320);
+            octx.fillStyle = '#fff';
+            octx.font = 'bold 44px system-ui, sans-serif';
+            octx.textAlign = 'center'; octx.textBaseline = 'middle';
+            var words = cur.text.split(' '), lines = [], line = '';
+            words.forEach(function (w) {
+              if ((line + ' ' + w).trim().length > 28) { lines.push(line.trim()); line = w; }
+              else line += ' ' + w;
+            });
+            if (line.trim()) lines.push(line.trim());
+            lines.slice(0, 4).forEach(function (ln, li) {
+              octx.fillText(ln, 360, 960 + li * 60);
+            });
+          }
+        } catch (e) { /* keep recording even if a frame fails */ }
+        captionTimer = requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+    }
     try {
       // SPEC §3: onAudio hook lets app.js attach lip-sync so the exported
       // video has moving lips.
-      var blob = await window.Exporter.recordVideo(canvas, r.url, {
-        width: canvas.width || 480,
-        height: canvas.height || 480,
+      var blob = await window.Exporter.recordVideo(outCanvas, r.url, {
+        width: outCanvas.width || 480,
+        height: outCanvas.height || 480,
         musicURL: state.musicUrl,       // background music mixed into the video
         musicVolume: state.musicVolume,
         onAudio: function (audioEl) {
+          audioRef.el = audioEl;
           try { window.Avatar.speak(cues, audioEl); } catch (e) {}
         }
       });
+      if (captionTimer) cancelAnimationFrame(captionTimer);
       stopAvatar();
-      window.Exporter.downloadAudio(blob, 'voicesync-video.webm');
+      window.Exporter.downloadAudio(blob, portrait ? 'voicesync-shorts-9x16.webm' : 'voicesync-video.webm');
       setMsg(t('videoSaved'));
     } catch (e) {
+      if (captionTimer) cancelAnimationFrame(captionTimer);
       stopAvatar();
       setMsg((e && e.message) || t('videoUnsupported'), true);
     }
   }
 
   function initExport() {
-    var w = $('btnWav'), m = $('btnMp3'), v = $('btnVideo'), s = $('btnSrt');
+    var w = $('btnWav'), m = $('btnMp3'), v = $('btnVideo'), s = $('btnSrt'), sh = $('btnShare');
     if (w) w.addEventListener('click', exportWav);
     if (m) m.addEventListener('click', exportMp3);
     if (v) v.addEventListener('click', exportVideo);
     if (s) s.addEventListener('click', exportSrt);
+    if (sh) sh.addEventListener('click', shareAudio);
+  }
+
+  // Feature 3: one-tap share (WhatsApp etc.) via Web Share API, download fallback.
+  async function shareAudio() {
+    var r = state.lastResult;
+    if (!r || !r.audioBuffer) { setMsg(t('exportNeedsAudio'), true); return; }
+    try {
+      var blob = r.blob;
+      if (!blob && hasModule('Exporter') && typeof window.Exporter.encodeWAV === 'function') {
+        blob = await window.Exporter.encodeWAV(r.audioBuffer);
+      }
+      if (!blob) { setMsg(t('exportFailed'), true); return; }
+      var file = new File([blob], 'voicesync-voice.wav', { type: 'audio/wav' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'VoiceSync Studio' });
+        setMsg(t('shared'));
+      } else {
+        // Fallback: just download it.
+        window.Exporter.downloadAudio(blob, 'voicesync-voice.wav');
+        setMsg(t('shareFallback'));
+      }
+    } catch (e) {
+      if (e && e.name !== 'AbortError') setMsg(t('exportFailed') + ': ' + (e.message || e), true);
+    }
   }
 
   /* ---------------- subtitles (SRT) ---------------- */
@@ -1220,16 +1440,10 @@
     return words.slice(0, best + 1).join(' ') + '\n' + words.slice(best + 1).join(' ');
   }
 
-  function exportSrt() {
-    var box = $('textInput');
-    var text = box ? box.value.trim() : '';
-    if (!text) { setMsg(t('enterText'), true); return; }
-    // Dialogue mode: strip the 1:/2: speaker markers so subtitles read cleanly.
+  // Shared caption blocks for SRT export AND Shorts burnt-in captions.
+  // Returns [{start, end, text}] timed across dur seconds.
+  function getCaptionBlocks(text, dur) {
     if (state.dialogueMode) text = text.replace(/^[ \t]*[12]:[ \t]*/gm, '');
-    var r = state.lastResult;
-    var dur = (r && r.duration) ? r.duration : Math.max(1, text.length / 14);
-    // Match the user's playback speed: at 2x the voice finishes in half the time.
-    dur = dur / (state.speed || 1);
     var sens = text.replace(/\s+/g, ' ').split(/(?<=[.!?؟۔])\s+/);
     var blocks = [], cur = '';
     sens.forEach(function (s) {
@@ -1240,10 +1454,25 @@
     if (!blocks.length) blocks.push(text.slice(0, 84));
     var totalChars = blocks.reduce(function (a, b) { return a + b.length; }, 0) || 1;
     var t = 0, out = [];
-    blocks.forEach(function (b, i) {
+    blocks.forEach(function (b) {
       var d = Math.max(0.8, dur * b.length / totalChars);
-      out.push((i + 1) + '\n' + fmtSrt(t) + ' --> ' + fmtSrt(t + d) + '\n' + wrapSrtLine(b) + '\n');
+      out.push({ start: t, end: t + d, text: b });
       t += d;
+    });
+    return out;
+  }
+
+  function exportSrt() {
+    var box = $('textInput');
+    var text = box ? box.value.trim() : '';
+    if (!text) { setMsg(t('enterText'), true); return; }
+    var r = state.lastResult;
+    var dur = (r && r.duration) ? r.duration : Math.max(1, text.length / 14);
+    // Match the user's playback speed: at 2x the voice finishes in half the time.
+    dur = dur / (state.speed || 1);
+    var blocks = getCaptionBlocks(text, dur);
+    var out = blocks.map(function (b, i) {
+      return (i + 1) + '\n' + fmtSrt(b.start) + ' --> ' + fmtSrt(b.end) + '\n' + wrapSrtLine(b.text) + '\n';
     });
     try {
       var blob = new Blob(['\ufeff' + out.join('\n')], { type: 'text/plain;charset=utf-8' });
@@ -1357,6 +1586,8 @@
     initTextInput();
     initTtsControls();
     initDialogue();
+    initPresets();
+    initEasyMode();
     initTransport();
     initExport();
     initProject();

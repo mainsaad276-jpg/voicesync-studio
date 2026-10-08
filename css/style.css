@@ -203,3 +203,26 @@ body {
   .card { padding: 14px; }
   .btn { padding: 11px 12px; font-size: 14px; }
 }
+
+/* ---------- Feature 5: Easy Mode — Type -> Speak -> Save only ---------- */
+body.easy-mode .tuning,
+body.easy-mode .music-row,
+body.easy-mode .dialogue-row,
+body.easy-mode #dialogueHint,
+body.easy-mode .preset-row,
+body.easy-mode #moduleStatus,
+body.easy-mode #btnRecord,
+body.easy-mode #btnDictate,
+body.easy-mode .roman-toggle,
+body.easy-mode #btnMp3,
+body.easy-mode #btnVideo,
+body.easy-mode #videoFormat,
+body.easy-mode #btnSrt,
+body.easy-mode #btnShare,
+body.easy-mode .project-card,
+body.easy-mode .footer-tech {
+  display: none !important;
+}
+body.easy-mode #easyToggle {
+  outline: 2px solid var(--accent, #4caf50);
+}

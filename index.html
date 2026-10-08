@@ -17,6 +17,10 @@
       <span class="brand-tag" data-i18n="app_tagline">Free Voiceover + Lip-Sync</span>
     </div>
     <div class="topbar-actions">
+      <button id="easyToggle" class="btn btn-secondary btn-small" type="button" aria-pressed="false">
+        <span aria-hidden="true">&#128515;</span>
+        <span data-i18n="easy_mode">Easy Mode</span>
+      </button>
       <select id="langToggle" class="lang-toggle select" aria-label="UI language">
         <option value="en">English</option>
         <option value="ur">اردو</option>
@@ -37,6 +41,10 @@
       <div class="editor-meta">
         <span id="charCount" class="char-count">0</span>
         <span class="char-count-label" data-i18n="chars">chars</span>
+        <label class="roman-toggle" title="Roman Urdu -> اردو">
+          <input type="checkbox" id="romanUrdu">
+          <span data-i18n="roman_urdu">Roman Urdu</span>
+        </label>
         <button id="btnDictate" class="btn btn-secondary btn-small" type="button" style="margin-inline-start:auto">
           <span aria-hidden="true">&#127908;</span>
           <span data-i18n="btn_dictate">Voice to Text</span>
@@ -164,6 +172,20 @@
         <select id="voiceSelect2" class="select" hidden aria-label="Voice 2"></select>
       </div>
       <p class="hint" id="dialogueHint" hidden data-i18n="dialogue_hint">Start lines with 1: for Voice 1 and 2: for Voice 2.</p>
+
+      <div class="preset-row">
+        <label class="field-label" for="presetSelect" data-i18n="preset_label">Preset</label>
+        <select id="presetSelect" class="select select-small">
+          <option value="" data-i18n="preset_none">— No preset —</option>
+        </select>
+        <button id="btnPresetSave" class="btn btn-secondary btn-small" type="button">
+          <span aria-hidden="true">&#128190;</span>
+          <span data-i18n="preset_save">Save</span>
+        </button>
+        <button id="btnPresetDelete" class="btn btn-secondary btn-small" type="button" aria-label="Delete preset">
+          <span aria-hidden="true">&#128465;</span>
+        </button>
+      </div>
     </section>
 
     <!-- Avatar preview + transport + timeline -->
@@ -241,9 +263,17 @@
           <span aria-hidden="true">&#127909;</span>
           <span data-i18n="btn_export_video">Download Video</span>
         </button>
+        <select id="videoFormat" class="select-small" aria-label="Video format">
+          <option value="square" data-i18n="fmt_square">Square 1:1</option>
+          <option value="portrait" data-i18n="fmt_portrait">Shorts 9:16 + captions</option>
+        </select>
         <button id="btnSrt" class="btn btn-accent" type="button">
           <span aria-hidden="true">&#128196;</span>
           <span data-i18n="btn_srt">Subtitles (SRT)</span>
+        </button>
+        <button id="btnShare" class="btn btn-accent" type="button">
+          <span aria-hidden="true">&#128228;</span>
+          <span data-i18n="btn_share">Share</span>
         </button>
       </div>
 

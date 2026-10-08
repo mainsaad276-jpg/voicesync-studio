@@ -1029,6 +1029,72 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Roman Urdu -> Urdu script pre-pass (Team 2 wish #1)                  */
+  /* Pakistanis type Urdu in Roman letters; without this, auto-detect    */
+  /* sees Latin and an English voice mangles it. Word-boundary rules,    */
+  /* longest-match first. Best-effort: unknown words pass through.       */
+  /* ------------------------------------------------------------------ */
+  var ROMAN_URDU_MAP = [
+    ['assalam o alaikum', 'السلام علیکم'], ['assalamoalaikum', 'السلام علیکم'],
+    ['wa alaikum assalam', 'وعلیکم السلام'], ['walaikum assalam', 'وعلیکم السلام'],
+    ['khuda hafiz', 'خدا حافظ'], ['allah hafiz', 'اللہ حافظ'],
+    ['shukriya', 'شکریہ'], ['meherbani', 'مہربانی'], ['bohat', 'بہت'], ['bahut', 'بہت'],
+    ['kya', 'کیا'], ['kyun', 'کیوں'], ['kyon', 'کیوں'], ['kaise', 'کیسے'], ['kese', 'کیسے'],
+    ['kahan', 'کہاں'], ['kidhar', 'کدھر'], ['kab', 'کب'], ['kaun', 'کون'], ['kon', 'کون'],
+    ['main', 'میں'], ['mein', 'میں'], ['tum', 'تم'], ['tu', 'تو'], ['aap', 'آپ'],
+    ['hum', 'ہم'], ['ham', 'ہم'], ['yeh', 'یہ'], ['ye', 'یہ'], ['woh', 'وہ'], ['wo', 'وہ'],
+    ['hai', 'ہے'], ['hain', 'ہیں'], ['hun', 'ہوں'], ['hoon', 'ہوں'], ['tha', 'تھا'],
+    ['thi', 'تھی'], ['the', 'تھے'], ['hoga', 'ہوگا'], ['hogi', 'ہوگی'], ['honge', 'ہوں گے'],
+    ['nahi', 'نہیں'], ['nahin', 'نہیں'], ['na', 'نہ'], ['mat', 'مت'],
+    ['aur', 'اور'], ['ya', 'یا'], ['lekin', 'لیکن'], ['magar', 'مگر'], ['kyunki', 'کیونکہ'],
+    ['ke', 'کے'], ['ki', 'کی'], ['ka', 'کا'], ['ko', 'کو'], ['se', 'سے'], ['me', 'میں'],
+    ['par', 'پر'], ['per', 'پر'], ['tak', 'تک'], ['sath', 'ساتھ'], ['saath', 'ساتھ'],
+    ['ghar', 'گھر'], ['bahar', 'باہر'], ['andar', 'اندر'], ['upar', 'اوپر'], ['neeche', 'نیچے'],
+    ['aaj', 'آج'], ['kal', 'کل'], ['ab', 'اب'], ['abhi', 'ابھی'], ['phir', 'پھر'],
+    ['pehle', 'پہلے'], ['baad', 'بعد'], ['roz', 'روز'], ['din', 'دن'], ['raat', 'رات'],
+    ['subah', 'صبح'], ['shaam', 'شام'], ['dopahar', 'دوپہر'],
+    ['acha', 'اچھا'], ['achha', 'اچھا'], ['achi', 'اچھی'], ['bura', 'برا'], ['buri', 'بری'],
+    ['bara', 'بڑا'], ['bari', 'بڑی'], ['chota', 'چھوٹا'], ['choti', 'چھوٹی'],
+    ['naya', 'نیا'], ['nayi', 'نئی'], ['purana', 'پرانا'], ['purani', 'پرانی'],
+    ['khushi', 'خوشی'], ['gham', 'غم'], ['pyar', 'پیار'], ['mohabbat', 'محبت'],
+    ['dost', 'دوست'], ['dosti', 'دوستی'], ['dushman', 'دشمن'],
+    ['maa', 'ماں'], ['baap', 'باپ'], ['abba', 'ابا'], ['ammi', 'امی'],
+    ['bhai', 'بھائی'], ['behen', 'بہن'], ['beta', 'بیٹا'], ['beti', 'بیٹی'],
+    ['bacha', 'بچہ'], ['bachay', 'بچے'], ['bache', 'بچے'],
+    ['pani', 'پانی'], ['khana', 'کھانا'], ['roti', 'روٹی'], ['chai', 'چائے'],
+    ['kitab', 'کتاب'], ['kitaab', 'کتاب'], ['qalam', 'قلم'], ['kalam', 'قلم'],
+    ['school', 'اسکول'], ['madrasa', 'مدرسہ'], ['ustad', 'استاد'],
+    ['kaam', 'کام'], ['kam', 'کام'], ['naukri', 'نوکری'], ['paisa', 'پیسہ'], ['paisay', 'پیسے'],
+    ['waqt', 'وقت'], ['zindagi', 'زندگی'], ['duniya', 'دنیا'], ['aakhirat', 'آخرت'],
+    ['sach', 'سچ'], ['jhoot', 'جھوٹ'], ['sahi', 'صحیح'], ['ghalat', 'غلط'],
+    ['haal', 'حال'], ['haalat', 'حالت'], ['khair', 'خیر'], ['aman', 'امن'],
+    ['ja', 'جا'], ['jaa', 'جا'],
+    ['madad', 'مدد'], ['sawal', 'سوال'], ['jawab', 'جواب'], ['baat', 'بات'], ['batain', 'باتیں'],
+    ['sun', 'سن'], ['suno', 'سنو'], ['dekho', 'دیکھو'], ['dekha', 'دیکھا'],
+    ['jana', 'جانا'], ['jao', 'جاؤ'], ['aana', 'آنا'], ['aao', 'آؤ'], ['chal', 'چل'], ['chalo', 'چلو'],
+    ['kar', 'کر'], ['karo', 'کرو'], ['kiya', 'کیا'], ['kiye', 'کیے'], ['hota', 'ہوتا'],
+    ['milna', 'ملنا'], ['mila', 'ملا'], ['dena', 'دینا'], ['diya', 'دیا'], ['lena', 'لینا'], ['liya', 'لیا'],
+    ['rehna', 'رہنا'], ['raha', 'رہا'], ['rahi', 'رہی'], ['rahe', 'رہے'],
+    ['sab', 'سب'], ['sabko', 'سب کو'], ['kuch', 'کچھ'], ['koi', 'کوئی'], ['har', 'ہر'],
+    ['meri', 'میری'], ['mera', 'میرا'], ['mere', 'میرے'], ['teri', 'تیری'], ['tera', 'تیرا'],
+    ['apki', 'آپ کی'], ['apka', 'آپ کا'], ['unki', 'ان کی'], ['unka', 'ان کا'],
+    ['theek', 'ٹھیک'], ['bilkul', 'بالکل'], ['zaroor', 'ضرور'], ['shayad', 'شاید'],
+    ['mashallah', 'ماشاءاللہ'], ['inshallah', 'انشاءاللہ'], ['alhamdulillah', 'الحمدللہ'],
+    ['subhanallah', 'سبحان اللہ'], ['jazakallah', 'جزاک اللہ']
+  ];
+
+  function _romanToUrdu(text) {
+    var out = ' ' + String(text || '') + ' ';
+    // longest phrases first so multi-word greetings win over single words
+    var sorted = ROMAN_URDU_MAP.slice().sort(function (a, b) { return b[0].length - a[0].length; });
+    for (var i = 0; i < sorted.length; i++) {
+      var re = new RegExp('([^A-Za-z])' + sorted[i][0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^A-Za-z])', 'gi');
+      out = out.replace(re, '$1' + sorted[i][1] + '$2');
+    }
+    return out.trim();
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Public API (exact SPEC.md contract)                                 */
   /* ------------------------------------------------------------------ */
   return {
@@ -1038,6 +1104,7 @@
     setReferenceAudio: setReferenceAudio, // mic recording blob for Chatterbox cloning
     // underscore helpers for QA/unit tests (not part of the UI contract)
     _chunkText: _chunkText,
-    _guessLang: _guessLang
+    _guessLang: _guessLang,
+    _romanToUrdu: _romanToUrdu
   };
 });
