@@ -355,6 +355,49 @@ async function main() {
     t('char_i18n_ur_real_' + k, !!urBlock && urBlock[1].indexOf(k + ':') !== -1);
   });
 
+  // ---- Team 2 Fix Round: 15 issues ----
+  // 1+2+15: pause covers audioEl + previewCtx, resumePlayback toggle exists
+  t('fix_pause_audioEl', /state\.audioEl\.pause\(\); state\.pausedKind = 'audioEl'/.test(appjs));
+  t('fix_pause_previewCtx', /state\.previewCtx\.suspend\(\); state\.pausedKind = 'previewCtx'/.test(appjs));
+  t('fix_resume_fn', appjs.indexOf('function resumePlayback') !== -1);
+  t('fix_pause_toggle', /if \(state\.pausedKind\) \{ resumePlayback\(\); return; \}/.test(appjs));
+  t('fix_pausedKind_reset', appjs.indexOf('state.pausedKind = null; // any pause/resume state dies') !== -1);
+  t('fix_pausedKind_state', appjs.indexOf('pausedKind: null,') !== -1);
+  // 3: btn-accent readable text
+  t('fix_accent_color', /\.btn-accent \{[^}]*color: #fff/.test(css));
+  // 4: Clear nulls lastResult + disables transport
+  t('fix_clear_nulls', appjs.indexOf('state.lastResult = null; state.lastCues = []; state.lastUrl = null;') !== -1);
+  t('fix_clear_disables', /'\btnPlay', 'btnListenBig'/.test(appjs) || appjs.indexOf("'btnPlay', 'btnListenBig'") !== -1);
+  t('fix_clear_i18n', i18njs.indexOf('cleared:') !== -1);
+  // 5: parts divisor 400
+  t('fix_parts_400', appjs.indexOf('Math.ceil(txt.length / 400)') !== -1);
+  t('fix_parts_no2000', appjs.indexOf('/ 2000)') === -1 || appjs.indexOf('txt.length / 2000') === -1);
+  // 6: renderLangPills in 3 paths
+  t('fix_pills_dropdown', /tl\.addEventListener\('change', function \(\) \{\s*\n?\s*state\.ttsLang = tl\.value \|\| 'en';\s*\n?\s*loadVoices\(\);\s*\n?\s*renderLangPills\(\);/.test(appjs));
+  t('fix_pills_autodetect', /await loadVoices\(\);\s*\n?\s*renderLangPills\(\); \/\/ Team 2 Fix: pills follow auto-detect/.test(appjs));
+  t('fix_pills_preset', appjs.indexOf("tl.value = p.ttsLang; renderLangPills();") !== -1);
+  // 7: filtered-out voice warning
+  t('fix_filtered_warn', appjs.indexOf("setMsg(t('voice_filtered_out'), true)") !== -1);
+  t('fix_filtered_i18n', i18njs.indexOf('voice_filtered_out:') !== -1);
+  // 8: Kenji Sato Female
+  t('fix_kenji_female', /Kenji Sato',\s*voiceId: 'edge:ja-JP-NanamiNeural', lang: 'Japanese', gender: 'Female'/.test(appjs));
+  // 9+12: selChar tracking
+  t('fix_selchar_state', appjs.indexOf('selChar: null,') !== -1);
+  t('fix_selchar_set', appjs.indexOf('state.selChar = c; // Team 2 Fix: track the CHARACTER') !== -1);
+  t('fix_selchar_box', appjs.indexOf('var c = state.selChar;') !== -1);
+  t('fix_selchar_highlight', appjs.indexOf('var isSel = (state.selChar === c);') !== -1);
+  // 10: character select syncs language UI
+  t('fix_char_langcode', appjs.indexOf('function charLangCode') !== -1);
+  t('fix_char_synclang', appjs.indexOf('function syncLangUiToCode') !== -1);
+  t('fix_char_synclang_call', appjs.indexOf('syncLangUiToCode(charLangCode(c))') !== -1);
+  // 11: preview URL pitch limitation noted
+  t('fix_preview_pitch_note', appjs.indexOf('Team 2 note (Medium 11): pitch is NOT applied here') !== -1);
+  // 13: easy-mode hides slider cards
+  t('fix_easy_slider', css.indexOf('body.easy-mode .slider-card,') !== -1);
+  // 14: visible player IS the playback element
+  t('fix_google_visible', appjs.indexOf('if (ap) { try { ap.hidden = false; } catch (e) {} }') !== -1);
+  t('fix_google_no_double', appjs.indexOf('el = ap || new Audio();') !== -1);
+
   console.log('\n==== 1000-TEST QA RESULT ====');
   console.log('PASSED: ' + pass + ' / ' + n);
   if (fails.length) { console.log('FAILED (' + fails.length + '):'); fails.forEach(function (f) { console.log('  ' + f); }); }

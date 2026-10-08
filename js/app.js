@@ -109,10 +109,12 @@
     lang: 'en',          // UI language (I18N)
     ttsLang: 'en',       // synthesis language (auto-detected from text on Generate)
     voiceId: null,
+    selChar: null,       // selected CHARACTER object (not voiceId — shared voices differ)
     lastResult: null,    // last TTS.synthesize result
     lastCues: [],        // last LipSync cue list
     lastUrl: null,       // object URL of last audio (revoked on regenerate)
     audioEl: null,       // HTMLAudioElement for the audio playback path
+    pausedKind: null,    // which playback path is paused (for resume toggle)
     speaking: false,
     clockTimer: 0,       // interval id for the webspeech virtual clock
     playToken: 0,        // bumped by stopAll(); Google chunk chains check it
@@ -239,7 +241,7 @@
     if (!box || !tc) return;
     var txt = box.value;
     var words = txt.trim() ? txt.trim().split(/\s+/).length : 0;
-    var parts = Math.max(1, Math.ceil(txt.length / 2000));
+    var parts = Math.max(1, Math.ceil(txt.length / 400)); // Team 2 Fix: worst-case chunk limit (Edge 400 / Google 200)
     tc.textContent = txt.length + ' ' + t('counter_chars') + ' \u2022 ' +
       words + ' ' + t('counter_words') + ' \u2022 ' + parts + ' ' + t('counter_parts');
   }
@@ -266,6 +268,14 @@
     if (clr) clr.addEventListener('click', function () {
       if (!box) return;
       box.value = ''; updateCharCount();
+      // Team 2 Fix Round: clear stale audio too — old result must not survive.
+      stopAll();
+      state.lastResult = null; state.lastCues = []; state.lastUrl = null;
+      state.lastEngineNote = null; updateEngineBadge();
+      ['btnPlay', 'btnListenBig'].forEach(function (id) {
+        var b = $(id); if (b) b.disabled = true;
+      });
+      setMsg(t('cleared'));
     });
   }
 
@@ -503,6 +513,7 @@
       tl.addEventListener('change', function () {
         state.ttsLang = tl.value || 'en';
         loadVoices();
+        renderLangPills(); // Team 2 Fix: keep pills in sync
       });
     }
     loadVoices();
@@ -584,6 +595,9 @@
       if (r.url) {
         var el = new Audio(r.url);
         try { el.playbackRate = spd; } catch (e) {}
+        // Team 2 note (Medium 11): pitch is NOT applied here — a plain
+        // <audio> element cannot pitch-shift, and the Google URL is
+        // CORS-blocked from fetch->WebAudio->detune routing. Speed works.
         state.previewEl = el;
         el.onended = function () { state.previewing = false; setMsg(t('done')); };
         el.onerror = function () { state.previewing = false; setMsg(t('noAudio'), true); };
@@ -646,11 +660,34 @@
     }
     sel.value = pick.id;
     state.voiceId = pick.id;
+    // Team 2 Fix: warn when the previously selected voice was filtered out
+    // by the language pill instead of silently switching to voices[0].
+    try {
+      var prevWant = (state.selChar && state.selChar.voiceId) ||
+        localStorage.getItem('voicesync-voice');
+      if (prevWant && prevWant !== pick.id) {
+        var stillThere = false;
+        for (var vi = 0; vi < voices.length; vi++) {
+          if (voices[vi].id === prevWant) { stillThere = true; break; }
+        }
+        if (!stillThere) {
+          setMsg(t('voice_filtered_out'), true);
+          state.selChar = null; // the character is gone from this language
+          updateSelCharBox();
+        }
+      }
+    } catch (e) {}
     refreshBrowserVoices(voices);
     sel.onchange = function () {
       state.voiceId = sel.value;
+      // Team 2 Fix: re-derive the selected character from the dropdown pick.
+      state.selChar = null;
+      for (var ci = 0; ci < CHARACTERS.length; ci++) {
+        if (CHARACTERS[ci].voiceId === sel.value) { state.selChar = CHARACTERS[ci]; break; }
+      }
       try { localStorage.setItem('voicesync-voice', sel.value); } catch (e) {}
       renderCharCards();
+      updateSelCharBox();
     };
     if (state.dialogueMode) syncVoice2();
     renderCharCards();
@@ -684,6 +721,38 @@
       b.addEventListener('click', function () { setLangPill(L.code); });
       wrap.appendChild(b);
     });
+  }
+
+  // Team 2 Fix (Medium 10): derive the language code from a character's voiceId.
+  function charLangCode(c) {
+    try {
+      var parts = String(c.voiceId).split(':'); // 'edge:ur-PK-AsadNeural'
+      if (parts.length > 1) return parts[1].split('-').slice(0, 2).join('-');
+    } catch (e) {}
+    return 'en';
+  }
+
+  // Team 2 Fix (Medium 10): point the whole language UI at the given code.
+  function syncLangUiToCode(code) {
+    var tl = $('ttsLang');
+    var use = code, ok = false, base = String(code).split('-')[0];
+    if (tl) {
+      var i;
+      for (i = 0; i < tl.options.length; i++) {
+        if (tl.options[i].value === code) { ok = true; break; }
+      }
+      if (!ok) {
+        for (i = 0; i < tl.options.length; i++) {
+          if (tl.options[i].value === base) { use = base; ok = true; break; }
+        }
+      }
+      if (!ok) return; // unknown language — leave UI alone
+      tl.value = use;
+    }
+    state.ttsLang = use;
+    try { localStorage.setItem('voicesync-ttsLang', use); } catch (e) {}
+    renderLangPills();
+    loadVoices(); // reload voices; saved voiceId keeps the character picked
   }
 
   function setLangPill(code) {
@@ -784,7 +853,7 @@
     // French
     { name: 'Pierre Dubois', voiceId: 'edge:fr-FR-HenriNeural', lang: 'French', gender: 'Male', style: 'Storyteller', pitch: 0 },
     // Japanese
-    { name: 'Kenji Sato',  voiceId: 'edge:ja-JP-NanamiNeural', lang: 'Japanese', gender: 'Male',   style: 'Anime Narrator', pitch: -6 },
+    { name: 'Kenji Sato',  voiceId: 'edge:ja-JP-NanamiNeural', lang: 'Japanese', gender: 'Female', style: 'Anime Narrator', pitch: -6 },
     { name: 'Yuki Tanaka', voiceId: 'edge:ja-JP-NanamiNeural', lang: 'Japanese', gender: 'Female', style: 'Friendly', pitch: 0 },
     // Korean
     { name: 'Seo-yeon',    voiceId: 'edge:ko-KR-SunHiNeural', lang: 'Korean', gender: 'Female', style: 'K-Drama Style', pitch: 0 },
@@ -818,9 +887,12 @@
       shown++;
       var card = document.createElement('button');
       card.type = 'button';
-      card.className = 'char-card' + (state.voiceId === c.voiceId ? ' selected' : '');
+      // Team 2 Fix (Medium 12): highlight ONLY the selected card object,
+      // not every card sharing the same voiceId.
+      var isSel = (state.selChar === c);
+      card.className = 'char-card' + (isSel ? ' selected' : '');
       card.setAttribute('role', 'option');
-      card.setAttribute('aria-selected', state.voiceId === c.voiceId ? 'true' : 'false');
+      card.setAttribute('aria-selected', isSel ? 'true' : 'false');
       card.setAttribute('aria-label', c.name + ' — ' + c.lang + ' ' + c.gender);
 
       var avatar = document.createElement('span');
@@ -871,6 +943,7 @@
   // Clicking a card selects that voice for generation.
   function selectCharacter(c) {
     state.voiceId = c.voiceId;
+    state.selChar = c; // Team 2 Fix: track the CHARACTER, not just voiceId
     // Character pitch offset so shared base voices sound different.
     if (typeof c.pitch === 'number') {
       state.pitch = c.pitch;
@@ -878,6 +951,8 @@
       if (pr) pr.value = String(c.pitch);
       if (pv) pv.textContent = pitchDisplay(c.pitch);
     }
+    // Medium 10: sync language UI to the character's language.
+    try { syncLangUiToCode(charLangCode(c)); } catch (e) {}
     try { localStorage.setItem('voicesync-voice', c.voiceId); } catch (e) {}
     updateSelCharBox();
     var sel = $('voiceSelect');
@@ -1168,6 +1243,7 @@
 
   function stopAll() {
     state.playToken++; // invalidate any in-flight Google chunk chain
+    state.pausedKind = null; // any pause/resume state dies with playback
     if (state.recording) { stopRecording(); }
     if (state.dictating) { stopDictate(); }
     // Stop voice preview too. Team 2 Round 4: also reset the busy-guard,
@@ -1312,7 +1388,10 @@
 
   function startGooglePlayback(result) {
     stopAll();
-    showAudioPlayer(result.url);
+    // Team 2 Fix (Medium 14): the VISIBLE player IS the playback element —
+    // no second hidden Audio holding the same URL (no double-play).
+    var ap = $('audioPlayer');
+    if (ap) { try { ap.hidden = false; } catch (e) {} }
     var token = state.playToken;
     var urls = (result.urls && result.urls.length) ? result.urls.slice() : [result.url];
     var dur = result.duration || 5;
@@ -1337,7 +1416,7 @@
     function playNext() {
       if (token !== state.playToken) return; // superseded by stopAll()
       if (idx >= urls.length) { stopAll(); setMsg(t('done')); return; }
-      el = new Audio();
+      el = ap || new Audio();
       state.audioEl = el;
       el.preload = 'auto';
       try { el.src = urls[idx]; } catch (e) { stopAll(); setMsg(t('playFailed'), true); return; }
@@ -1448,6 +1527,7 @@
           var tlSel = $('ttsLang');
           if (tlSel) tlSel.value = want;
           await loadVoices();
+          renderLangPills(); // Team 2 Fix: pills follow auto-detect
         }
       }
     } catch (e) {}
@@ -1567,39 +1647,65 @@
     if (db) db.addEventListener('click', exportMp3);
   }
 
-  // Round 2: pause current playback (Web Audio / speech / audio element).
+  // Team 2 Fix Round: pause current playback (all paths) + toggle resume.
+  // Pause is now a toggle: paused -> resume from the same position.
   function pausePlayback() {
+    // If something is paused already, resume it.
+    if (state.pausedKind) { resumePlayback(); return; }
+    try {
+      if (state.audioEl && !state.audioEl.paused) {
+        state.audioEl.pause(); state.pausedKind = 'audioEl'; setMsg(t('paused')); return;
+      }
+    } catch (e) {}
+    try {
+      if (state.previewEl && !state.previewEl.paused) {
+        state.previewEl.pause(); state.pausedKind = 'previewEl'; setMsg(t('paused')); return;
+      }
+    } catch (e) {}
+    try {
+      if (state.previewCtx && state.previewCtx.state === 'running') {
+        state.previewCtx.suspend(); state.pausedKind = 'previewCtx'; setMsg(t('paused')); return;
+      }
+    } catch (e) {}
     try {
       if (state.audioCtx && state.audioCtx.state === 'running') {
-        state.audioCtx.suspend(); setMsg(t('paused')); return;
+        state.audioCtx.suspend(); state.pausedKind = 'audioCtx'; setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
       if (window.speechSynthesis && window.speechSynthesis.speaking &&
           !window.speechSynthesis.paused) {
-        window.speechSynthesis.pause(); setMsg(t('paused')); return;
-      }
-    } catch (e) {}
-    try {
-      if (state.previewEl && !state.previewEl.paused) {
-        state.previewEl.pause(); setMsg(t('paused')); return;
+        window.speechSynthesis.pause(); state.pausedKind = 'speech'; setMsg(t('paused')); return;
       }
     } catch (e) {}
     try {
       var ap = $('audioPlayer');
-      if (ap && !ap.paused) { ap.pause(); setMsg(t('paused')); return; }
+      if (ap && !ap.paused) { ap.pause(); state.pausedKind = 'audioPlayer'; setMsg(t('paused')); return; }
+    } catch (e) {}
+    setMsg(t('nothing_to_pause'), true);
+  }
+
+  function resumePlayback() {
+    var k = state.pausedKind;
+    state.pausedKind = null;
+    try {
+      if (k === 'audioEl' && state.audioEl) { state.audioEl.play(); setMsg(t('playing')); return; }
+      if (k === 'previewEl' && state.previewEl) { state.previewEl.play(); setMsg(t('playing')); return; }
+      if (k === 'previewCtx' && state.previewCtx) { state.previewCtx.resume(); setMsg(t('playing')); return; }
+      if (k === 'audioCtx' && state.audioCtx) { state.audioCtx.resume(); setMsg(t('playing')); return; }
+      if (k === 'speech' && window.speechSynthesis) { window.speechSynthesis.resume(); setMsg(t('playing')); return; }
+      if (k === 'audioPlayer') { var ap = $('audioPlayer'); if (ap) { ap.play(); setMsg(t('playing')); return; } }
     } catch (e) {}
     setMsg(t('nothing_to_pause'), true);
   }
 
   // Round 2: selected-character info box under the Download button.
+  // Team 2 Fix: uses state.selChar (the CHARACTER), not voiceId matching —
+  // shared base voices (Ahmed/Dastaan Go) no longer show the wrong name.
   function updateSelCharBox() {
     var box = $('selCharBox');
     if (!box) return;
-    var c = null;
-    for (var i = 0; i < CHARACTERS.length; i++) {
-      if (CHARACTERS[i].voiceId === state.voiceId) { c = CHARACTERS[i]; break; }
-    }
+    var c = state.selChar;
     if (c) {
       box.innerHTML = '';
       var b = document.createElement('b'); b.textContent = c.name;
@@ -2037,7 +2143,7 @@
       for (var i = 0; i < tl.options.length; i++) {
         if (tl.options[i].value === p.ttsLang) { valid = true; break; }
       }
-      if (valid) { state.ttsLang = p.ttsLang; tl.value = p.ttsLang; }
+      if (valid) { state.ttsLang = p.ttsLang; tl.value = p.ttsLang; renderLangPills(); }
     }
     if (typeof p.voiceId === 'string' && p.voiceId) {
       try { localStorage.setItem('voicesync-voice', p.voiceId); } catch (e) {}

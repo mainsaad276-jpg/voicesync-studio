@@ -161,7 +161,7 @@ body {
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; flex: 1; }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.1); border-color: var(--accent); }
 .btn-secondary { background: var(--bg-soft); flex: 1; }
-.btn-accent { background: #24304a; border-color: var(--accent); flex: 1; }
+.btn-accent { background: #24304a; border-color: var(--accent); color: #fff; flex: 1; }
 .btn-recording { background: #b3261e !important; border-color: #b3261e !important; color: #fff !important; animation: recpulse 1.2s ease-in-out infinite; }
 @keyframes recpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.65; } }
 .btn-small { flex: 0 0 auto; padding: 6px 12px; font-size: 0.85em; }
@@ -206,6 +206,7 @@ body {
 
 /* ---------- Feature 5: Easy Mode — Type -> Speak -> Save only ---------- */
 body.easy-mode .tuning,
+body.easy-mode .slider-card,
 body.easy-mode .music-row,
 body.easy-mode .dialogue-row,
 body.easy-mode #dialogueHint,
