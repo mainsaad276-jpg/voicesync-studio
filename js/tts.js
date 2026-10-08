@@ -910,6 +910,74 @@
         ? voice.id.slice('edge:'.length)
         : _defaultVoiceId(text).replace(/^edge:/, '');
       var lang = voice && voice.lang ? voice.lang : _guessLang(text);
+      // Studio voices go through the official Azure AI Speech service when the
+      // voice proxy is configured (js/config.js). Same voices, reliable in
+      // every browser and in the Android app. If it fails, fall back to the
+      // free Edge read-aloud socket below.
+      if (_azureProxyUrl()) {
+        return _azureSynthesize(shortName, text, run, opts).catch(function (err) {
+          if (run.cancelled) throw err;
+          return _edgeWsSynthesize(shortName, lang, text, run, opts);
+        });
+      }
+      return _edgeWsSynthesize(shortName, lang, text, run, opts);
+    }
+    return _runOtherEngine(engine, text, voice, run, opts);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Azure AI Speech via the VoiceSync Worker proxy (worker/)            */
+  /* ------------------------------------------------------------------ */
+  var AZURE_CHUNK_LIMIT = 2500; // worker accepts up to 3000 chars per request
+  function _azureProxyUrl() {
+    try {
+      var c = typeof window !== 'undefined' && window.VS_CONFIG;
+      var u = c && c.ttsProxy ? String(c.ttsProxy).trim() : '';
+      return u ? u.replace(/\/+$/, '') : '';
+    } catch (e) { return ''; }
+  }
+  function _azureSynthesize(shortName, text, run, opts) {
+    var base = _azureProxyUrl();
+    var chunks = _chunkText(text, AZURE_CHUNK_LIMIT);
+    var parts = [], done = 0, seq = Promise.resolve();
+    chunks.forEach(function (ch) {
+      seq = seq.then(function () {
+        if (run.cancelled) throw new Error('cancelled');
+        return _retryChunk(function () {
+          var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          var timer = setTimeout(function () { if (ctl) ctl.abort(); }, FETCH_TIMEOUT_MS);
+          return fetch(base + '/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: ch, voice: shortName }),
+            signal: ctl ? ctl.signal : undefined
+          }).then(function (res) {
+            clearTimeout(timer);
+            if (!res.ok) {
+              return res.json().catch(function () { return {}; }).then(function (j) {
+                throw new Error('Azure voice service: ' + (j.error || ('HTTP ' + res.status)));
+              });
+            }
+            return res.arrayBuffer();
+          }, function (e) { clearTimeout(timer); throw e; });
+        }, 1, run);
+      }).then(function (buf) {
+        var u8 = new Uint8Array(buf || []);
+        if (!u8.length) throw new Error('Azure returned no audio');
+        parts.push(u8);
+        _reportProgress(opts, ++done, chunks.length);
+      });
+    });
+    return seq.then(function () {
+      return _finishMp3Result(_concatU8(parts), parts, text, 'edge', run).then(function (r) {
+        r.provider = 'azure'; // same Studio voice, served by the official API
+        return r;
+      });
+    });
+  }
+
+  function _edgeWsSynthesize(shortName, lang, text, run, opts) {
+    {
       var chunks = _chunkText(text, EDGE_CHUNK_LIMIT);
       var parts = [];
       var seq = Promise.resolve();
@@ -929,7 +997,9 @@
         return _finishMp3Result(_concatU8(parts), parts, text, 'edge', run);
       });
     }
+  }
 
+  function _runOtherEngine(engine, text, voice, run, opts) {
     if (engine === 'google') {
       var tl = _baseLang(voice && voice.lang ? voice.lang : _guessLang(text));
       if (GOOGLE_LANGS.indexOf(tl) === -1) tl = 'en';

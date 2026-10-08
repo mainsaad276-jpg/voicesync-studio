@@ -38,7 +38,7 @@
       <h2>In short</h2>
       <ul>
         <li>No account, no sign-up, no ads, no analytics or tracking.</li>
-        <li>We do not run our own server and we do not collect or store your text, voice or files.</li>
+        <li>We do not collect or store your text, voice or files. Our only server is a small voice relay (Cloudflare Worker) that passes your text to Microsoft Azure to make Studio voices and keeps nothing.</li>
         <li>To make a voice, the text you type is sent to the voice service you choose (listed below). Phone/computer voices stay on your device.</li>
       </ul>
     </section>
@@ -47,7 +47,7 @@
       <h2>What leaves your device, and when</h2>
       <table>
         <tr><th>Feature</th><th>What is sent</th><th>Sent to</th></tr>
-        <tr><td>Studio voices (Edge Neural)</td><td>Your script text</td><td>Microsoft speech service (speech.platform.bing.com)</td></tr>
+        <tr><td>Studio voices</td><td>Your script text and the chosen voice name</td><td>Our voice relay on Cloudflare, which forwards it to Microsoft Azure AI Speech; if that is unavailable, the Microsoft Edge read-aloud service (speech.platform.bing.com)</td></tr>
         <tr><td>Google voice</td><td>Your script text</td><td>Google Translate speech (translate.google.com)</td></tr>
         <tr><td>Chatterbox voice (beta)</td><td>Your script text, and your latest "Record My Voice" recording if you made one <b>and</b> ticked the voice-cloning consent checkbox (used as the voice sample)</td><td>Hugging Face Space by Resemble AI (hf.space)</td></tr>
         <tr><td>Voice to Text</td><td>Microphone audio while dictation is on</td><td>Your browser's or phone's speech recognition service (on most phones and in Chrome this is Google)</td></tr>

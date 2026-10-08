@@ -260,7 +260,7 @@
       edge: 'Edge Neural', google: 'Google', webspeech: 'Device voice',
       chatterbox: 'Chatterbox', dialogue: 'Dialogue', mic: 'Recording'
     };
-    var label = engineNames[r.engine] || r.engine;
+    var label = r.provider === 'azure' ? 'Studio Voice (Azure)' : (engineNames[r.engine] || r.engine);
     var isFallback = !!engNote;
     badge.textContent = (isFallback ? '⚠️ ' : '🔊 ') + label +
       (isFallback ? ' — ' + t('engineFallbackShort') : '');
