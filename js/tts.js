@@ -599,8 +599,9 @@
           audioBuffer: null, // Web Speech has no capturable buffer; app may synthesize silence of this duration for lip-sync
           blob: null,
           url: null,
-          duration: (info && info.spokenSec) || _estimateDurationSec(text),
-          engine: 'webspeech'
+          duration: (info && info.duration) || _estimateDurationSec(text),
+          engine: 'webspeech',
+          utterance: info && info.utterance // must pass through — app.js plays it on Play
         };
       });
     }
