@@ -162,6 +162,8 @@ body {
 .btn-primary:hover:not(:disabled) { filter: brightness(1.1); border-color: var(--accent); }
 .btn-secondary { background: var(--bg-soft); flex: 1; }
 .btn-accent { background: #24304a; border-color: var(--accent); flex: 1; }
+.btn-recording { background: #b3261e !important; border-color: #b3261e !important; color: #fff !important; animation: recpulse 1.2s ease-in-out infinite; }
+@keyframes recpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.65; } }
 
 .btn-group { display: flex; gap: 12px; flex-wrap: wrap; }
 

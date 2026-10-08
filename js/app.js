@@ -59,6 +59,15 @@
     projectSaved: 'Project saved.',
     projectLoaded: 'Project loaded.',
     projectLoadFailed: 'Could not read that project file.',
+    btn_record: 'Record My Voice',
+    btn_stop_record: 'Stop Recording',
+    requestingMic: 'Requesting microphone…',
+    recording: 'Recording… tap Record again to stop.',
+    recordReady: 'Recording ready — tap Play to hear it.',
+    recordEmpty: 'No audio recorded.',
+    micDenied: 'Microphone access was denied.',
+    micUnsupported: 'Recording is not supported in this browser.',
+    useWavForMic: 'For your recording use Download WAV (MP3 encoding is not available for mic audio).',
     modulesLabel: 'Modules'
   };
 
@@ -74,6 +83,12 @@
     clockTimer: 0,       // interval id for the webspeech virtual clock
     playToken: 0,        // bumped by stopAll(); Google chunk chains check it
     lipEngine: '',       // 'rhubarb' | 'heuristic' | '' (from LipSync.ready)
+    recording: false,    // mic recording in progress
+    recorder: null,       // active MediaRecorder
+    recordChunks: [],     // recorded audio chunks
+    recordStream: null,   // microphone MediaStream
+    recordT0: 0,          // recording start timestamp
+    micUrl: null,         // object URL of last mic recording
     rafId: 0             // timeline rAF id
   };
 
@@ -256,6 +271,7 @@
 
   function stopAll() {
     state.playToken++; // invalidate any in-flight Google chunk chain
+    if (state.recording) { stopRecording(); }
     try {
       if (hasModule('TTS') && typeof window.TTS.cancel === 'function') window.TTS.cancel();
     } catch (e) {}
@@ -512,10 +528,129 @@
   }
 
   function initTransport() {
-    var g = $('btnGenerate'), p = $('btnPlay'), s = $('btnStop');
+    var g = $('btnGenerate'), p = $('btnPlay'), s = $('btnStop'), r = $('btnRecord');
     if (g) g.addEventListener('click', onGenerate);
     if (p) p.addEventListener('click', replay);
     if (s) s.addEventListener('click', function () { stopAll(); setMsg(t('stopped')); });
+    if (r) r.addEventListener('click', toggleRecord);
+  }
+
+  /* ---------------- mic recording: "Record My Voice" ---------------- */
+  // Records from the microphone, decodes to an AudioBuffer, and installs it
+  // as state.lastResult so the SAME playback / lip-sync / export pipeline
+  // just works (replay -> startAudioPlayback, getCues, exportWav, exportVideo).
+
+  function toggleRecord() {
+    if (state.recording) { stopRecording(); return; }
+    startRecording();
+  }
+
+  function updateRecordBtn() {
+    var b = $('btnRecord');
+    if (!b) return;
+    var label = b.querySelector('[data-i18n="btn_record"]') || b.querySelector('span:last-child');
+    if (state.recording) {
+      b.classList.add('btn-recording');
+      if (label) label.textContent = t('btn_stop_record');
+    } else {
+      b.classList.remove('btn-recording');
+      if (label) label.textContent = t('btn_record');
+    }
+  }
+
+  function startRecording() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia ||
+        typeof MediaRecorder === 'undefined') {
+      setMsg(t('micUnsupported'), true);
+      return;
+    }
+    stopAll();
+    setMsg(t('requestingMic'));
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var rec = null;
+      try {
+        var mime = '';
+        if (typeof MediaRecorder.isTypeSupported === 'function') {
+          if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
+          else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm';
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) mime = 'audio/mp4';
+        }
+        rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      } catch (e) {
+        try { stream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e2) {}
+        setMsg(t('micUnsupported'), true);
+        return;
+      }
+      state.recordChunks = [];
+      state.recordStream = stream;
+      state.recorder = rec;
+      state.recording = true;
+      state.recordT0 = Date.now();
+      rec.ondataavailable = function (ev) {
+        if (ev.data && ev.data.size) state.recordChunks.push(ev.data);
+      };
+      rec.onstop = function () { finishRecording(); };
+      try { rec.start(); }
+      catch (e) { cleanupRecording(); setMsg(t('micUnsupported'), true); return; }
+      updateRecordBtn();
+      setMsg(t('recording'));
+    }, function () {
+      setMsg(t('micDenied'), true);
+    });
+  }
+
+  function stopRecording() {
+    if (state.recorder && state.recording) {
+      try { state.recorder.stop(); } catch (e) { cleanupRecording(); }
+    }
+  }
+
+  function cleanupRecording() {
+    if (state.recordStream) {
+      try { state.recordStream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) {}
+    }
+    state.recordStream = null;
+    state.recorder = null;
+    state.recording = false;
+    state.recordChunks = [];
+    updateRecordBtn();
+  }
+
+  async function finishRecording() {
+    var chunks = state.recordChunks.slice();
+    var mime = (state.recorder && state.recorder.mimeType) || 'audio/webm';
+    cleanupRecording();
+    if (!chunks.length) { setMsg(t('recordEmpty'), true); return; }
+    setMsg(t('working'));
+    var blob = null, url = null;
+    try {
+      blob = new Blob(chunks, { type: mime });
+      url = URL.createObjectURL(blob);
+    } catch (e) { setMsg(t('recordEmpty'), true); return; }
+    // Decode for duration, lip-sync cues and WAV export.
+    var audioBuffer = null;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        var ctx = new AC();
+        var ab = await blob.arrayBuffer();
+        audioBuffer = await ctx.decodeAudioData(ab);
+        try { ctx.close(); } catch (e) {}
+      }
+    } catch (e) { audioBuffer = null; }
+    if (state.micUrl) { try { URL.revokeObjectURL(state.micUrl); } catch (e) {} }
+    state.micUrl = url;
+    state.lastResult = {
+      audioBuffer: audioBuffer,
+      blob: blob,
+      url: url,
+      duration: audioBuffer ? audioBuffer.duration : 0,
+      engine: 'mic'
+    };
+    state.lastUrl = url;
+    state.lastCues = audioBuffer ? await getCues(audioBuffer) : [];
+    setMsg(t('recordReady'));
+    // No auto-play — the user taps Play (same pattern as the Web Speech path).
   }
 
   /* ---------------- export ---------------- */
@@ -537,6 +672,8 @@
   async function exportMp3() {
     if (!hasModule('Exporter')) { setMsg(t('exporterMissing'), true); return; }
     var r = state.lastResult;
+    // Mic recordings: the blob is webm/opus, not MP3 — WAV is the honest export.
+    if (r && r.engine === 'mic') { setMsg(t('useWavForMic'), true); return; }
     // SPEC §3: synthesize blob is the engine's native container (MP3 for Edge).
     if (r && r.blob) {
       setMsg(t('working'));
