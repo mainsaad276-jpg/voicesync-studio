@@ -42,6 +42,10 @@ body {
   flex-wrap: wrap;
   gap: var(--gap);
   padding: 12px 16px;
+  /* B10 (Play Store round): respect the display cutout / status bar. */
+  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
   background: var(--bg-soft);
   border-bottom: 1px solid var(--card-edge);
   position: sticky;
@@ -117,6 +121,13 @@ body {
   padding: 10px 12px; font-size: 15px; font-family: inherit;
   min-height: 44px; /* Team 3: 44px touch target */
 }
+/* B9 (Play Store round): small selects get the same 44px minimum target. */
+.select-small {
+  min-height: 44px;
+  background: var(--bg-soft); color: var(--ink);
+  border: 1px solid var(--card-edge); border-radius: 10px;
+  padding: 8px 10px; font-size: 14px; font-family: inherit;
+}
 .select:focus { outline: 2px solid var(--accent); }
 
 /* ---------- Preview / avatar ---------- */
@@ -186,6 +197,10 @@ body {
   padding: 14px 16px; text-align: center;
   color: var(--ink-dim); font-size: 13px;
   border-top: 1px solid var(--card-edge);
+  /* B10 (Play Store round): don't sit under the gesture bar. */
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
 }
 .footer p { margin: 0; }
 .footer-tech { display: block; font-size: 12px; opacity: 0.8; }
@@ -612,3 +627,85 @@ body.tabbed .preview-card > .btn-big { width: 100%; }
 .voice-row { display: flex; gap: 8px; }
 .voice-row .select { flex: 1 1 auto; min-width: 0; }
 .voice-row .btn { flex: 0 0 auto; }
+/* VoiceSync Studio — Play Store round (Part B, Team 1)
+ * B1: mic pre-permission disclosure modal.
+ * B2: voice-cloning consent checkbox row.
+ * B11: touch-action rules so sliders / timeline / text inputs behave on touch
+ *      (no 300ms tap-delay feel, no scroll-fighting).
+ */
+
+/* ---------- B1: disclosure modal ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+.modal-overlay[hidden] { display: none !important; }
+.modal {
+  background: var(--bg-soft, #fff);
+  color: var(--ink, #111);
+  border: 1px solid var(--card-edge, #ddd);
+  border-radius: 14px;
+  max-width: 520px;
+  width: 100%;
+  padding: 20px 20px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.modal h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+.modal p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.modal-actions .btn {
+  flex: 1 1 160px;
+  min-height: 44px;
+}
+
+/* ---------- B2: cloning consent checkbox ---------- */
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--card-edge, #ddd);
+  border-radius: 10px;
+  background: var(--bg, #fff);
+  font-size: 13px;
+  line-height: 1.55;
+  cursor: pointer;
+}
+.consent-row input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  margin-top: 2px;
+  accent-color: var(--accent, #1d5c4d);
+  cursor: pointer;
+}
+
+/* ---------- B11: touch behaviour ---------- */
+/* Kill the old 300ms tap delay on interactive elements. */
+button, input, select, textarea, label { touch-action: manipulation; }
+/* Horizontal sliders: let the browser own vertical scrolling, the slider
+   owns horizontal drags (no scroll-fighting). */
+input[type="range"] { touch-action: pan-y; }
+/* Timeline: tapping/scrubbing must not fight page scroll; vertical pans
+   still scroll the page. */
+.timeline { touch-action: pan-y; }
+/* The text box: allow normal vertical panning while typing. */
+.text-input { touch-action: pan-y; }

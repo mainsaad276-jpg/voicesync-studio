@@ -52,7 +52,7 @@
         data-i18n-ph="langpills_search_ph" placeholder="Search language... Urdu, Hindi, Russian, Arabic"
         data-i18n-aria="aria_search_languages" aria-label="Search languages">
       <div id="langPills" class="lang-pills" role="listbox" data-i18n-aria="aria_languages" aria-label="Languages"></div>
-      <p class="field-label browser-voice-label" data-i18n="browser_voice_label">BROWSER VOICE (sirf Offline engine ke liye)</p>
+      <p id="browserVoiceLabel" class="field-label browser-voice-label" data-i18n="browser_voice_label">BROWSER VOICE (sirf Offline engine ke liye)</p>
       <select id="browserVoiceSelect" class="select" data-i18n-aria="aria_browser_voice" aria-label="Browser voice"></select>
     </section>
 
@@ -406,6 +406,13 @@
         </div>
       </div>
       <p class="muted" data-i18n="clone_chatterbox_note">Tip: VoiceSync me <b>Chatterbox (beta)</b> voice list me free cloning pehle se mojood hai — mic recording ko reference bana kar koi bhi text usi andaz me bolwayen.</p>
+        <!-- B2 (Play Store round): Terms §6 — explicit consent before any
+             clone/reference audio may be uploaded to the Hugging Face Space.
+             Bilingual label, no data-i18n key (M39 drift guard). -->
+        <label class="consent-row" for="cloneConsent">
+          <input type="checkbox" id="cloneConsent">
+          <span>I agree my voice recording may be uploaded to a Hugging Face Space for voice cloning (Terms §6). / میں متفق ہوں کہ میری آواز کی ریکارڈنگ وائس کلوننگ کے لیے Hugging Face Space پر اپ لوڈ ہو سکتی ہے (شرائط §6)۔</span>
+        </label>
     </section>
 
     <!-- Engine guide (Free Voice Over skin) -->
@@ -507,6 +514,23 @@
       &nbsp;·&nbsp; <a href="docs/privacy.html" data-i18n="footer_privacy">🔒 Privacy Policy</a></p>
   </footer>
 
+  <!-- B1 (Play Store round): mic pre-permission disclosure modal. Content is
+       set by app.js (showMicConsent) — bilingual, no data-i18n keys (M39). -->
+  <div id="micModal" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="micModalTitle">
+      <h3 id="micModalTitle"></h3>
+      <p id="micModalBody"></p>
+      <div class="modal-actions">
+        <button id="micModalAllow" class="btn btn-accent" type="button">
+          <span>Allow microphone / مائیک کی اجازت دیں</span>
+        </button>
+        <button id="micModalLater" class="btn btn-secondary" type="button">
+          <span>Not now / ابھی نہیں</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Module scripts — strict load order per SPEC §3. Missing modules must not
        break parsing; app.js feature-detects each global before wiring it. -->
   <script src="js/i18n.js"></script>
@@ -514,7 +538,8 @@
   <script src="js/native.js"></script>
   <!-- Gradio client for the Chatterbox human-like voice engine (keyless, free). -->
   <!-- @gradio/client ships as an ES module: load it as a module and expose it
-       on window so tts.js (classic script) can use it. Version pinned. -->
+       on window so tts.js (classic script) can use it. Version pinned.
+       Module scripts are deferred by default, so first paint is never blocked. -->
   <script type="module">
     import { Client } from 'https://cdn.jsdelivr.net/npm/@gradio/client@2.7.1/dist/index.min.js';
     window.gradioClient = { Client: Client };

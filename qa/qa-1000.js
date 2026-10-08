@@ -694,6 +694,108 @@ async function main() {
   // Trivial: genRunId nulled when the run finishes.
   t('genrunid_nulled', appjs.indexOf('state.genRunId = null') !== -1);
 
+  /* 101. Play Store build round — Part B (Team 1): web-app changes.
+     IN_WRAPPER bridge hooks, mic consent modal, clone consent, offline,
+     visibilitychange, lazy Rhubarb, CSS touch/viewport fixes. */
+  function fnBody(src, name) {
+    var m = src.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n  \\}'));
+    return m ? m[0] : null;
+  }
+  // B1: mic pre-permission disclosure modal (record + dictate).
+  t('b1_modal_markup', html.indexOf('id="micModal"') !== -1 &&
+    html.indexOf('id="micModalTitle"') !== -1 && html.indexOf('id="micModalBody"') !== -1 &&
+    html.indexOf('id="micModalAllow"') !== -1 && html.indexOf('id="micModalLater"') !== -1);
+  t('b1_modal_bilingual_btns', html.indexOf('Allow microphone / مائیک کی اجازت دیں') !== -1 &&
+    html.indexOf('Not now / ابھی نہیں') !== -1);
+  t('b1_modal_css', css.indexOf('.modal-overlay') !== -1 && css.indexOf('.modal-actions') !== -1);
+  var startRecSrc = fnBody(appjs, 'startRecording');
+  var startRecNowSrc = fnBody(appjs, 'startRecordingNow');
+  var startDictSrc = fnBody(appjs, 'startDictate');
+  t('b1_record_modal_first', !!startRecSrc && startRecSrc.indexOf("showMicConsent('record'") !== -1 &&
+    startRecSrc.indexOf('getUserMedia(') === -1); // the getUserMedia CALL moved behind Allow
+  t('b1_recordnow_gum', !!startRecNowSrc && startRecNowSrc.indexOf('getUserMedia({ audio: true })') !== -1);
+  t('b1_dictate_modal_first', !!startDictSrc && startDictSrc.indexOf("showMicConsent('dictate'") !== -1 &&
+    startDictSrc.indexOf('new SR()') === -1); // SR construction moved behind Allow
+  t('b1_dictate_privacy_truth', appjs.indexOf('DICTATION_PRIVACY_TEXT') !== -1 &&
+    appjs.indexOf("Google's servers") !== -1 && appjs.indexOf('NOT processed on-device') !== -1);
+  t('b1_record_truth', appjs.indexOf('MIC_MODAL_RECORD_BODY') !== -1 &&
+    appjs.indexOf('Hugging Face Space') !== -1);
+  // B2: voice-cloning consent before any reference-audio upload.
+  t('b2_consent_fns_tts', ttsjs.indexOf('function getCloneConsent()') !== -1 &&
+    ttsjs.indexOf('function setCloneConsent(') !== -1);
+  t('b2_consent_exported', ttsjs.indexOf('getCloneConsent: getCloneConsent') !== -1 &&
+    ttsjs.indexOf('setCloneConsent: setCloneConsent') !== -1);
+  t('b2_upload_gated', ttsjs.indexOf('if (_chatterboxRefBlob && getCloneConsent())') !== -1);
+  t('b2_consent_persist', ttsjs.indexOf("'voicesync.cloneConsent'") !== -1);
+  t('b2_checkbox_ui', html.indexOf('id="cloneConsent"') !== -1 && css.indexOf('.consent-row') !== -1);
+  t('b2_handoff_gated', appjs.indexOf('cloneConsentOn()') !== -1 &&
+    appjs.indexOf('window.TTS.setReferenceAudio(null)') !== -1);
+  t('b2_consent_note', appjs.indexOf('CLONE_CONSENT_NOTE') !== -1);
+  // B4: offline handling + wrapper hides offline voices.
+  t('b4_offline_listeners', appjs.indexOf("addEventListener('offline'") !== -1 &&
+    appjs.indexOf("addEventListener('online'") !== -1);
+  t('b4_offline_msg', appjs.indexOf('OFFLINE_MSG') !== -1 &&
+    appjs.indexOf('You are offline') !== -1 && appjs.indexOf('آف لائن ہیں') !== -1);
+  t('b4_failfast', !!fnBody(appjs, 'onGenerate') &&
+    fnBody(appjs, 'onGenerate').indexOf("!navigator.onLine") !== -1);
+  t('b4_wrapper_voice_filter', appjs.indexOf("return v.engine !== 'webspeech'") !== -1 &&
+    appjs.indexOf('IN_WRAPPER') !== -1);
+  t('b4_hide_label_select', appjs.indexOf("browserVoiceSelect") !== -1 &&
+    appjs.indexOf("$('browserVoiceLabel')") !== -1);
+  // B5: bridge hooks with browser fallbacks.
+  t('b5_in_wrapper_def', /var IN_WRAPPER = [\s\S]{0,400}?window\.VoiceSyncBridge && (typeof )?window\.VoiceSyncBridge\.saveFile/.test(appjs));
+  t('b5_exporter_bridge', expsrc.indexOf('VoiceSyncBridge') !== -1 &&
+    expsrc.indexOf('readAsDataURL') !== -1 && expsrc.indexOf('saveFile(') !== -1 &&
+    expsrc.indexOf('function anchorDownload(') !== -1);
+  // Dual-bridge: Capacitor app's window.VSNative.saveFile(name, base64) is adapted.
+  t('b5_vsnative_adapter', appjs.indexOf('window.VSNative') !== -1 &&
+    appjs.indexOf('vn.isNative === true') !== -1 &&
+    appjs.indexOf('vn.saveFile(filename, b64)') !== -1 &&
+    expsrc.indexOf('window.VSNative') !== -1);
+  t('b5_downloadurl_bridge', appjs.indexOf('function downloadUrl(') !== -1 &&
+    /function downloadUrl\([\s\S]{0,900}?bridge\.saveFile/.test(appjs));
+  t('b5_share_bridge', appjs.indexOf('bridgeShareFile') !== -1 &&
+    appjs.indexOf('bridge.shareFile(') !== -1 &&
+    appjs.indexOf('navigator.share({ files: [file]') !== -1); // Web Share fallback kept
+  t('b5_keepawake_helper', appjs.indexOf('function bridgeKeepAwake(') !== -1 &&
+    appjs.indexOf('setKeepAwake') !== -1);
+  // B6: visibilitychange + exposed API.
+  t('b6_visibilitychange', appjs.indexOf("addEventListener('visibilitychange'") !== -1 &&
+    appjs.indexOf('document.hidden') !== -1);
+  t('b6_app_exposed', appjs.indexOf('window.VoiceSyncApp = {') !== -1 &&
+    appjs.indexOf('stopAll: function (opts)') !== -1);
+  // B7: Rhubarb lazy-load (deferred M37).
+  t('b7_no_boot_probe', appjs.indexOf('applyI18n();\n    probeLipSync();') === -1 &&
+    appjs.indexOf('requestIdleCallback') !== -1);
+  t('b7_ensure_idempotent', appjs.indexOf('_lipSyncProbed') !== -1 &&
+    appjs.indexOf('function ensureLipSync()') !== -1);
+  t('b7_probe_on_generate', !!fnBody(appjs, 'onGenerate') &&
+    fnBody(appjs, 'onGenerate').indexOf('ensureLipSync()') !== -1);
+  // B8: hide dictation in the wrapper without SpeechRecognition.
+  t('b8_dictate_hide', appjs.indexOf('applyWrapperVisibility') !== -1 &&
+    /IN_WRAPPER[\s\S]{0,200}?webkitSpeechRecognition/.test(appjs));
+  // B9: 44px on .select-small.
+  t('b9_select_small', /\.select-small\s*\{[^}]*min-height:\s*44px/.test(css));
+  // B10: viewport-fit + safe-area.
+  t('b10_viewport_fit', html.indexOf('viewport-fit=cover') !== -1);
+  t('b10_safearea', css.indexOf('env(safe-area-inset-top)') !== -1 &&
+    css.indexOf('env(safe-area-inset-bottom)') !== -1);
+  // B11: touch-action rules.
+  t('b11_touch_manipulation', css.indexOf('touch-action: manipulation') !== -1);
+  t('b11_touch_sliders', css.indexOf('input[type="range"] { touch-action: pan-y') !== -1);
+  t('b11_touch_timeline', css.indexOf('.timeline { touch-action: pan-y') !== -1);
+  // B12: deferred gradio + honest WebM label.
+  // B12: gradio must not block first paint — either <script defer src>, or an
+  // inline type="module" (module scripts are deferred by default) importing it.
+  t('b12_gradio_defer', /<script defer[^>]*@gradio\/client/.test(html) ||
+    /<script type="module">[\s\S]*?import[^;]*@gradio\/client/.test(html));
+  t('b12_webm_label_en', i18njs.indexOf("btn_export_video: 'Download Video (WebM)'") !== -1);
+  t('b12_webm_label_ur', i18njs.indexOf('btn_export_video:') !== -1 &&
+    i18njs.indexOf('(WebM)') !== -1);
+  // Wake-lock hooks around generation/export.
+  t('wake_gen_on', (appjs.match(/bridgeKeepAwake\(true\)/g) || []).length >= 3);
+  t('wake_gen_off', (appjs.match(/bridgeKeepAwake\(false\)/g) || []).length >= 8);
+
   console.log('\n==== 1000-TEST QA RESULT ====');
   console.log('PASSED: ' + pass + ' / ' + n);
   if (fails.length) { console.log('FAILED (' + fails.length + '):'); fails.forEach(function (f) { console.log('  ' + f); }); }

@@ -105,10 +105,36 @@
    * Browser helpers (never called from node tests)
    * ===================================================================== */
 
-  function triggerDownload(blob, filename) {
-    if (!blob) {
-      throw new Error('Nothing to download — no file data was provided.');
-    }
+  /* B5 (Play Store round): Android wrapper bridge. When the WebView
+     wrapper is present, hand the file to it so it lands in the user's real
+     Downloads folder; otherwise use the normal browser anchor download. */
+  function wrapperBridge() {
+    try {
+      if (typeof window === 'undefined') return null;
+      var b = window.VoiceSyncBridge;
+      if (b && typeof b.saveFile === 'function') return b;
+      var vn = window.VSNative;
+      if (vn && vn.isNative === true && typeof vn.saveFile === 'function') {
+        // Capacitor app: saveFile(name, base64) — adapt argument order.
+        return { saveFile: function (b64, filename /*, mime */) { return vn.saveFile(filename, b64); } };
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function blobToBase64(blob, cb) {
+    try {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var s = String(fr.result || '');
+        cb(s.indexOf(',') >= 0 ? s.split(',')[1] : s);
+      };
+      fr.onerror = function () { cb(null); };
+      fr.readAsDataURL(blob);
+    } catch (e) { cb(null); }
+  }
+
+  function anchorDownload(blob, filename) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -119,6 +145,26 @@
       if (a.parentNode) a.parentNode.removeChild(a);
       URL.revokeObjectURL(url);
     }, 4000);
+  }
+
+  function triggerDownload(blob, filename) {
+    if (!blob) {
+      throw new Error('Nothing to download — no file data was provided.');
+    }
+    filename = filename || 'voicesync-download.bin';
+    var bridge = wrapperBridge();
+    if (bridge) {
+      var mime = blob.type || 'application/octet-stream';
+      blobToBase64(blob, function (b64) {
+        if (b64) {
+          try { bridge.saveFile(b64, filename, mime); return; }
+          catch (e) { /* bridge failed — fall through to anchor */ }
+        }
+        anchorDownload(blob, filename);
+      });
+      return;
+    }
+    anchorDownload(blob, filename);
   }
 
   function pickVideoMimeType() {

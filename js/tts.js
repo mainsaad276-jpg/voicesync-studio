@@ -1037,6 +1037,32 @@
 
   function setReferenceAudio(blob) { _chatterboxRefBlob = blob || null; }
 
+  /* B2 (Play Store round): Terms §6 — the clone reference clip is uploaded
+     to a public Hugging Face Space, so it must NEVER leave the device
+     without explicit user consent. The consent choice persists in
+     localStorage; the upload branch below reads it live every run. */
+  var CLONE_CONSENT_KEY = 'voicesync.cloneConsent';
+  var _cloneConsent = null; // null = not read from storage yet
+  function getCloneConsent() {
+    if (_cloneConsent !== null) return _cloneConsent;
+    var v = false;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        v = window.localStorage.getItem(CLONE_CONSENT_KEY) === '1';
+      }
+    } catch (e) { v = false; }
+    _cloneConsent = v;
+    return v;
+  }
+  function setCloneConsent(on) {
+    _cloneConsent = !!on;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(CLONE_CONSENT_KEY, _cloneConsent ? '1' : '0');
+      }
+    } catch (e) {}
+  }
+
   function _chatterboxLang(lang) {
     var base = _baseLang(lang || 'en');
     if (CHATTERBOX_LANGS.indexOf(base) !== -1) return base;
@@ -1149,7 +1175,9 @@
     return _chatterboxConnect().then(function (client) {
       var seq = Promise.resolve();
       var refPath = null;
-      if (_chatterboxRefBlob) {
+      // B2: no consent -> no upload. Cloning is optional; the default
+      // Chatterbox voice is used instead (same as a failed upload).
+      if (_chatterboxRefBlob && getCloneConsent()) {
         seq = seq.then(function () {
           return _raceCancel(
             _withTimeout(client.upload([_chatterboxRefBlob]), 60000, 'Reference upload'), run)
@@ -1349,6 +1377,8 @@
     synthesize: synthesize,
     cancel: cancel,
     setReferenceAudio: setReferenceAudio, // mic recording blob for Chatterbox cloning
+    getCloneConsent: getCloneConsent, // Terms §6: consent before any clone/reference upload
+    setCloneConsent: setCloneConsent,
     // underscore helpers for QA/unit tests (not part of the UI contract)
     _chunkText: _chunkText,
     _guessLang: _guessLang,

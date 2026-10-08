@@ -26,6 +26,46 @@
     catch (e) { return fallback; }
   }
 
+  /* ---------------- Play Store wrapper bridge (Part B) ----------------
+   * Two Android wrappers are supported:
+   *  1. The native WebView wrapper exposes window.VoiceSyncBridge with EXACT
+   *     signatures: saveFile(base64, filename, mime),
+   *     shareFile(base64, filename, mime, text), setKeepAwake(on).
+   *  2. The Capacitor app exposes window.VSNative = { isNative: true,
+   *     saveFile(name, base64) } (note the argument order) — adapted below.
+   * Every bridge call is optional-chained so plain browsers are unaffected. */
+  var IN_WRAPPER = (function () {
+    try {
+      if (window.VoiceSyncBridge && typeof window.VoiceSyncBridge.saveFile === 'function') return true;
+      var vn = window.VSNative;
+      if (vn && vn.isNative === true && typeof vn.saveFile === 'function') return true;
+    } catch (e) {}
+    return false;
+  })();
+
+  function wrapperBridge() {
+    try {
+      if (window.VoiceSyncBridge && typeof window.VoiceSyncBridge.saveFile === 'function') {
+        return window.VoiceSyncBridge;
+      }
+      var vn = window.VSNative;
+      if (vn && vn.isNative === true && typeof vn.saveFile === 'function') {
+        // Adapt Capacitor's saveFile(name, base64) to the (base64, filename, mime) shape.
+        return { saveFile: function (b64, filename /*, mime */) { return vn.saveFile(filename, b64); } };
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // Keep the screen awake during long generation/export when the wrapper
+  // bridge is present. Harmless no-op in plain browsers.
+  function bridgeKeepAwake(on) {
+    try {
+      var b = wrapperBridge();
+      if (b && typeof b.setKeepAwake === 'function') b.setKeepAwake(!!on);
+    } catch (e) {}
+  }
+
   /* ---------------- strings ----------------
    * Fallback English used when i18n.js is not loaded yet.
    * t(key) prefers I18N.strings[state.lang][key] when available. */
@@ -104,6 +144,36 @@
     dialogueNeedAudio: 'Dialogue mode needs voices with downloadable audio (not the device voice).',
     modulesLabel: 'Modules'
   };
+
+  /* ---------------- bilingual privacy/consent text (Part B) ----------------
+   * Local bilingual constants (English + اردو in one string), per the
+   * established M39 pattern — no new i18n keys, no dict drift. */
+
+  // B3 (verbatim): the honest dictation/privacy text for the privacy-page worker.
+  // NOTE (Team 5 flag): Team 5's promised "exact verbatim text" file was not in
+  // the repo — this text was written fresh by Team 1 (Part B) to be truthful.
+  var DICTATION_PRIVACY_TEXT =
+    'Voice-to-Text (dictation) uses your browser\'s built-in speech recognition, which sends your spoken audio to Google\'s servers for transcription. It is NOT processed on-device, and it needs an internet connection. VoiceSync Studio itself does not record, store, or share your speech — the transcribed words go straight into your text box. / ' +
+    'وائس ٹو ٹیکسٹ (ڈکٹیشن) آپ کے براؤزر کی بلٹ اِن اسپیچ ریکگنیشن استعمال کرتا ہے جو آپ کی بولی ہوئی آواز گوگل کے سرورز پر ٹرانسکرپشن کے لیے بھیجتا ہے۔ یہ ڈیوائس پر پروسیس نہیں ہوتا اور انٹرنیٹ درکار ہے۔ VoiceSync Studio خود آپ کی آواز ریکارڈ، محفوظ یا شیئر نہیں کرتا — لکھے ہوئے الفاظ سیدھے آپ کے ٹیکسٹ باکس میں جاتے ہیں۔';
+
+  // B1 (Team 5 flag: same note — verbatim text file was missing, written fresh):
+  // mic pre-permission disclosure shown BEFORE any getUserMedia call.
+  var MIC_MODAL_RECORD_TITLE = 'Microphone access / مائیک کی اجازت';
+  var MIC_MODAL_RECORD_BODY =
+    'Tapping "Allow microphone" lets VoiceSync Studio use your microphone. Your recording is processed and kept ON YOUR DEVICE — nothing is uploaded. If you later use Chatterbox voice cloning, your recording is sent to a public Hugging Face Space so the AI can copy your voice style. / ' +
+    '"مائیک کی اجازت دیں" دبانے سے VoiceSync Studio آپ کا مائیک استعمال کرے گا۔ آپ کی ریکارڈنگ آپ کے ڈیوائس پر ہی پروسیس اور محفوظ رہتی ہے — کچھ بھی اپ لوڈ نہیں ہوتا۔ اگر آپ بعد میں Chatterbox وائس کلوننگ استعمال کریں تو آپ کی ریکارڈنگ ایک پبلک Hugging Face Space پر بھیجی جائے گی تاکہ AI آپ کی آواز کی نقل کر سکے۔';
+  var MIC_MODAL_DICTATE_TITLE = 'Voice-to-Text / وائس ٹو ٹیکسٹ';
+  var MIC_MODAL_ALLOW = 'Allow microphone / مائیک کی اجازت دیں';
+  var MIC_MODAL_LATER = 'Not now / ابھی نہیں';
+
+  // B4: offline messaging.
+  var OFFLINE_MSG = 'You are offline — voice generation needs internet. / آپ آف لائن ہیں — آواز بنانے کے لیے انٹرنیٹ درکار ہے۔';
+  var ONLINE_MSG = 'Back online — you can generate again. / انٹرنیٹ واپس آگیا — اب آواز بنا سکتے ہیں۔';
+
+  // B2: prompt shown when a mic recording would become a clone reference
+  // but the consent checkbox was never ticked.
+  var CLONE_CONSENT_NOTE =
+    'To use your recording for voice cloning, please tick the voice-cloning consent checkbox below first. / اپنی ریکارڈنگ وائس کلوننگ کے لیے استعمال کرنے کے لیے پہلے نیچے وائس کلوننگ کی اجازت والا خانہ چیک کریں۔';
 
   var state = {
     lang: 'en',          // UI language (I18N)
@@ -220,6 +290,16 @@
     el.textContent = t('modulesLabel') + ': ' + parts.join(' · ');
   }
 
+  // B7 (Play Store round, deferred M37): the ~37 MB Rhubarb model must NOT
+  // load at boot. probeLipSync() is now idempotent and is triggered either
+  // lazily (requestIdleCallback once the page is idle) or on the first
+  // Generate that actually needs lip-sync.
+  var _lipSyncProbed = false;
+  function ensureLipSync() {
+    if (_lipSyncProbed) return;
+    _lipSyncProbed = true;
+    probeLipSync();
+  }
   function probeLipSync() {
     // SPEC §3: LipSync.ready() -> Promise<'rhubarb'|'heuristic'>
     if (!hasModule('LipSync') || typeof window.LipSync.ready !== 'function') {
@@ -239,6 +319,25 @@
       renderModuleStatus();
     }
     window.LipSync.ready().then(done).catch(function () { done('heuristic'); });
+  }
+
+  /* ---------------- Play Store wrapper visibility (B4/B8) ---------------- */
+  function applyWrapperVisibility() {
+    // B4: no speechSynthesis inside the WebView wrapper — hide the dead
+    // "Browser Voice (offline engine)" controls entirely.
+    if (IN_WRAPPER && typeof window.speechSynthesis === 'undefined') {
+      var bvs = $('browserVoiceSelect');
+      if (bvs) bvs.hidden = true;
+      var bvl = $('browserVoiceLabel');
+      if (bvl) bvl.hidden = true;
+    }
+    // B8: SpeechRecognition doesn't exist in the WebView either — hide the
+    // dictation button there (in a plain browser it stays, with a message).
+    var bd = $('btnDictate');
+    if (bd && IN_WRAPPER &&
+        !(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+      bd.hidden = true;
+    }
   }
 
   /* ---------------- language (I18N) ---------------- */
@@ -474,9 +573,55 @@
     }
   }
 
+  /* ---------------- B1: mic pre-permission disclosure modal ----------------
+   * Shown between the tap and getUserMedia (or SpeechRecognition start) for
+   * BOTH the "Record My Voice" button and the "Voice to Text" button.
+   * NOTE (Team 5 flag): Team 5's promised file with "exact verbatim text"
+   * was not in the repo — this disclosure text was written fresh by Team 1
+   * (Part B) to be truthful about where audio goes. */
+  var _micModalAllowCb = null;
+
+  function hideMicModal() {
+    _micModalAllowCb = null;
+    var m = $('micModal');
+    if (m) m.hidden = true;
+  }
+
+  function showMicConsent(kind, onAllow) {
+    var m = $('micModal'), title = $('micModalTitle'), body = $('micModalBody'),
+        allow = $('micModalAllow');
+    if (!m || !title || !body || !allow) { // no modal markup — degrade to old behavior
+      try { onAllow(); } catch (e) {}
+      return;
+    }
+    title.textContent = (kind === 'dictate') ? MIC_MODAL_DICTATE_TITLE : MIC_MODAL_RECORD_TITLE;
+    body.textContent = (kind === 'dictate') ? DICTATION_PRIVACY_TEXT : MIC_MODAL_RECORD_BODY;
+    _micModalAllowCb = onAllow;
+    m.hidden = false;
+    try { allow.focus(); } catch (e) {}
+  }
+
+  function initMicModal() {
+    var allow = $('micModalAllow'), later = $('micModalLater'), m = $('micModal');
+    if (allow) allow.addEventListener('click', function () {
+      var cb = _micModalAllowCb;
+      hideMicModal();
+      if (typeof cb === 'function') { try { cb(); } catch (e) {} }
+    });
+    if (later) later.addEventListener('click', hideMicModal);
+    if (m) m.addEventListener('click', function (ev) { if (ev.target === m) hideMicModal(); });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        var mm = $('micModal');
+        if (mm && !mm.hidden) hideMicModal();
+      }
+    });
+  }
+
   /* ---------------- voice-to-text (dictation) ---------------- */
-  // Free, built-in: Chrome's SpeechRecognition transcribes the mic straight
-  // into the script box. No server, no key.
+  // B3: the old comment below was FALSE — dictation is not "no server".
+  // Chrome's SpeechRecognition transcribes the mic straight into the script
+  // box, but the transcription itself happens on Google's servers.
 
   function toggleDictate() {
     if (state.dictating) { stopDictate(); setMsg(t('stopped')); return; }
@@ -495,6 +640,11 @@
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setMsg(t('sttUnsupported'), true); return; }
     stopAll();
+    // B1: privacy disclosure first — only start listening after "Allow".
+    showMicConsent('dictate', function () { startDictateNow(SR); });
+  }
+
+  function startDictateNow(SR) {
     var rec;
     try { rec = new SR(); } catch (e) { setMsg(t('sttUnsupported'), true); return; }
     rec.lang = sttLang();
@@ -744,6 +894,11 @@
     sel.appendChild(loading);
     var voices = [];
     try { voices = await window.TTS.getVoices(state.ttsLang); } catch (e) { voices = []; }
+    // B4: in the Android wrapper speechSynthesis does not exist, so the
+    // "Browser Voice (offline engine)" entries would be dead — hide them.
+    if (IN_WRAPPER && typeof window.speechSynthesis === 'undefined') {
+      voices = (voices || []).filter(function (v) { return v.engine !== 'webspeech'; });
+    }
     if (my !== state.voicesReq) return; // C4: stale — a newer load superseded this one; touch nothing
     sel.innerHTML = '';
     if (!voices || !voices.length) {
@@ -1462,6 +1617,7 @@
     state.speechClock = null; state.speechPausedAt = 0; // M3: drop the frozen virtual clock
     stopTimeline();
     state.speaking = false;
+    bridgeKeepAwake(false); // B5 round: a manual stop also releases the wake lock
   }
 
   // SPEC §3: LipSync.analyze never rejects; {error} -> static mouth.
@@ -1767,6 +1923,13 @@
     // M20: emoji/punctuation-only "text" would synthesize silence — require at
     // least one real letter or digit.
     if (!/[\p{L}\p{N}]/u.test(text)) { setMsg(t('enterText'), true); return; }
+    // B4: fail fast when offline — the network engines would otherwise sit
+    // through long fetch timeouts before failing. The Web Speech device
+    // voice genuinely works offline, so it stays allowed.
+    if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
+      var eng0 = safeGet(function () { return parseVoiceId(state.voiceId).engine; }, '');
+      if (eng0 !== 'webspeech' || state.dialogueMode) { setMsg(OFFLINE_MSG, true); return; }
+    }
     // Feature 1: Roman Urdu pre-pass.
     // C7: NEVER mutate the textbox — the old code overwrote box.value, which
     // irreversibly destroyed ordinary English text. Transliterate a COPY for
@@ -1806,6 +1969,8 @@
     stopAll({ skipTtsCancel: true });
     state.generating = true; // M17/C8: from here the run owns the voice
     setBusy(true);
+    bridgeKeepAwake(true); // wrapper: keep the screen on during generation
+    ensureLipSync(); // B7: first Generate that needs lip-sync loads Rhubarb here
     // C4: a fire-and-forget loadVoices() may still be in flight — await it
     // before reading state.voiceId (a stale one resolves without writing).
     if (state.voicesPromise) { try { await state.voicesPromise; } catch (e) {} }
@@ -1838,11 +2003,11 @@
     if (state.dialogueMode) {
       var segs = parseDialogue(synthText);
       // M24: markers present but every speaker empty — honest message.
-      if (!segs || !segs.length) { setBusy(false); state.generating = false; setMsg(t('dialogueNeedMarkers'), true); return; }
+      if (!segs || !segs.length) { setBusy(false); state.generating = false; bridgeKeepAwake(false); setMsg(t('dialogueNeedMarkers'), true); return; }
       // C6: cap dialogue text — absurd input is rejected, never OOM'd.
       var dlgLen = 0, di;
       for (di = 0; di < segs.length; di++) dlgLen += segs[di].text ? segs[di].text.length : 0;
-      if (dlgLen > MAX_INPUT_CHARS) { setBusy(false); state.generating = false; setMsg(TEXT_TOO_LONG_ERR, true); return; }
+      if (dlgLen > MAX_INPUT_CHARS) { setBusy(false); state.generating = false; bridgeKeepAwake(false); setMsg(TEXT_TOO_LONG_ERR, true); return; }
       var dout = null;
       try {
         dout = await synthesizeDialogue(segs);
@@ -1854,8 +2019,8 @@
       }
       if (!dout || dout.error || !dout.result) {
         var derr = (dout && dout.error) || 'unknown';
-        if (isCancelled(derr)) { state.generating = false; setMsg(t('stopped')); return; } // M12: clean stop
-        state.generating = false;
+        if (isCancelled(derr)) { state.generating = false; bridgeKeepAwake(false); setMsg(t('stopped')); return; } // M12: clean stop
+        state.generating = false; bridgeKeepAwake(false);
         setMsg(t('ttsFailed') + ': ' + derr, true);
         return;
       }
@@ -1876,8 +2041,8 @@
 
     if (!result || result.error) {
       var rerr = (result && result.error) || 'unknown';
-      if (isCancelled(rerr)) { state.generating = false; setMsg(t('stopped')); return; } // M12: clean stop, not "failed: cancelled"
-      state.generating = false;
+      if (isCancelled(rerr)) { state.generating = false; bridgeKeepAwake(false); setMsg(t('stopped')); return; } // M12: clean stop, not "failed: cancelled"
+      state.generating = false; bridgeKeepAwake(false);
       setMsg(t('ttsFailed') + ': ' + rerr, true);
       return;
     }
@@ -1943,7 +2108,7 @@
     } else {
       setMsg(t('noAudio'), true);
     }
-    state.generating = false; // M17/C8: run fully done — voice controls live again
+    state.generating = false; bridgeKeepAwake(false); // M17/C8: run fully done — voice controls live again
   }
 
   function replay() {
@@ -2159,6 +2324,18 @@
   }
 
   // Round 2: voice-cloning premium (locked UI).
+  // B2 (Play Store round): Terms §6 — an explicit consent checkbox before
+  // any clone/reference audio may be uploaded. The choice persists in
+  // localStorage via TTS.getCloneConsent()/setCloneConsent(), and tts.js
+  // refuses the HF Space upload while it is unchecked.
+  function cloneConsentOn() {
+    try {
+      if (window.TTS && typeof window.TTS.getCloneConsent === 'function') {
+        return window.TTS.getCloneConsent();
+      }
+    } catch (e) {}
+    return false;
+  }
   function initClone() {
     var sb = $('btnCloneSample'), cf = $('cloneFile'), cb = $('btnClonePremium');
     if (sb && cf) sb.addEventListener('click', function () { cf.click(); });
@@ -2169,6 +2346,17 @@
     if (cb) cb.addEventListener('click', function () {
       setMsg(t('clone_locked_msg'), true);
     });
+    var cc = $('cloneConsent');
+    if (cc) {
+      try { cc.checked = cloneConsentOn(); } catch (e) {}
+      cc.addEventListener('change', function () {
+        try {
+          if (window.TTS && typeof window.TTS.setCloneConsent === 'function') {
+            window.TTS.setCloneConsent(!!cc.checked);
+          }
+        } catch (e) {}
+      });
+    }
   }
 
   /* ---------------- mic recording: "Record My Voice" ---------------- */
@@ -2201,6 +2389,15 @@
       return;
     }
     stopAll();
+    // B1: privacy disclosure first — only call getUserMedia after "Allow".
+    showMicConsent('record', startRecordingNow);
+  }
+
+  function startRecordingNow() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMsg(t('micUnsupported'), true);
+      return;
+    }
     setMsg(t('requestingMic'));
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       var rec = null;
@@ -2298,14 +2495,24 @@
       engine: 'mic'
     };
     state.lastUrl = url;
+    ensureLipSync(); // B7: lip-sync also runs for mic recordings — probe it here
     state.lastCues = audioBuffer ? await getCues(audioBuffer) : [];
     // MINOR (Team 2 R7): refresh the engine badge — a stale fallback warning
     // from a previous generation must not linger after a mic recording.
     state.lastEngineNote = null;
     try { updateEngineBadge(); } catch (e) {}
-    // Hand the recording to the Chatterbox engine as a clone reference too.
+    // Hand the recording to the Chatterbox engine as a clone reference —
+    // but ONLY with consent (Terms §6): without it the blob is cleared so
+    // tts.js has nothing to upload, and the user is told how to opt in.
     if (window.TTS && typeof window.TTS.setReferenceAudio === 'function') {
-      try { window.TTS.setReferenceAudio(blob); } catch (e) {}
+      try {
+        if (cloneConsentOn()) {
+          window.TTS.setReferenceAudio(blob);
+        } else {
+          window.TTS.setReferenceAudio(null);
+          setMsg(CLONE_CONSENT_NOTE);
+        }
+      } catch (e) {}
     }
     // Auto-save: download the WAV straight to the Downloads folder, so the
     // recording is a real file (not just in-memory).
@@ -2368,12 +2575,15 @@
     var r = state.lastResult;
     if (!r || !r.audioBuffer) { setMsg(t('exportNeedsAudio'), true); return; }
     setMsg(t('working'));
+    bridgeKeepAwake(true);
     try {
       var blob = await window.Exporter.encodeWAV(r.audioBuffer);
       window.Exporter.downloadAudio(blob, stampedName('voicesync-voice', 'wav'));
       setMsg(t('wavSaved'));
     } catch (e) {
       setMsg(t('exportFailed') + ': ' + (e && e.message ? e.message : e), true);
+    } finally {
+      bridgeKeepAwake(false);
     }
   }
 
@@ -2387,12 +2597,15 @@
     // MIME type — never assume MP3 (the old code named WAV bytes ".mp3").
     if (r && r.blob) {
       setMsg(t('working'));
+      bridgeKeepAwake(true);
       try {
         var ext = audioExtForType(r.blob.type);
         window.Exporter.downloadAudio(r.blob, stampedName('voicesync-voice', ext));
         setMsg(withTuneNote(ext === 'wav' ? t('wavSaved') : ext === 'mp3' ? t('mp3Saved') : AUDIO_SAVED_MSG));
       } catch (e) {
         setMsg(t('exportFailed') + ': ' + (e && e.message ? e.message : e), true);
+      } finally {
+        bridgeKeepAwake(false);
       }
       return;
     }
@@ -2409,9 +2622,37 @@
   // byte access). If the browser plays it instead of downloading, the user
   // can long-press / right-click > Save.
   function downloadUrl(url, filename) {
+    filename = filename || stampedName('voicesync-download', 'mp3');
+    var bridge = wrapperBridge();
+    // B5: in the wrapper, try fetching the bytes so the file lands in the
+    // real Downloads folder via the bridge; fall back to the anchor trick.
+    if (bridge) {
+      try {
+        fetch(url).then(function (r) {
+          if (!r.ok) throw new Error('fetch ' + r.status);
+          return r.blob();
+        }).then(function (blob) {
+          var fr = new FileReader();
+          fr.onload = function () {
+            var s = String(fr.result || '');
+            var b64 = s.indexOf(',') >= 0 ? s.split(',')[1] : s;
+            try {
+              bridge.saveFile(b64, filename, blob.type || 'audio/mpeg');
+            } catch (e) { anchorUrlDownload(url, filename); }
+          };
+          fr.onerror = function () { anchorUrlDownload(url, filename); };
+          fr.readAsDataURL(blob);
+        }).catch(function () { anchorUrlDownload(url, filename); });
+        return;
+      } catch (e) { /* fall through to anchor */ }
+    }
+    anchorUrlDownload(url, filename);
+  }
+
+  function anchorUrlDownload(url, filename) {
     var a = document.createElement('a');
     a.href = url;
-    a.download = filename || stampedName('voicesync-download', 'mp3');
+    a.download = filename;
     a.target = '_blank';
     a.rel = 'noopener';
     document.body.appendChild(a);
@@ -2435,6 +2676,7 @@
     if (!canvas) { setMsg(t('avatarMissing'), true); return; }
 
     setMsg(t('recording'));
+    bridgeKeepAwake(true); // wrapper: video export can run long
     var cues = state.lastCues || [];
     // Feature 2: 9:16 Shorts — composite canvas (avatar top + captions bottom).
     var fmtSel = $('videoFormat');
@@ -2516,6 +2758,8 @@
       if (captionTimer) cancelAnimationFrame(captionTimer);
       stopAvatar();
       setMsg((e && e.message) || t('videoUnsupported'), true);
+    } finally {
+      bridgeKeepAwake(false);
     }
   }
 
@@ -2526,6 +2770,26 @@
     if (v) v.addEventListener('click', exportVideo);
     if (s) s.addEventListener('click', exportSrt);
     if (sh) sh.addEventListener('click', shareAudio);
+  }
+
+  // B5: bridge-side share — blob -> base64 -> VoiceSyncBridge.shareFile.
+  // Resolves true only when the bridge accepted the file.
+  function bridgeShareFile(bridge, blob, filename, text) {
+    return new Promise(function (resolve) {
+      var fr;
+      try { fr = new FileReader(); } catch (e) { resolve(false); return; }
+      fr.onload = function () {
+        var s = String(fr.result || '');
+        var b64 = s.indexOf(',') >= 0 ? s.split(',')[1] : s;
+        if (!b64) { resolve(false); return; }
+        try {
+          bridge.shareFile(b64, filename, blob.type || 'application/octet-stream', text || '');
+          resolve(true);
+        } catch (e) { resolve(false); }
+      };
+      fr.onerror = function () { resolve(false); };
+      try { fr.readAsDataURL(blob); } catch (e) { resolve(false); }
+    });
   }
 
   // Feature 3: one-tap share (WhatsApp etc.) via Web Share API, download fallback.
@@ -2547,6 +2811,15 @@
       if (!blob) { setMsg(t('exportFailed'), true); return; }
       var shExt = audioExtForType(blob.type);
       var shName = stampedName('voicesync-voice', shExt);
+      // B5: in the wrapper, hand the file to the native share sheet via the
+      // bridge; every bridge failure degrades to the normal browser path.
+      var bridge = wrapperBridge();
+      if (bridge && typeof bridge.shareFile === 'function') {
+        try {
+          var shared = await bridgeShareFile(bridge, blob, shName, 'VoiceSync Studio voiceover');
+          if (shared) { setMsg(t('shared')); return; }
+        } catch (e) { /* fall through to Web Share API below */ }
+      }
       var file = new File([blob], shName, { type: blob.type || 'application/octet-stream' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'VoiceSync Studio' });
@@ -2747,12 +3020,40 @@
     initProject();
     mountAvatar();
     applyI18n();
-    probeLipSync();
+    initMicModal();
+    applyWrapperVisibility();
+    // B7: do NOT probe the lip-sync engine at boot — schedule it for idle
+    // time instead (it also self-probes on the first Generate below).
+    if (typeof window.requestIdleCallback === 'function') {
+      try { window.requestIdleCallback(function () { ensureLipSync(); }, { timeout: 10000 }); }
+      catch (e) { setTimeout(ensureLipSync, 5000); }
+    } else {
+      setTimeout(ensureLipSync, 5000);
+    }
   }
 
   // MINOR (Team 3): audio must not survive back-navigation — stop
   // everything when the page is hidden/unloaded.
   window.addEventListener('pagehide', function () { try { stopAll(); } catch (e) {} });
+
+  // B6: stop everything the moment the tab/app goes to background (the
+  // wrapper relies on this for audio-focus handling), and expose stopAll
+  // to the Android wrapper bridge.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { try { stopAll(); } catch (e) {} }
+  });
+  window.VoiceSyncApp = {
+    stopAll: function (opts) { try { return stopAll(opts); } catch (e) { return undefined; } }
+  };
+
+  // B4: clear bilingual online/offline status so the user always knows
+  // generation needs internet.
+  window.addEventListener('offline', function () {
+    try { setMsg(OFFLINE_MSG, true); } catch (e) {}
+  });
+  window.addEventListener('online', function () {
+    try { setMsg(ONLINE_MSG); } catch (e) {}
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
