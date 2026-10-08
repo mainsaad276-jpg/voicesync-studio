@@ -138,7 +138,7 @@
 
   // Route the playing <audio> element into the captured stream so the WebM
   // includes the voiceover. Best-effort: failures keep video-only export.
-  function muxAudioIntoStream(stream, audioEl) {
+  function muxAudioIntoStream(stream, audioEl, musicEl, musicVolume) {
     try {
       var AC =
         typeof AudioContext !== 'undefined'
@@ -152,6 +152,17 @@
       var dest = ctx.createMediaStreamDestination();
       src.connect(dest);
       src.connect(ctx.destination); // keep it audible while recording
+      // Optional background music, mixed low under the voiceover.
+      if (musicEl) {
+        try {
+          var msrc = ctx.createMediaElementSource(musicEl);
+          var gain = ctx.createGain();
+          gain.gain.value = typeof musicVolume === 'number' ? musicVolume : 0.2;
+          msrc.connect(gain);
+          gain.connect(dest);
+          msrc.connect(ctx.destination);
+        } catch (e2) { /* music is best-effort */ }
+      }
       var tracks = dest.stream.getAudioTracks();
       if (tracks.length > 0) stream.addTrack(tracks[0]);
     } catch (e) {
@@ -211,6 +222,7 @@
         var settled = false;
         var safetyTimer = null;
         var audioEl = null;
+        var musicEl = null;
         var recorder = null;
 
         function clearTimer() {
@@ -276,6 +288,13 @@
                 /* ignore */
               }
             }
+            if (musicEl) {
+              try {
+                musicEl.pause();
+              } catch (e) {
+                /* ignore */
+              }
+            }
             resolve(new Blob(chunks, { type: 'video/webm' }));
           };
           recorder.onerror = function (ev) {
@@ -288,13 +307,32 @@
 
           if (audioURL) {
             audioEl = new Audio(audioURL);
-            muxAudioIntoStream(stream, audioEl); // embed voiceover in the WebM
-            audioEl.onended = finish; // stop when the voiceover ends
+            // Optional background music mixed under the voiceover in the video.
+            musicEl = null;
+            if (opts.musicURL) {
+              try {
+                musicEl = new Audio(opts.musicURL);
+                musicEl.loop = true;
+                musicEl.volume = 1; // level is set by the mixer's gain node
+              } catch (e) { musicEl = null; }
+            }
+            muxAudioIntoStream(stream, audioEl, musicEl, opts.musicVolume); // embed voiceover in the WebM
+            audioEl.onended = function () {
+              if (musicEl) { try { musicEl.pause(); } catch (e) {} }
+              finish();
+            };
             audioEl.onerror = function () {
+              if (musicEl) { try { musicEl.pause(); } catch (e) {} }
               fail('Video export stopped: the voiceover audio could not be played.');
             };
             safetyTimer = setTimeout(finish, 180000); // 3-minute hard cap
             var playPromise = audioEl.play();
+            if (musicEl) {
+              try {
+                var mpp = musicEl.play();
+                if (mpp && typeof mpp.catch === 'function') mpp.catch(function () {});
+              } catch (e) {}
+            }
             if (playPromise && typeof playPromise.catch === 'function') {
               playPromise.catch(function (err) {
                 fail(

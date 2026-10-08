@@ -76,6 +76,16 @@
     listening: 'Listening… speak now. Tap again to stop.',
     sttUnsupported: 'Voice typing is not supported in this browser.',
     sttError: 'Voice typing had a problem. Try again.',
+    tune_speed: 'Speed',
+    tune_pitch: 'Pitch',
+    btn_music: 'Music',
+    musicLoaded: 'Music loaded — it will play softly under the voice.',
+    btn_srt: 'Subtitles (SRT)',
+    srtSaved: 'Subtitles downloaded.',
+    dialogue_mode: 'Dialogue mode (two voices)',
+    dialogue_hint: 'Start lines with 1: for Voice 1 and 2: for Voice 2.',
+    dialogueNeedMarkers: 'Dialogue mode: start lines with 1: and 2: to assign voices.',
+    dialogueNeedAudio: 'Dialogue mode needs voices with downloadable audio (not the device voice).',
     modulesLabel: 'Modules'
   };
 
@@ -101,6 +111,16 @@
     dictater: null,       // active SpeechRecognition
     dictateBase: '',      // text that was in the box when dictation started
     dictateFinals: '',    // finalized transcripts this session
+    speed: 1,             // playback speed 0.5–2.0
+    pitch: 0,             // pitch shift in semitones -12..+12
+    audioCtx: null,       // Web Audio context for pitched playback
+    audioSrc: null,       // buffer source node for pitched playback
+    musicUrl: null,       // background music object URL
+    musicVolume: 0.2,     // background music level 0..1
+    musicEl: null,        // background music audio element
+    musicFileName: '',
+    dialogueMode: false,  // two-voice dialogue mode
+    voiceId2: null,       // Voice 2 for dialogue mode
     rafId: 0             // timeline rAF id
   };
 
@@ -190,6 +210,131 @@
     updateCharCount();
     var d = $('btnDictate');
     if (d) d.addEventListener('click', toggleDictate);
+    initTuning();
+    initMusic();
+  }
+
+  /* ---------------- background music ---------------- */
+
+  function initMusic() {
+    var f = $('musicFile'), v = $('musicVol'), c = $('btnMusicClear');
+    if (f) f.addEventListener('change', function () {
+      var file = f.files && f.files[0];
+      if (!file) return;
+      if (state.musicUrl) { try { URL.revokeObjectURL(state.musicUrl); } catch (e) {} }
+      stopMusic();
+      state.musicUrl = URL.createObjectURL(file);
+      state.musicFileName = file.name;
+      var n = $('musicName'); if (n) n.textContent = file.name;
+      if (c) c.hidden = false;
+      setMsg(t('musicLoaded'));
+    });
+    if (v) v.addEventListener('input', function () {
+      state.musicVolume = (parseFloat(v.value) || 0) / 100;
+      if (state.musicEl) { try { state.musicEl.volume = state.musicVolume; } catch (e) {} }
+    });
+    if (c) c.addEventListener('click', function () {
+      stopMusic();
+      if (state.musicUrl) { try { URL.revokeObjectURL(state.musicUrl); } catch (e) {} }
+      state.musicUrl = null; state.musicFileName = '';
+      var n = $('musicName'); if (n) n.textContent = '';
+      if (f) f.value = '';
+      c.hidden = true;
+    });
+  }
+
+  function startMusic() {
+    stopMusic();
+    if (!state.musicUrl) return;
+    try {
+      var el = new Audio(state.musicUrl);
+      el.loop = true;
+      el.volume = state.musicVolume;
+      state.musicEl = el;
+      var p = el.play();
+      if (p && typeof p.catch === 'function') p.catch(function () {});
+    } catch (e) { state.musicEl = null; }
+  }
+
+  function stopMusic() {
+    if (state.musicEl) {
+      try { state.musicEl.pause(); } catch (e) {}
+      state.musicEl = null;
+    }
+  }
+
+  function initTuning() {
+    var sr = $('speedRange'), pr = $('pitchRange');
+    var sv = $('speedVal'), pv = $('pitchVal');
+    if (sr) sr.addEventListener('input', function () {
+      state.speed = parseFloat(sr.value) || 1;
+      if (sv) sv.textContent = state.speed.toFixed(1) + '×';
+    });
+    if (pr) pr.addEventListener('input', function () {
+      state.pitch = parseInt(pr.value, 10) || 0;
+      if (pv) pv.textContent = (state.pitch > 0 ? '+' : '') + state.pitch;
+    });
+  }
+
+  // Pitched playback via Web Audio: true pitch shift (detune) without
+  // changing speed. Used when pitch != 0 and we have real audio bytes.
+  function startPitchedPlayback(result, cues) {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC || !result.audioBuffer) { startAudioPlayback(result, cues); return; }
+    stopAll();
+    var ctx;
+    try {
+      ctx = new AC();
+      if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
+    } catch (e) { startAudioPlayback(result, cues); return; }
+    var src;
+    try {
+      src = ctx.createBufferSource();
+      src.buffer = result.audioBuffer;
+      src.playbackRate.value = state.speed || 1;
+      try { src.detune.value = (state.pitch || 0) * 100; } catch (e) {}
+      src.connect(ctx.destination);
+    } catch (e) {
+      try { ctx.close(); } catch (e2) {}
+      startAudioPlayback(result, cues);
+      return;
+    }
+    var dur = result.audioBuffer.duration / (state.speed || 1);
+    var t0 = ctx.currentTime;
+    var timeSrc = {
+      get currentTime() {
+        var t = ctx.currentTime - t0;
+        return t < 0 ? 0 : (t > dur ? dur : t);
+      },
+      addEventListener: function () {},
+      removeEventListener: function () {}
+    };
+    state.audioCtx = ctx;
+    state.audioSrc = src;
+    if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
+      try { window.Avatar.speak(cues || [], timeSrc); } catch (e) {}
+    }
+    src.onended = function () {
+      stopAvatar(); stopTimeline(); state.speaking = false;
+      setMsg(t('done')); cleanupPitched();
+    };
+    state.speaking = true;
+    setMsg(t('playing'));
+    startMusic();
+    try { src.start(0); }
+    catch (e) { cleanupPitched(); startAudioPlayback(result, cues); return; }
+    startTimeline(function () { return timeSrc.currentTime; }, dur);
+  }
+
+  function cleanupPitched() {
+    if (state.audioSrc) {
+      try { state.audioSrc.onended = null; state.audioSrc.stop(); } catch (e) {}
+      state.audioSrc = null;
+    }
+    if (state.audioCtx) {
+      try { state.audioCtx.close(); } catch (e) {}
+      state.audioCtx = null;
+    }
   }
 
   /* ---------------- voice-to-text (dictation) ---------------- */
@@ -337,6 +482,116 @@
       state.voiceId = sel.value;
       try { localStorage.setItem('voicesync-voice', sel.value); } catch (e) {}
     };
+    if (state.dialogueMode) syncVoice2();
+  }
+
+  /* ---------------- dialogue mode: two voices, one script ---------------- */
+  // Lines starting with "1:" use Voice 1, "2:" use Voice 2. Each segment is
+  // synthesized with its own voice, then merged into one audio buffer so the
+  // normal playback / lip-sync / export pipeline just works.
+
+  function initDialogue() {
+    var cb = $('dialogueMode'), s2 = $('voiceSelect2'), hint = $('dialogueHint');
+    if (cb) cb.addEventListener('change', function () {
+      state.dialogueMode = !!cb.checked;
+      if (s2) s2.hidden = !state.dialogueMode;
+      if (hint) hint.hidden = !state.dialogueMode;
+      if (state.dialogueMode) syncVoice2();
+    });
+    if (s2) s2.addEventListener('change', function () { state.voiceId2 = s2.value; });
+  }
+
+  function syncVoice2() {
+    var s1 = $('voiceSelect'), s2 = $('voiceSelect2');
+    if (!s1 || !s2) return;
+    s2.innerHTML = s1.innerHTML;
+    var idx = 1;
+    // Prefer a different voice than Voice 1 when possible.
+    for (var i = 0; i < s2.options.length; i++) {
+      if (s2.options[i].value && s2.options[i].value !== state.voiceId) { idx = i; break; }
+    }
+    s2.selectedIndex = idx;
+    state.voiceId2 = s2.value;
+  }
+
+  function parseDialogue(text) {
+    var segs = [], curSp = 1, curLines = [], hasMarkers = false;
+    text.split('\n').forEach(function (line) {
+      var m = line.match(/^\s*([12])\s*:\s*([\s\S]*)$/);
+      if (m) {
+        hasMarkers = true;
+        if (curLines.length) segs.push({ speaker: curSp, text: curLines.join('\n') });
+        curSp = parseInt(m[1], 10);
+        curLines = [m[2]];
+      } else {
+        curLines.push(line);
+      }
+    });
+    if (curLines.length) segs.push({ speaker: curSp, text: curLines.join('\n') });
+    segs = segs.filter(function (s) { return s.text.trim(); });
+    return hasMarkers ? segs : null;
+  }
+
+  function resampleLinear(data, fromRate, toRate) {
+    if (fromRate === toRate) return data;
+    var ratio = fromRate / toRate;
+    var len = Math.max(1, Math.floor(data.length / ratio));
+    var out = new Float32Array(len);
+    for (var i = 0; i < len; i++) {
+      var pos = i * ratio, i0 = Math.floor(pos), frac = pos - i0;
+      var a = data[i0] || 0, b = data[i0 + 1] || 0;
+      out[i] = a + (b - a) * frac;
+    }
+    return out;
+  }
+
+  async function synthesizeDialogue(segments) {
+    var parts = [], rate = 0;
+    for (var i = 0; i < segments.length; i++) {
+      var seg = segments[i];
+      var vid = seg.speaker === 2 ? (state.voiceId2 || state.voiceId) : state.voiceId;
+      setMsg(t('generating') + ' (' + (i + 1) + '/' + segments.length + ')');
+      var r = await window.TTS.synthesize(seg.text, vid);
+      if (!r || r.error || !r.audioBuffer) {
+        return { error: t('dialogueNeedAudio') };
+      }
+      if (!rate) rate = r.audioBuffer.sampleRate;
+      var d = r.audioBuffer.getChannelData(0);
+      if (r.audioBuffer.sampleRate !== rate) d = resampleLinear(d, r.audioBuffer.sampleRate, rate);
+      parts.push(d);
+    }
+    var total = parts.reduce(function (a, p) { return a + p.length; }, 0);
+    var merged = new Float32Array(total), off = 0;
+    parts.forEach(function (p) { merged.set(p, off); off += p.length; });
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return { error: 'AudioContext unavailable' };
+    var ctx;
+    try { ctx = new AC(); } catch (e) { return { error: 'AudioContext unavailable' }; }
+    var buf;
+    try {
+      buf = ctx.createBuffer(1, total, rate);
+      buf.getChannelData(0).set(merged);
+    } catch (e) {
+      try { ctx.close(); } catch (e2) {}
+      return { error: String(e && e.message || e) };
+    }
+    var blob = null, url = null;
+    try {
+      if (hasModule('Exporter') && typeof window.Exporter.encodeWAV === 'function') {
+        blob = await window.Exporter.encodeWAV(buf);
+        url = URL.createObjectURL(blob);
+      }
+    } catch (e) { blob = null; url = null; }
+    try { ctx.close(); } catch (e) {}
+    return {
+      result: {
+        audioBuffer: buf,
+        blob: blob,
+        url: url,
+        duration: total / rate,
+        engine: 'dialogue'
+      }
+    };
   }
 
   /* ---------------- avatar ---------------- */
@@ -371,6 +626,8 @@
     state.playToken++; // invalidate any in-flight Google chunk chain
     if (state.recording) { stopRecording(); }
     if (state.dictating) { stopDictate(); }
+    stopMusic();
+    cleanupPitched();
     try {
       if (hasModule('TTS') && typeof window.TTS.cancel === 'function') window.TTS.cancel();
     } catch (e) {}
@@ -403,6 +660,7 @@
     state.audioEl = el;
     el.preload = 'auto';
     el.src = result.url;
+    try { el.playbackRate = state.speed || 1; el.preservesPitch = true; } catch (e) {}
     el.onended = function () { stopAvatar(); stopTimeline(); state.speaking = false; setMsg(t('done')); };
     el.onerror = function () { stopAll(); setMsg(t('audioLoadFailed'), true); };
     // SPEC §3: Avatar.speak(cues, timeSrc) — timeSrc may be HTMLAudioElement.
@@ -411,6 +669,7 @@
     }
     state.speaking = true;
     setMsg(t('playing'));
+    startMusic();
     var p = el.play();
     if (p && typeof p.catch === 'function') {
       p.catch(function () { stopAll(); setMsg(t('playFailed'), true); });
@@ -427,6 +686,11 @@
     }
     var u = result.utterance;
     var dur = result.duration || 5;
+    try {
+      u.rate = state.speed || 1;
+      var p = 1 + (state.pitch || 0) / 12;
+      u.pitch = Math.max(0, Math.min(2, p));
+    } catch (e) {}
     var cues = [];
     if (hasModule('LipSync') && typeof window.LipSync.makeTalkingCues === 'function') {
       try { cues = window.LipSync.makeTalkingCues(dur) || []; } catch (e) { cues = []; }
@@ -447,6 +711,7 @@
     };
     state.speaking = true;
     setMsg(t('playing'));
+    startMusic();
     try {
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(u);
@@ -477,6 +742,7 @@
     state.lastCues = cues;
     var clock = { currentTime: 0 };
     var offset = 0, idx = 0, el = null;
+    startMusic();
 
     state.clockTimer = setInterval(function () {
       clock.currentTime = offset + (el && typeof el.currentTime === 'number' ? el.currentTime : 0);
@@ -493,6 +759,7 @@
       state.audioEl = el;
       el.preload = 'auto';
       try { el.src = urls[idx]; } catch (e) { stopAll(); setMsg(t('playFailed'), true); return; }
+      try { el.playbackRate = state.speed || 1; } catch (e) {}
       el.onended = function () {
         try { offset += (el.duration > 0 && isFinite(el.duration)) ? el.duration : perChunk; }
         catch (e) { offset += perChunk; }
@@ -597,13 +864,26 @@
     } catch (e) {}
     // Chatterbox is human-like but slow (free shared GPU) — set expectations.
     setMsg(state.voiceId && state.voiceId.indexOf('chatterbox:') === 0 ? t('chatterboxWorking') : t('generating'));
-    var result = null;
-    try {
-      result = await window.TTS.synthesize(text, state.voiceId);
-    } catch (e) {
-      result = { error: String((e && e.message) || e) };
+    // Dialogue mode: synthesize each speaker's lines with their own voice,
+    // merge into one buffer, then run the normal pipeline.
+    if (state.dialogueMode) {
+      var segs = parseDialogue(text);
+      if (!segs) { setBusy(false); setMsg(t('dialogueNeedMarkers'), true); return; }
+      var dout = await synthesizeDialogue(segs);
+      setBusy(false);
+      if (!dout || dout.error || !dout.result) {
+        setMsg(t('ttsFailed') + ': ' + ((dout && dout.error) || 'unknown'), true);
+        return;
+      }
+      result = dout.result;
+    } else {
+      try {
+        result = await window.TTS.synthesize(text, state.voiceId);
+      } catch (e) {
+        result = { error: String((e && e.message) || e) };
+      }
+      setBusy(false);
     }
-    setBusy(false);
 
     if (!result || result.error) {
       setMsg(t('ttsFailed') + ': ' + ((result && result.error) || 'unknown'), true);
@@ -647,7 +927,9 @@
   function replay() {
     var r = state.lastResult;
     if (!r) { setMsg(t('nothingToPlay'), true); return; }
-    if (r.audioBuffer) startAudioPlayback(r, state.lastCues || []);
+    // Pitched Web Audio path when the user shifted pitch and we have bytes.
+    if (r.audioBuffer && state.pitch) startPitchedPlayback(r, state.lastCues || []);
+    else if (r.audioBuffer) startAudioPlayback(r, state.lastCues || []);
     else if (r.utterance) startWebSpeechPlayback(r);
     else if (r.engine === 'google' && r.url) startGooglePlayback(r);
     else setMsg(t('noAudio'), true);
@@ -871,6 +1153,8 @@
       var blob = await window.Exporter.recordVideo(canvas, r.url, {
         width: canvas.width || 480,
         height: canvas.height || 480,
+        musicURL: state.musicUrl,       // background music mixed into the video
+        musicVolume: state.musicVolume,
         onAudio: function (audioEl) {
           try { window.Avatar.speak(cues, audioEl); } catch (e) {}
         }
@@ -885,10 +1169,63 @@
   }
 
   function initExport() {
-    var w = $('btnWav'), m = $('btnMp3'), v = $('btnVideo');
+    var w = $('btnWav'), m = $('btnMp3'), v = $('btnVideo'), s = $('btnSrt');
     if (w) w.addEventListener('click', exportWav);
     if (m) m.addEventListener('click', exportMp3);
     if (v) v.addEventListener('click', exportVideo);
+    if (s) s.addEventListener('click', exportSrt);
+  }
+
+  /* ---------------- subtitles (SRT) ---------------- */
+  // Timing is estimated from the generated voice duration, distributed by
+  // character count — accurate enough for YouTube captions.
+
+  function fmtSrt(sec) {
+    var ms = Math.max(0, Math.floor(sec * 1000));
+    function p(n, l) { n = String(n); while (n.length < l) n = '0' + n; return n; }
+    return p(Math.floor(ms / 3600000), 2) + ':' + p(Math.floor(ms / 60000) % 60, 2) +
+      ':' + p(Math.floor(ms / 1000) % 60, 2) + ',' + p(ms % 1000, 3);
+  }
+
+  function wrapSrtLine(b) {
+    if (b.length <= 42) return b;
+    var words = b.split(' '), mid = b.length / 2, pos = 0, best = 0, bestDist = 1e9, i;
+    for (i = 0; i < words.length; i++) {
+      pos += words[i].length + 1;
+      var dist = Math.abs(pos - mid);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+    return words.slice(0, best + 1).join(' ') + '\n' + words.slice(best + 1).join(' ');
+  }
+
+  function exportSrt() {
+    var box = $('textInput');
+    var text = box ? box.value.trim() : '';
+    if (!text) { setMsg(t('enterText'), true); return; }
+    var r = state.lastResult;
+    var dur = (r && r.duration) ? r.duration : Math.max(1, text.length / 14);
+    var sens = text.replace(/\s+/g, ' ').split(/(?<=[.!?؟۔])\s+/);
+    var blocks = [], cur = '';
+    sens.forEach(function (s) {
+      if ((cur + ' ' + s).trim().length <= 84) cur = (cur + ' ' + s).trim();
+      else { if (cur) blocks.push(cur); cur = s; }
+    });
+    if (cur) blocks.push(cur);
+    if (!blocks.length) blocks.push(text.slice(0, 84));
+    var totalChars = blocks.reduce(function (a, b) { return a + b.length; }, 0) || 1;
+    var t = 0, out = [];
+    blocks.forEach(function (b, i) {
+      var d = Math.max(0.8, dur * b.length / totalChars);
+      out.push((i + 1) + '\n' + fmtSrt(t) + ' --> ' + fmtSrt(t + d) + '\n' + wrapSrtLine(b) + '\n');
+      t += d;
+    });
+    try {
+      var blob = new Blob(['\ufeff' + out.join('\n')], { type: 'text/plain;charset=utf-8' });
+      window.Exporter.downloadAudio(blob, 'voicesync-subtitles.srt');
+      setMsg(t('srtSaved'));
+    } catch (e) {
+      setMsg(t('exportFailed') + ': ' + (e && e.message ? e.message : e), true);
+    }
   }
 
   /* ---------------- project save/load ---------------- */
@@ -989,6 +1326,7 @@
     initLanguage();
     initTextInput();
     initTtsControls();
+    initDialogue();
     initTransport();
     initExport();
     initProject();
