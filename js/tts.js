@@ -1080,7 +1080,16 @@
     ['apki', 'آپ کی'], ['apka', 'آپ کا'], ['unki', 'ان کی'], ['unka', 'ان کا'],
     ['theek', 'ٹھیک'], ['bilkul', 'بالکل'], ['zaroor', 'ضرور'], ['shayad', 'شاید'],
     ['mashallah', 'ماشاءاللہ'], ['inshallah', 'انشاءاللہ'], ['alhamdulillah', 'الحمدللہ'],
-    ['subhanallah', 'سبحان اللہ'], ['jazakallah', 'جزاک اللہ']
+    ['subhanallah', 'سبحان اللہ'], ['jazakallah', 'جزاک اللہ'],
+    // Team 2 round 3: expanded coverage
+    ['khao', 'کھاؤ'], ['kha', 'کھا'], ['piyo', 'پیو'], ['pi', 'پی'],
+    ['jaonga', 'جاؤں گا'], ['jaongi', 'جاؤں گی'], ['aaonga', 'آؤں گا'], ['aaongi', 'آؤں گی'],
+    ['karonga', 'کروں گا'], ['karongi', 'کروں گی'], ['rahoonga', 'رہوں گا'],
+    ['wahan', 'وہاں'], ['yahan', 'یہاں'], ['jahan', 'جہاں'],
+    ['milo', 'ملو'], ['mile', 'ملے'], ['milte', 'ملتے'],
+    ['aik', 'ایک'], ['ek', 'ایک'], ['do', 'دو'], ['teen', 'تین'], ['chaar', 'چار'], ['paanch', 'پانچ'],
+    ['naam', 'نام'], ['kaam', 'کام'], ['daam', 'دام'],
+    ['o', 'او'], ['are', 'ارے'], ['wah', 'واہ']
   ];
 
   function _romanToUrdu(text) {

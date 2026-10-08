@@ -1371,6 +1371,8 @@
         musicVolume: state.musicVolume,
         onAudio: function (audioEl) {
           audioRef.el = audioEl;
+          // Team 2 round 3: match captions — play export audio at user speed.
+          try { audioEl.playbackRate = state.speed || 1; } catch (e) {}
           try { window.Avatar.speak(cues, audioEl); } catch (e) {}
         }
       });
