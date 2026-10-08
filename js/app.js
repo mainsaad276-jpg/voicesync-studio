@@ -312,7 +312,7 @@
     state.audioCtx = ctx;
     state.audioSrc = src;
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
-      try { window.Avatar.speak(cues || [], timeSrc); } catch (e) {}
+      try { window.Avatar.speak(scaleCues(cues, state.speed || 1), timeSrc); } catch (e) {}
     }
     src.onended = function () {
       stopAvatar(); stopTimeline(); state.speaking = false;
@@ -654,6 +654,16 @@
   }
 
   // Audio path: real audio element + real viseme cues.
+  /* Scale lip-sync cue times when playback speed != 1 so the avatar's
+     mouth stays in sync with the faster/slower audio. */
+  function scaleCues(cues, speed) {
+    var s = speed || 1;
+    if (!cues || !cues.length || s === 1) return cues || [];
+    return cues.map(function (c) {
+      return { start: c.start / s, end: c.end / s, value: c.value };
+    });
+  }
+
   function startAudioPlayback(result, cues) {
     stopAll();
     var el = new Audio();
@@ -664,6 +674,7 @@
     el.onended = function () { stopAvatar(); stopTimeline(); state.speaking = false; setMsg(t('done')); };
     el.onerror = function () { stopAll(); setMsg(t('audioLoadFailed'), true); };
     // SPEC §3: Avatar.speak(cues, timeSrc) — timeSrc may be HTMLAudioElement.
+    // el.currentTime is audio-time, same base as the cues: no scaling needed.
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
       try { window.Avatar.speak(cues || [], el); } catch (e) {}
     }
@@ -696,13 +707,15 @@
       try { cues = window.LipSync.makeTalkingCues(dur) || []; } catch (e) { cues = []; }
     }
     // Virtual timing source: Avatar.speak only reads .currentTime (SPEC §3).
+    // The virtual clock advances in real time while the utterance speaks at
+    // u.rate = speed, so cue times must be scaled to the real-time base.
     var clock = { currentTime: 0 };
     var t0 = performance.now();
     state.clockTimer = setInterval(function () {
       clock.currentTime = (performance.now() - t0) / 1000;
     }, 50);
     if (hasModule('Avatar') && typeof window.Avatar.speak === 'function') {
-      try { window.Avatar.speak(cues, clock); } catch (e) {}
+      try { window.Avatar.speak(scaleCues(cues, state.speed || 1), clock); } catch (e) {}
     }
     u.onend = function () { stopAll(); setMsg(t('done')); };
     u.onerror = function (ev) {
@@ -720,7 +733,7 @@
       setMsg(t('ttsFailed') + ': ' + (e && e.message ? e.message : e), true);
       return;
     }
-    startTimeline(function () { return clock.currentTime; }, dur);
+    startTimeline(function () { return clock.currentTime; }, dur / (state.speed || 1));
   }
 
   // Google path (API.md §3): translate_tts sends no CORS headers, so the
@@ -1202,8 +1215,12 @@
     var box = $('textInput');
     var text = box ? box.value.trim() : '';
     if (!text) { setMsg(t('enterText'), true); return; }
+    // Dialogue mode: strip the 1:/2: speaker markers so subtitles read cleanly.
+    if (state.dialogueMode) text = text.replace(/^[ \t]*[12]:[ \t]*/gm, '');
     var r = state.lastResult;
     var dur = (r && r.duration) ? r.duration : Math.max(1, text.length / 14);
+    // Match the user's playback speed: at 2x the voice finishes in half the time.
+    dur = dur / (state.speed || 1);
     var sens = text.replace(/\s+/g, ' ').split(/(?<=[.!?؟۔])\s+/);
     var blocks = [], cur = '';
     sens.forEach(function (s) {
