@@ -1,0 +1,19 @@
+# Dependencies / local tooling
+node_modules/
+.npm/
+*.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build output (site is static; keep this if a build step is ever added)
+dist/
+build/
+
+# Local notes that must never leak into the shared repo
+progress/*.local.md
+*.swp
+*~
