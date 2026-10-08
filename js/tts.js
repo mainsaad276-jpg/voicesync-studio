@@ -322,8 +322,14 @@
     if (/[ٹڈڑےھں]/.test(t)) return 'ur-PK';
     // Teh marbuta (ة) is the strongest Arabic signal; Urdu rarely uses it.
     if (/[ة]/.test(t)) return 'ar-SA';
-    if (/[\u0600-\u06FF]/.test(t)) return 'ur-PK'; // ambiguous Arabic-script: user's default
-    if (/[\u0900-\u097F]/.test(text)) return 'hi-IN'; // Devanagari: Hindi
+    // Otherwise go by script dominance: a Hindi sentence with one Urdu
+    // punctuation mark (؟) must still read as Hindi, and English with a
+    // stray ؟ must still read as English.
+    var arabic = (t.match(/[\u0600-\u06FF]/g) || []).length;
+    var deva = (t.match(/[\u0900-\u097F]/g) || []).length;
+    var latin = (t.match(/[A-Za-z]/g) || []).length;
+    if (deva > arabic && deva >= latin && deva > 0) return 'hi-IN'; // Devanagari: Hindi
+    if (arabic > deva && arabic >= latin && arabic > 0) return 'ur-PK'; // user's default
     return 'en-US';
   }
 
@@ -354,8 +360,8 @@
     for (i = 0; i < langs.length; i++) {
       var l = langs[i], base = _baseLang(l);
       if (GOOGLE_LANGS.indexOf(base) === -1) continue;
-      out.push({ id: 'google:' + l + ':female', name: 'Google ' + _langLabel(l) + ' (fallback voice)', lang: l, gender: 'female', engine: 'google' });
-      out.push({ id: 'google:' + l + ':male',   name: 'Google ' + _langLabel(l) + ' (fallback voice)', lang: l, gender: 'male',   engine: 'google' });
+      out.push({ id: 'google:' + l + ':female', name: 'Google ' + _langLabel(l) + ' — Female (fallback)', lang: l, gender: 'female', engine: 'google' });
+      out.push({ id: 'google:' + l + ':male',   name: 'Google ' + _langLabel(l) + ' — Male (fallback)', lang: l, gender: 'male',   engine: 'google' });
     }
     // Live Web Speech voices when the browser exposes them.
     try {
@@ -626,13 +632,25 @@
   }
 
   // Decode concatenated MP3; if the joint stream won't decode, decode each
-  // chunk and stitch the PCM into one AudioBuffer.
+  // chunk and stitch the PCM into one AudioBuffer. Has its own timeout so a
+  // hung decodeAudioData can never freeze the whole chain (UI stuck on
+  // "Generating voice…" forever — the exact bug users reported).
+  var DECODE_TIMEOUT_MS = 15000;
   function _decodeMp3(u8, chunkU8List) {
     var ctx = _getAudioContext();
     if (!ctx) return Promise.resolve(null);
-    return _decodeOne(ctx, u8).catch(function () {
+    function withTimeout(p) {
+      return new Promise(function (resolve) {
+        var done = false;
+        var timer = setTimeout(function () { if (!done) { done = true; resolve(null); } }, DECODE_TIMEOUT_MS);
+        p.then(function (v) { if (!done) { done = true; clearTimeout(timer); resolve(v); } },
+               function () { if (!done) { done = true; clearTimeout(timer); resolve(null); } });
+      });
+    }
+    return withTimeout(_decodeOne(ctx, u8)).then(function (buf) {
+      if (buf) return buf;
       var jobs = (chunkU8List || [u8]).map(function (c) {
-        return _decodeOne(ctx, c).catch(function () { return null; });
+        return withTimeout(_decodeOne(ctx, c));
       });
       return Promise.all(jobs).then(function (bufs) {
         bufs = bufs.filter(Boolean);
@@ -692,6 +710,29 @@
       return { error: msg };
     });
   }
+
+  // Safety net: synthesize() must NEVER hang forever. If the whole chain
+  // (all engines + fallbacks) takes longer than this, give up with a clear
+  // error so the UI can re-enable the buttons and tell the user.
+  var SYNTHESIZE_TIMEOUT_MS = 90000;
+  var _synthesizeInner = synthesize;
+  synthesize = function (text, voiceId) {
+    return new Promise(function (resolve) {
+      var done = false;
+      var timer = setTimeout(function () {
+        if (!done) {
+          done = true;
+          try { cancel(); } catch (e) {} // abort in-flight WebSocket/fetch
+          resolve({ error: 'Timed out after 90s — check your internet connection and try again.' });
+        }
+      }, SYNTHESIZE_TIMEOUT_MS);
+      _synthesizeInner(text, voiceId).then(function (r) {
+        if (!done) { done = true; clearTimeout(timer); resolve(r); }
+      }, function (err) {
+        if (!done) { done = true; clearTimeout(timer); resolve({ error: String((err && err.message) || err) }); }
+      });
+    });
+  };
 
   // One engine attempt. Resolves the full SPEC result object, or rejects so
   // the chain can try the next engine.
