@@ -486,9 +486,12 @@
        break parsing; app.js feature-detects each global before wiring it. -->
   <script src="js/i18n.js"></script>
   <!-- Gradio client for the Chatterbox human-like voice engine (keyless, free). -->
-  <script src="https://cdn.jsdelivr.net/npm/@gradio/client@2.7.1/dist/index.min.js"
-        integrity="sha384-9BoiXA6dwi9qIeWEZnqz3xzQCD5vblu2OV8HwpRNPTIhwGUJfGgj651fVCrlkwAl"
-        crossorigin="anonymous"></script>
+  <!-- @gradio/client ships as an ES module: load it as a module and expose it
+       on window so tts.js (classic script) can use it. Version pinned. -->
+  <script type="module">
+    import { Client } from 'https://cdn.jsdelivr.net/npm/@gradio/client@2.7.1/dist/index.min.js';
+    window.gradioClient = { Client: Client };
+  </script>
   <script src="js/tts.js"></script>
   <script src="js/lipsync.js"></script>
   <script src="js/avatar.js"></script>

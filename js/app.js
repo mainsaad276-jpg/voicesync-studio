@@ -580,6 +580,13 @@
       });
     }
     loadVoices();
+    // Chrome/Edge load device voices asynchronously: getVoices() is empty on
+    // first call and fills in later via 'voiceschanged'. Reload when they arrive.
+    try {
+      if (typeof speechSynthesis !== 'undefined' && speechSynthesis.addEventListener) {
+        speechSynthesis.addEventListener('voiceschanged', function () { loadVoices(); });
+      }
+    } catch (e) { /* not supported — offline voices just stay hidden */ }
     // Voice preview: hear the selected voice before generating.
     var pv = $('btnVoicePreview');
     if (pv) pv.addEventListener('click', previewVoice);
@@ -927,6 +934,7 @@
       sel.appendChild(o);
     });
     sel.value = keep || '';
+    if (sel.selectedIndex < 0) sel.selectedIndex = 0; // never show a blank box
     sel.onchange = function () {
       if (!sel.value) return;
       state.voiceId = sel.value;

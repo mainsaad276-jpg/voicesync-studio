@@ -1,7 +1,7 @@
 // VoiceSync Studio — 1000-test automated QA suite
 // Run: node qa-1000.js   (also wired into git pre-push hook)
 var fs = require('fs');
-var P = '/home/hatch/workspace/voicesync-studio/';
+var P = require('path').join(__dirname, '..') + '/';
 var appjs = fs.readFileSync(P + 'js/app.js', 'utf8');
 var ttsjs = fs.readFileSync(P + 'js/tts.js', 'utf8');
 var i18njs = fs.readFileSync(P + 'js/i18n.js', 'utf8');

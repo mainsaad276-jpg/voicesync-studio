@@ -414,3 +414,10 @@ body.easy-mode .lang-card {
 .btn-big { box-shadow: 0 4px 12px rgba(29,92,77,.25); transition: transform .12s ease; }
 .btn-big:hover { transform: translateY(-2px); }
 .btn-big:active { transform: translateY(0); }
+
+/* ===== Fixes 2026-10-08 ===== */
+/* Feature badges: span the full grid row and never stretch into tall blobs. */
+.pill-badges { grid-column: 1 / -1; align-items: flex-start; align-content: flex-start; align-self: start; }
+.pill { align-self: flex-start; height: auto; }
+/* Small transport row wraps on phones instead of overflowing the screen. */
+.transport-mini { flex-wrap: wrap; }
