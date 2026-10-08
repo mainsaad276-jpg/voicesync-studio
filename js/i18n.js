@@ -181,7 +181,7 @@
       audioLoadFailed: 'Audio failed to load in this browser — the built-in voice will be used instead. Tap Play.',
       readyTapPlay: 'Voice ready — tap Play to hear it.',
       status_no_voice: 'Please pick a voice first.',
-      footer_text: '100% free — no API keys, no sign-up.',
+      footer_text: 'On Mastermind YT\u2019s grand opening \u2014 thanks to Mr Muhammad Abubakar\u2019s work, this app is FREE for you from this link.',
       footer_tech: 'Edge Neural → Google → Web Speech fallbacks'
     },
     ur: {
@@ -354,7 +354,7 @@
       audioLoadFailed: 'اس براؤزر میں آڈیو لوڈ نہیں ہوئی — بلٹ ان آواز استعمال ہوگی۔ Play دبائیں۔',
       readyTapPlay: 'آواز تیار ہے — سننے کے لیے Play دبائیں۔',
       status_no_voice: 'پہلے آواز منتخب کریں۔',
-      footer_text: '100٪ مفت — کوئی API کیز نہیں، کوئی سائن اپ نہیں۔',
+      footer_text: 'ماسٹر مائنڈ وائی ٹی کی گرینڈ اوپننگ پر — مسٹر محمد ابوبکر کے کام کی وجہ سے یہ ایپ اس لنک سے آپ کے لیے مفت کام کرے گی۔',
       footer_tech: 'Edge Neural → Google → Web Speech فال بیک',
       // Team 2 M4: status/runtime keys now fully translated (were English-only via FALLBACK)
       enterText: 'پہلے کچھ متن لکھیں یا پیسٹ کریں۔',

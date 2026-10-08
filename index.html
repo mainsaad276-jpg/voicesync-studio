@@ -21,7 +21,7 @@
         <span aria-hidden="true">&#128515;</span>
         <span data-i18n="easy_mode">Easy Mode</span>
       </button>
-      <select id="langToggle" class="lang-toggle select" aria-label="UI language">
+      <select id="langToggle" class="lang-toggle select" data-i18n-aria="aria_ui_language" aria-label="UI language">
         <option value="en">English</option>
         <option value="ur">اردو</option>
       </select>
@@ -48,10 +48,10 @@
       </h2>
       <input id="langSearch" class="char-search" type="search"
         data-i18n-ph="langpills_search_ph" placeholder="Search language... Urdu, Hindi, Russian, Arabic"
-        aria-label="Search languages">
-      <div id="langPills" class="lang-pills" role="listbox" aria-label="Languages"></div>
+        data-i18n-aria="aria_search_languages" aria-label="Search languages">
+      <div id="langPills" class="lang-pills" role="listbox" data-i18n-aria="aria_languages" aria-label="Languages"></div>
       <p class="field-label browser-voice-label" data-i18n="browser_voice_label">BROWSER VOICE (sirf Offline engine ke liye)</p>
-      <select id="browserVoiceSelect" class="select" aria-label="Browser voice"></select>
+      <select id="browserVoiceSelect" class="select" data-i18n-aria="aria_browser_voice" aria-label="Browser voice"></select>
     </section>
 
     <!-- Text editor + voice selection -->
@@ -199,7 +199,7 @@
             <select id="voiceSelect" class="select">
               <option value="" data-i18n="voice_loading">Loading voices…</option>
             </select>
-            <button id="btnVoicePreview" class="btn btn-secondary btn-small" type="button" aria-label="Preview voice">
+            <button id="btnVoicePreview" class="btn btn-secondary btn-small" type="button" data-i18n-aria="aria_preview_voice" aria-label="Preview voice">
               <span aria-hidden="true">&#128266;</span>
               <span data-i18n="voice_preview">Preview</span>
             </button>
@@ -212,7 +212,7 @@
           <input type="checkbox" id="dialogueMode">
           <span data-i18n="dialogue_mode">Dialogue mode (two voices)</span>
         </label>
-        <select id="voiceSelect2" class="select" hidden aria-label="Voice 2"></select>
+        <select id="voiceSelect2" class="select" hidden data-i18n-aria="aria_voice_2" aria-label="Voice 2"></select>
       </div>
       <p class="hint" id="dialogueHint" hidden data-i18n="dialogue_hint">Start lines with 1: for Voice 1 and 2: for Voice 2.</p>
 
@@ -225,7 +225,7 @@
           <span aria-hidden="true">&#128190;</span>
           <span data-i18n="preset_save">Save</span>
         </button>
-        <button id="btnPresetDelete" class="btn btn-secondary btn-small" type="button" aria-label="Delete preset">
+        <button id="btnPresetDelete" class="btn btn-secondary btn-small" type="button" data-i18n-aria="aria_delete_preset" aria-label="Delete preset">
           <span aria-hidden="true">&#128465;</span>
         </button>
       </div>
@@ -239,8 +239,8 @@
       </h2>
       <input id="charSearch" class="char-search" type="search"
         data-i18n-ph="char_search_ph" placeholder="Search character... Ahmed, Priya, Ivan, Natasha"
-        aria-label="Search character voices">
-      <div id="charGrid" class="char-grid" role="listbox" aria-label="Character voices"></div>
+        data-i18n-aria="aria_search_characters" aria-label="Search character voices">
+      <div id="charGrid" class="char-grid" role="listbox" data-i18n-aria="aria_character_voices" aria-label="Character voices"></div>
       <p class="char-howto" data-i18n="char_howto">Koi bhi character chunen — us ki awaz sunne ke liye ▶ dabayen. Card par click karne se wahi awaz Generate ke liye select ho jayegi. Har character ka apna alag lehja hai.</p>
     </section>
 
@@ -273,14 +273,14 @@
         <span data-i18n="gen_title">GENERATE, LISTEN &amp; DOWNLOAD</span> — <span data-i18n="gen_title_ur">آواز بنائیں، سنیں اور ڈاؤن لوڈ کریں</span>
       </h2>
 
-      <div id="avatarMount" class="avatar-mount" aria-label="Talking character preview"></div>
+      <div id="avatarMount" class="avatar-mount" data-i18n-aria="aria_talking_preview" aria-label="Talking character preview"></div>
 
       <div class="slider-card">
         <div class="slider-head">
           <span><b data-i18n="tune_speed">Speed</b> — <span data-i18n="speed_ur">رفتار</span></span>
           <span id="speedVal" class="tune-val">1.00×</span>
         </div>
-        <input type="range" id="speedRange" min="0.5" max="2" step="0.1" value="1" aria-label="Speed">
+        <input type="range" id="speedRange" min="0.5" max="2" step="0.1" value="1" data-i18n-aria="aria_speed" aria-label="Speed">
         <p class="slider-sub" data-i18n="speed_sub">0.5× slow — 1× normal — 1.8× fast</p>
       </div>
 
@@ -289,7 +289,7 @@
           <span><b data-i18n="tune_pitch">Pitch</b> — <span data-i18n="pitch_ur">آواز کی اونچائی</span></span>
           <span id="pitchVal" class="tune-val">1.00</span>
         </div>
-        <input type="range" id="pitchRange" min="-12" max="12" step="1" value="0" aria-label="Pitch">
+        <input type="range" id="pitchRange" min="-12" max="12" step="1" value="0" data-i18n-aria="aria_pitch" aria-label="Pitch">
         <p class="slider-sub" data-i18n="pitch_sub">Offline engine + character style par asar hota hai</p>
       </div>
 
@@ -344,14 +344,14 @@
           <span data-i18n="btn_music">Music</span>
         </button>
         <input type="file" id="musicFile" accept="audio/*" hidden>
-        <input type="range" id="musicVol" min="0" max="50" value="20" aria-label="Music volume" title="Music volume">
+        <input type="range" id="musicVol" min="0" max="50" value="20" data-i18n-aria="aria_music_volume" aria-label="Music volume" title="Music volume">
         <span id="musicName" class="music-name"></span>
-        <button id="btnMusicClear" class="btn btn-secondary btn-small" type="button" hidden aria-label="Remove music">×</button>
+        <button id="btnMusicClear" class="btn btn-secondary btn-small" type="button" hidden data-i18n-aria="aria_remove_music" aria-label="Remove music">×</button>
       </div>
 
-      <div id="moduleStatus" class="module-status" aria-label="Module status"></div>
+      <div id="moduleStatus" class="module-status" data-i18n-aria="aria_module_status" aria-label="Module status"></div>
 
-      <div id="timeline" class="timeline" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Playback progress">
+      <div id="timeline" class="timeline" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-i18n-aria="aria_playback_progress" aria-label="Playback progress">
         <div id="progress" class="progress"></div>
       </div>
       <div class="timeline-meta"><span id="timeLabel" class="time-label">0:00 / 0:00</span></div>
@@ -387,7 +387,7 @@
         </div>
         <input id="cloneName" class="char-search" type="text"
           data-i18n-ph="clone_name_ph" placeholder="Clone ka naam... e.g. Abubakar Voice"
-          aria-label="Clone name">
+          data-i18n-aria="aria_clone_name" aria-label="Clone name">
         <button id="btnCloneSample" class="btn btn-secondary" type="button">
           <span aria-hidden="true">&#127908;</span>
           <span data-i18n="clone_sample">Voice sample chunen</span>
@@ -410,11 +410,11 @@
     <section class="card guide-card" aria-labelledby="guide-heading">
       <h2 id="guide-heading" class="card-title" data-i18n="guide_title">KAUN SA ENGINE KAB ISTEMAL KAREN?</h2>
       <div class="slider-card">
-        <h4>Urdu / Hindi / Pashto / Bengali</h4>
+        <h4 data-i18n="guide_ur_h">Urdu / Hindi / Pashto / Bengali</h4>
         <p data-i18n="guide_ur">Studio Voices sab se best hain — Ahmed, Fatima, Priya, Arjun har character apne alag lehje me bolta hai aur saaf MP3 file milti hai. Google engine bhi in zabanon me seedha play ho jata hai.</p>
       </div>
       <div class="slider-card">
-        <h4>Russian / English / European</h4>
+        <h4 data-i18n="guide_eu_h">Russian / English / European</h4>
         <p data-i18n="guide_eu">Studio Voices (Edge Neural) me Ivan, Natasha, Aria, Dmitry jaise named studio characters milte hain — YouTube voice-over ke liye behtareen. Har character ke sath ▶ button se pehle awaz ka preview sun sakte hain.</p>
       </div>
       <div class="slider-card">
@@ -444,7 +444,7 @@
           <span aria-hidden="true">&#127909;</span>
           <span data-i18n="btn_export_video">Download Video</span>
         </button>
-        <select id="videoFormat" class="select-small" aria-label="Video format">
+        <select id="videoFormat" class="select-small" data-i18n-aria="aria_video_format" aria-label="Video format">
           <option value="square" data-i18n="fmt_square">Square 1:1</option>
           <option value="portrait" data-i18n="fmt_portrait">Shorts 9:16 + captions</option>
         </select>
@@ -478,14 +478,17 @@
   <footer class="footer">
     <p class="footer-ur" data-i18n="footer_ur">تمام کریکٹر آوازیں بالکل مفت ہیں — وائس کلوننگ پریمیم فیچر ہے</p>
     <p><span data-i18n="footer_brand">Abubakar YT Zone • Text likho, awaz suno, MP3 download karo</span></p>
-    <p><span data-i18n="footer_text">100% free — no API keys, no sign-up.</span> <span class="footer-tech" data-i18n="footer_tech">Edge Neural → Google → Web Speech fallbacks</span></p>
+    <p><span data-i18n="footer_text">On Mastermind YT’s grand opening — thanks to Mr Muhammad Abubakar’s work, this app is FREE for you from this link.</span> <span class="footer-tech" data-i18n="footer_tech">Edge Neural → Google → Web Speech fallbacks</span></p>
+    <p><a href="docs/VoiceSync-Studio-Terms-and-User-Guide.pdf" target="_blank" rel="noopener" data-i18n="footer_terms">📄 Terms &amp; User Guide</a></p>
   </footer>
 
   <!-- Module scripts — strict load order per SPEC §3. Missing modules must not
        break parsing; app.js feature-detects each global before wiring it. -->
   <script src="js/i18n.js"></script>
   <!-- Gradio client for the Chatterbox human-like voice engine (keyless, free). -->
-  <script src="https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@gradio/client@2.7.1/dist/index.min.js"
+        integrity="sha384-9BoiXA6dwi9qIeWEZnqz3xzQCD5vblu2OV8HwpRNPTIhwGUJfGgj651fVCrlkwAl"
+        crossorigin="anonymous"></script>
   <script src="js/tts.js"></script>
   <script src="js/lipsync.js"></script>
   <script src="js/avatar.js"></script>
