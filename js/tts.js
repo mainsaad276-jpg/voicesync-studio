@@ -369,6 +369,19 @@
         }
       }
     } catch (e) { /* feature-detect: not available, skip silently */ }
+    // Chatterbox human-like voice (beta) — keyless, free, via public HF Space.
+    (function () {
+      var bl = lang ? _baseLang(lang) : null;
+      if (!bl || CHATTERBOX_LANGS.indexOf(bl) !== -1 || bl === 'ur') {
+        out.push({
+          id: 'chatterbox:default',
+          name: 'Chatterbox Human-Like (beta)',
+          lang: bl || 'en',
+          gender: '',
+          engine: 'chatterbox'
+        });
+      }
+    })();
     return out;
   }
 
@@ -777,7 +790,155 @@
       });
     }
 
+    if (engine === 'chatterbox') {
+      var cblang = voice && voice.lang ? voice.lang : _guessLang(text);
+      return _chatterboxSynthesize(text, cblang);
+    }
+
     return Promise.reject(new Error('unknown engine: ' + engine));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Engine 4: Chatterbox (ResembleAI) — human-like + zero-shot cloning  */
+  /* Free public Hugging Face Space, keyless, via @gradio/client (beta). */
+  /* ------------------------------------------------------------------ */
+  var CHATTERBOX_SPACE = 'ResembleAI/Chatterbox-Multilingual-TTS';
+  var CHATTERBOX_ORIGIN = 'https://resembleai-chatterbox-multilingual-tts.hf.space';
+  var CHATTERBOX_LANGS = ['ar', 'da', 'de', 'el', 'en', 'es', 'fi', 'fr', 'he', 'hi',
+    'it', 'ja', 'ko', 'ms', 'nl', 'no', 'pl', 'pt', 'ru', 'sv', 'sw', 'tr', 'zh'];
+  var CHATTERBOX_CHUNK = 250;
+  var CHATTERBOX_TIMEOUT_MS = 120000;
+  var _chatterboxClient = null;
+  var _chatterboxRefBlob = null; // optional clone reference (app.js sets it after mic recording)
+
+  function setReferenceAudio(blob) { _chatterboxRefBlob = blob || null; }
+
+  function _chatterboxLang(lang) {
+    var base = _baseLang(lang || 'en');
+    if (CHATTERBOX_LANGS.indexOf(base) !== -1) return base;
+    if (base === 'ur') return 'hi'; // closest supported language
+    return 'en';
+  }
+
+  function _gradioClientCtor() {
+    if (typeof window === 'undefined') return null;
+    var g = window.gradioClient || null;
+    return (g && g.Client) ? g.Client : null;
+  }
+
+  function _chatterboxConnect() {
+    var Client = _gradioClientCtor();
+    if (!Client) return Promise.reject(new Error('Chatterbox library not loaded'));
+    if (_chatterboxClient) return Promise.resolve(_chatterboxClient);
+    return Client.connect(CHATTERBOX_SPACE).then(function (c) {
+      _chatterboxClient = c;
+      return c;
+    });
+  }
+
+  function _withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, reject) {
+        setTimeout(function () { reject(new Error(label + ' timed out')); }, ms);
+      })
+    ]);
+  }
+
+  function _chatterboxChunk(client, clang, chunk, refPath) {
+    var payload = {
+      text_input: chunk,
+      language_id: clang,
+      audio_prompt_path_input: refPath || null,
+      exaggeration_input: 0.5,
+      temperature_input: 0.8,
+      seed_num_input: 0,
+      cfgw_input: 0.5
+    };
+    return _withTimeout(client.predict('/generate_tts_audio', payload), CHATTERBOX_TIMEOUT_MS, 'Chatterbox')
+      .then(function (res) {
+        var f = res && res.data && res.data[0];
+        var url = f && (f.url || f.path);
+        if (!url) throw new Error('Chatterbox returned no audio');
+        if (url.charAt(0) === '/') url = CHATTERBOX_ORIGIN + url;
+        return _withTimeout(fetch(url).then(function (r) {
+          if (!r.ok) throw new Error('Chatterbox audio fetch failed: ' + r.status);
+          return r.arrayBuffer();
+        }), 60000, 'Chatterbox audio download');
+      });
+  }
+
+  function _resampleLinear(data, fromRate, toRate) {
+    if (fromRate === toRate) return data;
+    var ratio = fromRate / toRate;
+    var len = Math.max(1, Math.floor(data.length / ratio));
+    var out = new Float32Array(len);
+    for (var i = 0; i < len; i++) {
+      var pos = i * ratio, i0 = Math.floor(pos), frac = pos - i0;
+      var a = data[i0] || 0, b = data[i0 + 1] || 0;
+      out[i] = a + (b - a) * frac;
+    }
+    return out;
+  }
+
+  function _encodeWavBytes(float32, sampleRate) {
+    var n = float32.length;
+    var buf = new ArrayBuffer(44 + n * 2);
+    var v = new DataView(buf);
+    for (var i = 0; i < n; i++) {
+      var s = Math.max(-1, Math.min(1, float32[i]));
+      v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    function wstr(off, s) { for (var j = 0; j < s.length; j++) v.setUint8(off + j, s.charCodeAt(j)); }
+    wstr(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); wstr(8, 'WAVE');
+    wstr(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true); v.setUint32(24, sampleRate, true);
+    v.setUint32(28, sampleRate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    wstr(36, 'data'); v.setUint32(40, n * 2, true);
+    return new Uint8Array(buf);
+  }
+
+  function _chatterboxSynthesize(text, lang) {
+    var clang = _chatterboxLang(lang);
+    var chunks = _chunkText(text, CHATTERBOX_CHUNK);
+    if (!chunks.length) return Promise.reject(new Error('Empty text'));
+    return _chatterboxConnect().then(function (client) {
+      var seq = Promise.resolve();
+      var refPath = null;
+      if (_chatterboxRefBlob) {
+        seq = seq.then(function () {
+          return _withTimeout(client.upload([_chatterboxRefBlob]), 60000, 'Reference upload')
+            .then(function (paths) { refPath = paths && paths[0]; })
+            .catch(function () { refPath = null; }); // cloning optional; default voice otherwise
+        });
+      }
+      var bufs = [];
+      chunks.forEach(function (ch) {
+        seq = seq.then(function () {
+          if (_cancelled) throw new Error('cancelled');
+          return _chatterboxChunk(client, clang, ch, refPath).then(function (ab) { bufs.push(ab); });
+        });
+      });
+      return seq.then(function () {
+        var ctx = _getAudioContext();
+        if (!ctx) throw new Error('AudioContext unavailable');
+        return Promise.all(bufs.map(function (ab) {
+          return _decodeOne(ctx, new Uint8Array(ab)).catch(function () { return null; });
+        })).then(function (decoded) {
+          var good = decoded.filter(function (b) { return b; });
+          if (!good.length) throw new Error('Chatterbox audio undecodable');
+          var rate = good[0].sampleRate, total = 0, i, parts = [];
+          for (i = 0; i < good.length; i++) {
+            var d = good[i].getChannelData(0);
+            if (good[i].sampleRate !== rate) d = _resampleLinear(d, good[i].sampleRate, rate);
+            parts.push(d); total += d.length;
+          }
+          var out = new Float32Array(total), off = 0;
+          for (i = 0; i < parts.length; i++) { out.set(parts[i], off); off += parts[i].length; }
+          return _finishMp3Result(_encodeWavBytes(out, rate), [], text, 'chatterbox');
+        });
+      });
+    });
   }
 
   function _finishMp3Result(allBytes, chunkList, text, engineName) {
@@ -826,6 +987,7 @@
     getVoices: getVoices,
     synthesize: synthesize,
     cancel: cancel,
+    setReferenceAudio: setReferenceAudio, // mic recording blob for Chatterbox cloning
     // underscore helpers for QA/unit tests (not part of the UI contract)
     _chunkText: _chunkText,
     _guessLang: _guessLang

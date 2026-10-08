@@ -68,6 +68,8 @@
     micDenied: 'Microphone access was denied.',
     micUnsupported: 'Recording is not supported in this browser.',
     useWavForMic: 'For your recording use Download WAV (MP3 encoding is not available for mic audio).',
+    chatterboxWorking: 'Making the human-like voice… (free shared server, may take a minute)',
+    chatterboxBusy: 'Human-like voice server is busy right now — tap Play for the device voice, or try Chatterbox again later.',
     modulesLabel: 'Modules'
   };
 
@@ -476,7 +478,8 @@
 
     stopAll();
     setBusy(true);
-    setMsg(t('generating'));
+    // Chatterbox is human-like but slow (free shared GPU) — set expectations.
+    setMsg(state.voiceId && state.voiceId.indexOf('chatterbox:') === 0 ? t('chatterboxWorking') : t('generating'));
     var result = null;
     try {
       result = await window.TTS.synthesize(text, state.voiceId);
@@ -508,7 +511,13 @@
       if (hasModule('LipSync') && typeof window.LipSync.makeTalkingCues === 'function') {
         try { state.lastCues = window.LipSync.makeTalkingCues(result.duration || 5) || []; } catch (e) {}
       }
-      setMsg(t('readyTapPlay'));
+      // Honesty: if the user picked Chatterbox but the free server was busy,
+      // say so instead of silently substituting the device voice.
+      if (state.voiceId && state.voiceId.indexOf('chatterbox:') === 0) {
+        setMsg(t('chatterboxBusy'));
+      } else {
+        setMsg(t('readyTapPlay'));
+      }
     } else if (result.engine === 'google' && result.url) {
       // Google <audio>-element path (API.md §3): no byte access, but the
       // mouth still moves via text-timing cues — never a dead mouth.
@@ -649,6 +658,10 @@
     };
     state.lastUrl = url;
     state.lastCues = audioBuffer ? await getCues(audioBuffer) : [];
+    // Hand the recording to the Chatterbox engine as a clone reference too.
+    if (window.TTS && typeof window.TTS.setReferenceAudio === 'function') {
+      try { window.TTS.setReferenceAudio(blob); } catch (e) {}
+    }
     setMsg(t('recordReady'));
     // No auto-play — the user taps Play (same pattern as the Web Speech path).
   }
