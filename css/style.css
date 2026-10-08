@@ -1,0 +1,183 @@
+/* ============================================================
+   VoiceSync Studio — dark studio theme (Sana)
+   Vanilla CSS. Mobile-first; studio grid for wide screens.
+   ============================================================ */
+
+:root {
+  --bg:        #0e1117;
+  --bg-soft:   #161b24;
+  --card:      #1b2230;
+  --card-edge: #2a3448;
+  --ink:       #eef2f7;
+  --ink-dim:   #a7b3c5;
+  --accent:    #6c8cff;
+  --accent-2:  #22c55e;
+  --danger:    #ef4444;
+  --radius:    14px;
+  --gap:       16px;
+  --font:      "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.5;
+}
+
+[dir="rtl"] body { font-family: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", var(--font); }
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 12px 16px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--card-edge);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-mark { font-size: 28px; }
+.brand h1 { font-size: 20px; margin: 0; white-space: nowrap; }
+.brand-tag {
+  font-size: 12px; color: var(--ink-dim);
+  border: 1px solid var(--card-edge); border-radius: 999px;
+  padding: 2px 10px; white-space: nowrap;
+}
+
+.lang-toggle {
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--card-edge); border-radius: 999px;
+  padding: 8px 18px; font-size: 15px; cursor: pointer;
+}
+.lang-toggle:hover { border-color: var(--accent); }
+
+/* ---------- Studio layout ---------- */
+.studio {
+  flex: 1;
+  width: 100%; max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--gap);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
+  align-content: start;
+}
+
+@media (min-width: 860px) {
+  .studio { grid-template-columns: 1.1fr 1fr; }
+  .export-card { grid-column: 1 / -1; }
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+.card-title { font-size: 16px; margin: 0 0 12px; color: var(--ink); }
+.project-title { margin-top: 20px; }
+
+/* ---------- Editor ---------- */
+.field-label {
+  display: block; font-size: 13px; color: var(--ink-dim); margin-bottom: 6px;
+}
+
+.text-input {
+  width: 100%; resize: vertical; min-height: 120px;
+  background: var(--bg-soft); color: var(--ink);
+  border: 1px solid var(--card-edge); border-radius: 10px;
+  padding: 12px; font-size: 15px; font-family: inherit;
+}
+.text-input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+
+.editor-meta { display: flex; justify-content: flex-end; gap: 4px;
+  font-size: 12px; color: var(--ink-dim); margin: 4px 0 12px; }
+
+.controls-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 480px) { .controls-grid { grid-template-columns: 1fr 1fr; } }
+
+.select {
+  width: 100%; background: var(--bg-soft); color: var(--ink);
+  border: 1px solid var(--card-edge); border-radius: 10px;
+  padding: 10px 12px; font-size: 15px; font-family: inherit;
+}
+.select:focus { outline: 2px solid var(--accent); }
+
+/* ---------- Preview / avatar ---------- */
+.avatar-mount {
+  width: 100%; aspect-ratio: 1 / 1; max-height: 380px;
+  background: var(--bg-soft);
+  border: 1px solid var(--card-edge); border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.avatar-mount svg, .avatar-mount canvas { width: 100%; height: 100%; object-fit: contain; }
+
+.transport { display: flex; gap: 12px; margin: 14px 0; }
+
+.timeline {
+  height: 10px; background: var(--bg-soft);
+  border: 1px solid var(--card-edge); border-radius: 999px;
+  overflow: hidden; cursor: pointer;
+}
+.progress {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-radius: 999px; transition: width 0.1s linear;
+}
+
+.status {
+  font-size: 14px; color: var(--ink-dim); margin: 10px 0 0;
+  min-height: 1.5em;
+}
+.status.busy  { color: var(--accent); }
+.status.error { color: var(--danger); }
+
+/* ---------- Buttons ---------- */
+.btn {
+  border: 1px solid var(--card-edge); border-radius: 10px;
+  padding: 12px 18px; font-size: 15px; font-family: inherit;
+  cursor: pointer; display: inline-flex; align-items: center;
+  justify-content: center; gap: 8px; color: var(--ink);
+  background: var(--card);
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; flex: 1; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.1); border-color: var(--accent); }
+.btn-secondary { background: var(--bg-soft); flex: 1; }
+.btn-accent { background: #24304a; border-color: var(--accent); flex: 1; }
+
+.btn-group { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* ---------- Footer ---------- */
+.footer {
+  padding: 14px 16px; text-align: center;
+  color: var(--ink-dim); font-size: 13px;
+  border-top: 1px solid var(--card-edge);
+}
+.footer p { margin: 0; }
+.footer-tech { display: block; font-size: 12px; opacity: 0.8; }
+
+/* ---------- 360px mobile ---------- */
+@media (max-width: 400px) {
+  .brand h1 { font-size: 17px; }
+  .brand-tag { display: none; }
+  .card { padding: 14px; }
+  .btn { padding: 11px 12px; font-size: 14px; }
+}
