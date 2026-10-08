@@ -31,6 +31,15 @@
   <!-- ============ MAIN ============ -->
   <main class="studio" id="appRoot">
 
+    <!-- Feature pill badges (Free Voice Over skin) -->
+    <div class="pill-badges" aria-hidden="false">
+      <span class="pill green" data-i18n="pill_free">FREE VOICES</span>
+      <span class="pill" data-i18n="pill_noapi">NO API KEY</span>
+      <span class="pill" data-i18n="pill_mp3">MP3 DOWNLOAD</span>
+      <span class="pill" data-i18n="pill_langs">60+ LANGUAGES</span>
+      <span class="pill gold" data-i18n="pill_clone">★VOICE CLONING — PREMIUM</span>
+    </div>
+
     <!-- Text editor + voice selection -->
     <section class="card editor-card" aria-labelledby="editor-heading">
       <h2 id="editor-heading" class="card-title" data-i18n="editor_title">Script Editor</h2>
@@ -192,6 +201,18 @@
           <span aria-hidden="true">&#128465;</span>
         </button>
       </div>
+    </section>
+
+    <!-- Character Voices (Free Voice Over skin) -->
+    <section class="card char-card-section" aria-labelledby="char-heading">
+      <h2 id="char-heading" class="card-title">
+        <span data-i18n="char_title">CHARACTER VOICES — کریکٹر آوازیں</span>
+        <span class="pill green" style="margin-inline-start:8px" data-i18n="pill_free">FREE</span>
+      </h2>
+      <input id="charSearch" class="char-search" type="search"
+        data-i18n-ph="char_search_ph" placeholder="Search character... Ahmed, Priya, Ivan, Natasha"
+        aria-label="Search character voices">
+      <div id="charGrid" class="char-grid" role="listbox" aria-label="Character voices"></div>
     </section>
 
     <!-- Avatar preview + transport + timeline -->

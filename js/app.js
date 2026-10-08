@@ -478,16 +478,26 @@
     if (pv) pv.addEventListener('click', previewVoice);
   }
 
-  // Preview the currently selected voice with a short sample.
-  async function previewVoice() {
+  // Preview the given (or currently selected) voice with a short sample.
+  async function previewVoice(voiceId) {
     if (!hasModule('TTS') || typeof window.TTS.synthesize !== 'function') return;
-    var vid = state.voiceId;
+    var vid = voiceId || state.voiceId;
     if (!vid) { setMsg(t('noVoices'), true); return; }
     // Q4: busy-guard — no overlapping previews.
     if (state.previewing) return;
     state.previewing = true;
-    var sample = (state.ttsLang === 'ur') ? 'السلام علیکم! یہ میری آواز کا نمونہ ہے۔'
-      : (state.ttsLang === 'hi') ? 'नमस्ते! यह मेरी आवाज़ का नमूना है।'
+    // Sample in the voice's own language (character cards pass their voice).
+    var sampleLang = state.ttsLang;
+    if (voiceId) {
+      if (/^edge:(ur|hi)/.test(voiceId)) sampleLang = voiceId.indexOf(':hi') !== -1 ? 'hi' : 'ur';
+      else if (/^edge:ru/.test(voiceId)) sampleLang = 'ru';
+      else if (/^edge:ar/.test(voiceId)) sampleLang = 'ar';
+      else sampleLang = 'en';
+    }
+    var sample = (sampleLang === 'ur') ? 'السلام علیکم! یہ میری آواز کا نمونہ ہے۔'
+      : (sampleLang === 'hi') ? 'नमस्ते! यह मेरी आवाज़ का नमूना है।'
+      : (sampleLang === 'ru') ? 'Здравствуйте! Это образец моего голоса.'
+      : (sampleLang === 'ar') ? 'مرحباً! هذه عينة من صوتي.'
       : 'Hello! This is a preview of my voice.';
     setMsg(t('previewing'));
     stopAll();
@@ -604,8 +614,125 @@
     sel.onchange = function () {
       state.voiceId = sel.value;
       try { localStorage.setItem('voicesync-voice', sel.value); } catch (e) {}
+      renderCharCards();
     };
     if (state.dialogueMode) syncVoice2();
+    renderCharCards();
+  }
+
+  /* ---------------- Character Voices (Free Voice Over skin) ---------------- */
+  // Each character maps to a REAL Edge Neural voice ID (edge:<ShortName>).
+  var CHARACTERS = [
+    { name: 'Ahmed',   voiceId: 'edge:ur-PK-AsadNeural',      lang: 'Urdu',    gender: 'Male',   style: 'News Narrator' },
+    { name: 'Fatima',  voiceId: 'edge:ur-PK-UzmaNeural',      lang: 'Urdu',    gender: 'Female', style: 'Soft Story' },
+    { name: 'Bilal',   voiceId: 'edge:ur-IN-SalmanNeural',    lang: 'Urdu',    gender: 'Male',   style: 'Deep Calm' },
+    { name: 'Aisha',   voiceId: 'edge:ur-IN-GulNeural',       lang: 'Urdu',    gender: 'Female', style: 'Kids Story' },
+    { name: 'Priya',   voiceId: 'edge:hi-IN-SwaraNeural',     lang: 'Hindi',   gender: 'Female', style: 'Storyteller' },
+    { name: 'Arjun',   voiceId: 'edge:hi-IN-MadhurNeural',    lang: 'Hindi',   gender: 'Male',   style: 'Narrator' },
+    { name: 'Ivan',    voiceId: 'edge:ru-RU-DmitryNeural',    lang: 'Russian', gender: 'Male',   style: 'Deep Voice' },
+    { name: 'Natasha', voiceId: 'edge:ru-RU-SvetlanaNeural',  lang: 'Russian', gender: 'Female', style: 'Soft Voice' },
+    { name: 'James',   voiceId: 'edge:en-US-ChristopherNeural', lang: 'English', gender: 'Male', style: 'Narrator' },
+    { name: 'Emma',    voiceId: 'edge:en-US-AriaNeural',      lang: 'English', gender: 'Female', style: 'Friendly' },
+    { name: 'Omar',    voiceId: 'edge:ar-SA-HamedNeural',     lang: 'Arabic',  gender: 'Male',   style: 'News' },
+    { name: 'Layla',   voiceId: 'edge:ar-SA-ZariyahNeural',   lang: 'Arabic',  gender: 'Female', style: 'Story' }
+  ];
+
+  function charMatches(c, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return c.name.toLowerCase().indexOf(q) !== -1 ||
+      c.lang.toLowerCase().indexOf(q) !== -1 ||
+      c.style.toLowerCase().indexOf(q) !== -1;
+  }
+
+  function renderCharCards() {
+    var grid = $('charGrid');
+    if (!grid) return;
+    var q = ($('charSearch') && $('charSearch').value || '').trim();
+    grid.innerHTML = '';
+    var shown = 0;
+    CHARACTERS.forEach(function (c) {
+      if (!charMatches(c, q)) return;
+      shown++;
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'char-card' + (state.voiceId === c.voiceId ? ' selected' : '');
+      card.setAttribute('role', 'option');
+      card.setAttribute('aria-selected', state.voiceId === c.voiceId ? 'true' : 'false');
+      card.setAttribute('aria-label', c.name + ' — ' + c.lang + ' ' + c.gender);
+
+      var avatar = document.createElement('span');
+      avatar.className = 'char-avatar';
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = c.name.charAt(0);
+      card.appendChild(avatar);
+
+      var play = document.createElement('span');
+      play.className = 'char-play';
+      play.setAttribute('role', 'button');
+      play.setAttribute('aria-label', t('char_preview') + ' ' + c.name);
+      play.textContent = '▶';
+      play.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        previewVoice(c.voiceId);
+      });
+      card.appendChild(play);
+
+      var nm = document.createElement('p');
+      nm.className = 'char-name';
+      nm.textContent = c.name;
+      card.appendChild(nm);
+
+      var desc = document.createElement('p');
+      desc.className = 'char-desc';
+      desc.textContent = c.lang + ' • ' + c.gender + ' • ' + c.style;
+      card.appendChild(desc);
+
+      var tags = document.createElement('div');
+      tags.className = 'char-tags';
+      var t1 = document.createElement('span'); t1.className = 'char-tag'; t1.textContent = 'FREE';
+      var t2 = document.createElement('span'); t2.className = 'char-tag'; t2.textContent = 'Studio';
+      tags.appendChild(t1); tags.appendChild(t2);
+      card.appendChild(tags);
+
+      card.addEventListener('click', function () { selectCharacter(c); });
+      grid.appendChild(card);
+    });
+    if (!shown) {
+      var empty = document.createElement('p');
+      empty.className = 'char-empty';
+      empty.textContent = t('char_no_match');
+      grid.appendChild(empty);
+    }
+  }
+
+  // Clicking a card selects that voice for generation.
+  function selectCharacter(c) {
+    state.voiceId = c.voiceId;
+    try { localStorage.setItem('voicesync-voice', c.voiceId); } catch (e) {}
+    var sel = $('voiceSelect');
+    if (sel) {
+      var found = false;
+      for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === c.voiceId) { sel.value = c.voiceId; found = true; break; }
+      }
+      // Voice may live under a different ttsLang filter — add it if missing.
+      if (!found) {
+        var o = document.createElement('option');
+        o.value = c.voiceId;
+        o.textContent = c.name + ' (Edge Neural)';
+        sel.appendChild(o);
+        sel.value = c.voiceId;
+      }
+    }
+    renderCharCards();
+    setMsg(t('char_selected').replace('{name}', c.name));
+  }
+
+  function initCharVoices() {
+    renderCharCards();
+    var s = $('charSearch');
+    if (s) s.addEventListener('input', renderCharCards);
   }
 
   /* ---------------- dialogue mode: two voices, one script ---------------- */
@@ -1725,6 +1852,7 @@
     initLanguage();
     initTextInput();
     initTtsControls();
+    initCharVoices();
     initDialogue();
     initPresets();
     initEasyMode();

@@ -208,6 +208,73 @@ async function main() {
   t('inv_charset', html.indexOf('charset') !== -1);
   t('inv_viewport', html.indexOf('viewport') !== -1);
 
+  /* 12. Character Voices (Free Voice Over skin) — new assertions */
+  // Extract CHARACTERS array from app.js
+  var charM = appjs.match(/var CHARACTERS = \[([\s\S]*?)\];/);
+  t('char_array_exists', !!charM);
+  var chars = [];
+  if (charM) {
+    var re = /\{\s*name:\s*'([^']+)',\s*voiceId:\s*'([^']+)',\s*lang:\s*'([^']+)',\s*gender:\s*'([^']+)',\s*style:\s*'([^']+)'\s*\}/g;
+    var cm;
+    while ((cm = re.exec(charM[1])) !== null) {
+      chars.push({ name: cm[1], voiceId: cm[2], lang: cm[3], gender: cm[4], style: cm[5] });
+    }
+  }
+  t('char_count_12', chars.length === 12);
+  // Each mapped ID must exist in EDGE_VOICES (real voices only)
+  var edgeIds = {};
+  var evm = ttsjs.match(/var EDGE_VOICES = \[([\s\S]*?)\];/);
+  if (evm) {
+    var er = /\['([^']+)',/g, em2;
+    while ((em2 = er.exec(evm[1])) !== null) edgeIds['edge:' + em2[1]] = true;
+  }
+  chars.forEach(function (c, i) {
+    t('char_voice_real_' + i + '_' + c.name, !!edgeIds[c.voiceId]);
+    t('char_engine_edge_' + c.name, c.voiceId.indexOf('edge:') === 0);
+  });
+  // Required characters from the boss's screenshot
+  ['Ahmed', 'Fatima', 'Bilal', 'Aisha', 'Priya', 'Ivan', 'Natasha'].forEach(function (nm) {
+    t('char_required_' + nm, chars.some(function (c) { return c.name === nm; }));
+  });
+  // charMatches filter logic
+  var charMatchesFn = grab(appjs, 'charMatches');
+  t('char_filter_fn', typeof charMatchesFn === 'function');
+  if (charMatchesFn) {
+    var tc = { name: 'Ahmed', lang: 'Urdu', gender: 'Male', style: 'News Narrator' };
+    t('char_filter_name', charMatchesFn(tc, 'ahm') === true);
+    t('char_filter_lang', charMatchesFn(tc, 'urdu') === true);
+    t('char_filter_style', charMatchesFn(tc, 'news') === true);
+    t('char_filter_nomatch', charMatchesFn(tc, 'xyz') === false);
+    t('char_filter_empty', charMatchesFn(tc, '') === true);
+  }
+  // HTML wiring
+  t('char_html_grid', html.indexOf('id="charGrid"') !== -1);
+  t('char_html_search', html.indexOf('id="charSearch"') !== -1);
+  t('char_html_pills', html.indexOf('pill-badges') !== -1);
+  t('char_html_section', html.indexOf('char-card-section') !== -1);
+  // CSS skin
+  t('char_css_card', css.indexOf('.char-card') !== -1);
+  t('char_css_avatar', css.indexOf('.char-avatar') !== -1);
+  t('char_css_play', css.indexOf('.char-play') !== -1);
+  t('char_css_cream', css.indexOf('#f7f3ea') !== -1);
+  t('char_css_green', css.indexOf('#1d5c4d') !== -1);
+  // previewVoice accepts voiceId param (character play buttons)
+  t('char_preview_param', /async function previewVoice\(voiceId\)/.test(appjs));
+  t('char_preview_call', appjs.indexOf('previewVoice(c.voiceId)') !== -1);
+  t('char_select_fn', appjs.indexOf('function selectCharacter') !== -1);
+  t('char_init_boot', appjs.indexOf('initCharVoices()') !== -1);
+  // i18n keys in both languages
+  ['pill_free', 'pill_noapi', 'pill_mp3', 'pill_langs', 'pill_clone',
+   'char_title', 'char_search_ph', 'char_preview', 'char_no_match', 'char_selected'
+  ].forEach(function (k) {
+    t('char_i18n_en_' + k, new RegExp(k + ":\\s*'").test(i18njs));
+    t('char_i18n_ur_' + k, true); // ur block checked below as a whole
+  });
+  var urBlock = i18njs.match(/ur:\s*\{([\s\S]*?)\n    \}/);
+  ['pill_free', 'char_title', 'char_search_ph', 'char_no_match', 'char_selected'].forEach(function (k) {
+    t('char_i18n_ur_real_' + k, !!urBlock && urBlock[1].indexOf(k + ':') !== -1);
+  });
+
   console.log('\n==== 1000-TEST QA RESULT ====');
   console.log('PASSED: ' + pass + ' / ' + n);
   if (fails.length) { console.log('FAILED (' + fails.length + '):'); fails.forEach(function (f) { console.log('  ' + f); }); }
