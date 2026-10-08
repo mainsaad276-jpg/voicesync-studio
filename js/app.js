@@ -315,7 +315,7 @@
       try { window.Avatar.speak(scaleCues(cues, state.speed || 1), timeSrc); } catch (e) {}
     }
     src.onended = function () {
-      stopAvatar(); stopTimeline(); state.speaking = false;
+      stopMusic(); stopAvatar(); stopTimeline(); state.speaking = false;
       setMsg(t('done')); cleanupPitched();
     };
     state.speaking = true;
@@ -655,12 +655,14 @@
 
   // Audio path: real audio element + real viseme cues.
   /* Scale lip-sync cue times when playback speed != 1 so the avatar's
-     mouth stays in sync with the faster/slower audio. */
+     mouth stays in sync with the faster/slower audio.
+     Team 2 M1: cues carry `viseme` (lipsync.js) — preserve it, else the
+     mouth freezes at speed != 1. */
   function scaleCues(cues, speed) {
     var s = speed || 1;
     if (!cues || !cues.length || s === 1) return cues || [];
     return cues.map(function (c) {
-      return { start: c.start / s, end: c.end / s, value: c.value };
+      return { start: c.start / s, end: c.end / s, viseme: c.viseme, value: c.value };
     });
   }
 
@@ -671,7 +673,7 @@
     el.preload = 'auto';
     el.src = result.url;
     try { el.playbackRate = state.speed || 1; el.preservesPitch = true; } catch (e) {}
-    el.onended = function () { stopAvatar(); stopTimeline(); state.speaking = false; setMsg(t('done')); };
+    el.onended = function () { stopMusic(); stopAvatar(); stopTimeline(); state.speaking = false; setMsg(t('done')); };
     el.onerror = function () { stopAll(); setMsg(t('audioLoadFailed'), true); };
     // SPEC §3: Avatar.speak(cues, timeSrc) — timeSrc may be HTMLAudioElement.
     // el.currentTime is audio-time, same base as the cues: no scaling needed.
@@ -844,6 +846,7 @@
 
   // SPEC §3: TTS.synthesize(text, voiceId) -> Promise<Result | {error}>
   async function onGenerate() {
+    var result = null; // Team 2 C1: must be declared ('use strict' -> ReferenceError otherwise)
     if (!hasModule('TTS') || typeof window.TTS.synthesize !== 'function') {
       setMsg(t('ttsMissing'), true);
       renderModuleStatus();
@@ -866,6 +869,7 @@
         var want = null;
         if (detected === 'ur' && ['ur', 'ar', 'fa'].indexOf(cur) === -1) want = 'ur';
         else if (detected === 'hi' && cur !== 'hi') want = 'hi';
+        else if (detected === 'ar' && ['ur', 'ar', 'fa'].indexOf(cur) === -1) want = 'ar'; // Team 2 C2
         else if (detected === 'en' && ['ur', 'ar', 'fa', 'hi'].indexOf(cur) !== -1) want = 'en';
         if (want && want !== cur) {
           state.ttsLang = want;
@@ -909,10 +913,12 @@
 
     if (result.audioBuffer) {
       // Audio path: real buffer -> lip-sync analysis -> playback.
+      // Team 2 M2: honor the pitch slider on Generate too, not just replay().
       setMsg(t('analyzing'));
       var cues = await getCues(result.audioBuffer);
       state.lastCues = cues;
-      startAudioPlayback(result, cues);
+      if (state.pitch) startPitchedPlayback(result, cues);
+      else startAudioPlayback(result, cues);
     } else if (result.utterance) {
       // Offline Web Speech path: do NOT auto-speak here — browsers may block
       // speechSynthesis without a fresh user gesture, and Generate's gesture
@@ -1272,10 +1278,14 @@
       if (lt) lt.value = p.uiLang;
       applyI18n();
     }
-    if (p.ttsLang === 'ur' || p.ttsLang === 'en') {
-      state.ttsLang = p.ttsLang;
-      var tl = $('ttsLang');
-      if (tl) tl.value = p.ttsLang;
+    // Team 2 M6: validate against the real dropdown options, not a hardcoded pair.
+    var tl = $('ttsLang');
+    if (typeof p.ttsLang === 'string' && tl) {
+      var valid = false;
+      for (var i = 0; i < tl.options.length; i++) {
+        if (tl.options[i].value === p.ttsLang) { valid = true; break; }
+      }
+      if (valid) { state.ttsLang = p.ttsLang; tl.value = p.ttsLang; }
     }
     if (typeof p.voiceId === 'string' && p.voiceId) {
       try { localStorage.setItem('voicesync-voice', p.voiceId); } catch (e) {}

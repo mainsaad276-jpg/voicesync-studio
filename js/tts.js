@@ -381,12 +381,13 @@
       }
     } catch (e) { /* feature-detect: not available, skip silently */ }
     // Chatterbox human-like voice (beta) — keyless, free, via public HF Space.
+    // Team 2 M5: be honest — Chatterbox has no Urdu model (maps ur->hi).
     (function () {
       var bl = lang ? _baseLang(lang) : null;
       if (!bl || CHATTERBOX_LANGS.indexOf(bl) !== -1 || bl === 'ur') {
         out.push({
           id: 'chatterbox:default',
-          name: 'Chatterbox Human-Like (beta)',
+          name: bl === 'ur' ? 'Chatterbox Human-Like (beta) — اردو نہیں، ہندی آواز' : 'Chatterbox Human-Like (beta)',
           lang: bl || 'en',
           gender: '',
           engine: 'chatterbox'
