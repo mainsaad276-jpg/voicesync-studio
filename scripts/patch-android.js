@@ -16,6 +16,14 @@ for (const p of perms) {
     m = m.replace('</manifest>', `    <uses-permission android:name="${p}" />\n</manifest>`);
   }
 }
+// Saving to Documents on Android 9 and older needs storage permission;
+// Android 10 needs legacy storage mode. Newer phones need neither.
+if (!m.includes('WRITE_EXTERNAL_STORAGE')) {
+  m = m.replace('</manifest>', '    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />\n</manifest>');
+}
+if (!m.includes('requestLegacyExternalStorage')) {
+  m = m.replace('<application', '<application\n        android:requestLegacyExternalStorage="true"');
+}
 fs.writeFileSync(manifest, m);
 
 let g = fs.readFileSync(gradle, 'utf8');

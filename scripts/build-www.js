@@ -14,4 +14,17 @@ for (const rel of include) {
   fs.mkdirSync(path.dirname(dst), { recursive: true });
   fs.cpSync(src, dst, { recursive: true });
 }
+// App-only: Capacitor runtime so native plugins are reachable without a bundler.
+const capJs = path.join(root, 'node_modules/@capacitor/core/dist/capacitor.js');
+if (fs.existsSync(capJs)) {
+  fs.copyFileSync(capJs, path.join(out, 'js/capacitor.js'));
+  const idx = path.join(out, 'index.html');
+  let html = fs.readFileSync(idx, 'utf8');
+  const tag = '<script src="js/native.js"></script>';
+  if (!html.includes(tag)) throw new Error('native.js tag missing from index.html');
+  html = html.replace(tag, '<script src="js/capacitor.js"></script>\n  ' + tag);
+  fs.writeFileSync(idx, html);
+} else {
+  throw new Error('Run npm install first: @capacitor/core not found');
+}
 console.log('www/ ready:', fs.readdirSync(out).join(', '));

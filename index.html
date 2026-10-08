@@ -2,7 +2,9 @@
 <html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1d5c4d">
+  <link rel="icon" href="assets/icon-192.png">
   <title>VoiceSync Studio — Free Voiceover + Lip-Sync</title>
   <meta name="description" content="VoiceSync Studio: free text-to-speech voiceover with synced lip-sync character. Export audio (WAV/MP3) and video (WebM). 100% free, no API keys.">
   <link rel="stylesheet" href="css/style.css">
@@ -32,7 +34,7 @@
   <main class="studio" id="appRoot">
 
     <!-- Feature pill badges (Free Voice Over skin) -->
-    <div class="pill-badges" aria-hidden="false">
+    <div data-tab="write" class="pill-badges" aria-hidden="false">
       <span class="pill green" data-i18n="pill_free">FREE VOICES</span>
       <span class="pill" data-i18n="pill_noapi">NO API KEY</span>
       <span class="pill" data-i18n="pill_mp3">MP3 DOWNLOAD</span>
@@ -41,7 +43,7 @@
     </div>
 
     <!-- Language pills (Free Voice Over skin) -->
-    <section class="card lang-card" aria-labelledby="langpills-heading">
+    <section data-tab="write" class="card lang-card" aria-labelledby="langpills-heading">
       <h2 id="langpills-heading" class="card-title">
         <span data-i18n="langpills_title">LANGUAGE</span> — <span data-i18n="langpills_title_ur">زبان چنیں</span>
         <span class="muted">(+60)</span>
@@ -55,7 +57,7 @@
     </section>
 
     <!-- Text editor + voice selection -->
-    <section class="card editor-card" aria-labelledby="editor-heading">
+    <section data-tab="write" class="card editor-card" aria-labelledby="editor-heading">
       <h2 id="editor-heading" class="card-title">
         <span data-i18n="yourtext_title">YOUR TEXT</span> — <span data-i18n="yourtext_title_ur">اپنا ٹیکسٹ لکھیں</span>
       </h2>
@@ -232,7 +234,7 @@
     </section>
 
     <!-- Character Voices (Free Voice Over skin) -->
-    <section class="card char-card-section" aria-labelledby="char-heading">
+    <section data-tab="voices" class="card char-card-section" aria-labelledby="char-heading">
       <h2 id="char-heading" class="card-title">
         <span data-i18n="char_title">CHARACTER VOICES — کریکٹر آوازیں</span>
         <span class="pill green" style="margin-inline-start:8px" data-i18n="pill_free">FREE</span>
@@ -245,7 +247,7 @@
     </section>
 
     <!-- Free speech engines (Free Voice Over skin) -->
-    <section class="card engines-card" aria-labelledby="engines-heading">
+    <section data-tab="voices" class="card engines-card" aria-labelledby="engines-heading">
       <h2 id="engines-heading" class="card-title">
         <span data-i18n="engines_title">FREE SPEECH ENGINES</span> — <span data-i18n="engines_title_ur">سارے فری انجن</span>
       </h2>
@@ -268,7 +270,7 @@
     </section>
 
     <!-- Generate / Listen / Download (Free Voice Over skin) -->
-    <section class="card preview-card" aria-labelledby="preview-heading">
+    <section data-tab="listen" class="card preview-card" aria-labelledby="preview-heading">
       <h2 id="preview-heading" class="card-title">
         <span data-i18n="gen_title">GENERATE, LISTEN &amp; DOWNLOAD</span> — <span data-i18n="gen_title_ur">آواز بنائیں، سنیں اور ڈاؤن لوڈ کریں</span>
       </h2>
@@ -361,7 +363,7 @@
     </section>
 
     <!-- Voice cloning — Premium (locked UI, Free Voice Over skin) -->
-    <section class="card clone-card" aria-labelledby="clone-heading">
+    <section data-tab="voices" class="card clone-card" aria-labelledby="clone-heading">
       <h2 id="clone-heading" class="card-title">
         <span data-i18n="clone_title">VOICE CLONING</span>
         <span class="pill gold" data-i18n="pill_premium">★ PREMIUM</span>
@@ -407,7 +409,7 @@
     </section>
 
     <!-- Engine guide (Free Voice Over skin) -->
-    <section class="card guide-card" aria-labelledby="guide-heading">
+    <section data-tab="save" class="card guide-card" aria-labelledby="guide-heading">
       <h2 id="guide-heading" class="card-title" data-i18n="guide_title">KAUN SA ENGINE KAB ISTEMAL KAREN?</h2>
       <div class="slider-card">
         <h4 data-i18n="guide_ur_h">Urdu / Hindi / Pashto / Bengali</h4>
@@ -428,7 +430,7 @@
     </section>
 
     <!-- Export + project -->
-    <section class="card export-card" aria-labelledby="export-heading">
+    <section data-tab="save" class="card export-card" aria-labelledby="export-heading">
       <h2 id="export-heading" class="card-title" data-i18n="export_title">Export</h2>
 
       <div class="btn-group">
@@ -474,6 +476,28 @@
 
   </main>
 
+  <!-- Mobile / app: quick action + bottom tab bar (hidden on wide screens) -->
+  <div class="quick-cta" id="quickCta">
+    <button type="button" class="btn btn-big" id="btnQuickGen">
+      <span aria-hidden="true">&#127908;</span>
+      <span data-i18n="cta_generate">Awaz banayein aur sunein</span>
+    </button>
+  </div>
+  <nav class="tabbar" id="tabbar" data-i18n-aria="aria_tabs" aria-label="Sections">
+    <button type="button" class="tab" data-go="write" aria-current="page">
+      <span class="tab-ico" aria-hidden="true">&#9997;&#65039;</span><span data-i18n="tab_write">Likho</span>
+    </button>
+    <button type="button" class="tab" data-go="voices">
+      <span class="tab-ico" aria-hidden="true">&#127917;</span><span data-i18n="tab_voices">Awazen</span>
+    </button>
+    <button type="button" class="tab" data-go="listen">
+      <span class="tab-ico" aria-hidden="true">&#9654;&#65039;</span><span data-i18n="tab_listen">Suno</span>
+    </button>
+    <button type="button" class="tab" data-go="save">
+      <span class="tab-ico" aria-hidden="true">&#11015;&#65039;</span><span data-i18n="tab_save">Save</span>
+    </button>
+  </nav>
+
   <!-- ============ FOOTER ============ -->
   <footer class="footer">
     <p class="footer-ur" data-i18n="footer_ur">تمام کریکٹر آوازیں بالکل مفت ہیں — وائس کلوننگ پریمیم فیچر ہے</p>
@@ -485,6 +509,8 @@
   <!-- Module scripts — strict load order per SPEC §3. Missing modules must not
        break parsing; app.js feature-detects each global before wiring it. -->
   <script src="js/i18n.js"></script>
+  <!-- Android app bridge: no-op on the website. -->
+  <script src="js/native.js"></script>
   <!-- Gradio client for the Chatterbox human-like voice engine (keyless, free). -->
   <!-- @gradio/client ships as an ES module: load it as a module and expose it
        on window so tts.js (classic script) can use it. Version pinned. -->
@@ -497,5 +523,6 @@
   <script src="js/avatar.js"></script>
   <script src="js/exporter.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/tabs.js"></script>
 </body>
 </html>
