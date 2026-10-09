@@ -71,6 +71,10 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'          // WebViewAssetLoader, WebViewClientCompat
     implementation 'androidx.appcompat:appcompat:1.7.0'     // AppCompatActivity, WindowCompat (edge-to-edge)
     implementation 'androidx.core:core-splashscreen:1.0.1'  // Android 12+ SplashScreen backport (values-v31 theme)
+    // EncryptedSharedPreferences for the JSF Labs API key + Voice ID.
+    // 1.1.0-alpha06 is the current androidx.security release line recommended
+    // for new EncryptedSharedPreferences/MasterKey usage (minSdk 26 ✓).
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     // Crashlytics SDK only — no google-services plugin, no google-services.json.
     // CrashReporter.init() probes for a configured FirebaseApp and silently
     // disables reporting when it is absent.

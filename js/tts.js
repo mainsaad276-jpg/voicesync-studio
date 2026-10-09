@@ -21,6 +21,11 @@
  *                In Node (no CORS) the fetch/byte path is kept for testing.)
  *       webspeech:{audioBuffer:null, blob:null, url:null, duration, engine:'webspeech', utterance}
  *       chatterbox:{audioBuffer, blob(WAV, audio/wav), url, duration, engine:'chatterbox'}
+ *       jsflabs: {audioBuffer, blob(WAV, audio/wav), url, duration, engine:'jsflabs'}
+ *                (Android app only: window.VoiceSyncBridge.jsfSpeak does the
+ *                TTS natively with the in-app API key — the web never sees
+ *                the key. Explicit-selection only: NOT in the automatic
+ *                fallback chain, it spends paid credits.)
  *     Failure: {error, errors:[{engine, error}]} (M11); mixed-script input
  *       adds {mixedScript:true, note} to successful results (M22).
  *   TTS.cancel(runId)              -> void  (no arg = cancel all runs)
@@ -469,6 +474,21 @@
         });
       }
     })();
+    // JSF Labs Studio Voice — ONLY inside the Android app. The synthesis is
+    // done native-side (the API key lives in the app and never reaches this
+    // web code), so the voice entry is bridge-gated: on the public website
+    // (no bridge) no jsflabs voice ever appears in the picker.
+    (function () {
+      if (typeof window === 'undefined') return;
+      if (!(window.VoiceSyncBridge && typeof window.VoiceSyncBridge.jsfSpeak === 'function')) return;
+      out.push({
+        id: 'jsflabs:default',
+        name: 'JSF Labs Studio Voice (in-app)',
+        lang: lang || 'en',
+        gender: '',
+        engine: 'jsflabs'
+      });
+    })();
     return out;
   }
 
@@ -799,6 +819,9 @@
 
     // Engine order: the explicitly chosen voice's engine first, then the rest
     // (M16: chatterbox joins the automatic fallback, after webspeech).
+    // 'jsflabs' is DELIBERATELY absent from the automatic fallback list —
+    // it spends the user's paid JSF Labs credits, so it may run ONLY when
+    // the user explicitly selects the JSF Labs voice. Never auto-add it.
     var order = [preferredEngine];
     ['edge', 'google', 'webspeech', 'chatterbox'].forEach(function (e) {
       if (order.indexOf(e) === -1) order.push(e);
@@ -899,6 +922,7 @@
   function _chunkLimitForEngine(engine) {
     if (engine === 'google') return GOOGLE_CHUNK_LIMIT;
     if (engine === 'chatterbox') return CHATTERBOX_CHUNK;
+    if (engine === 'jsflabs') return JSF_CHUNK_LIMIT; // single chunk per run
     return EDGE_CHUNK_LIMIT; // edge; webspeech and the Google browser path handle whole text in one shot
   }
 
@@ -1089,7 +1113,80 @@
       return _chatterboxSynthesize(text, cblang, run, opts);
     }
 
+    if (engine === 'jsflabs') {
+      return _jsfLabsSynthesize(text, voice, run, opts);
+    }
+
     return Promise.reject(new Error('unknown engine: ' + engine));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Engine 5: JSF Labs — native bridge (Android app only)               */
+  /* The API key lives in the Android app (in-app settings) and NEVER    */
+  /* reaches this web code: window.VoiceSyncBridge.jsfSpeak() does the   */
+  /* HTTP call natively and returns the WAV bytes as base64. The bridge  */
+  /* is synchronous, so the call is wrapped in a Promise (try/catch) to  */
+  /* keep the engine contract (resolve = full SPEC result, reject = try  */
+  /* next engine).                                                       */
+  /* ------------------------------------------------------------------ */
+  var JSF_CHUNK_LIMIT = 50000;
+
+  function _jsfBridge() {
+    try {
+      if (typeof window !== 'undefined' &&
+          window.VoiceSyncBridge &&
+          typeof window.VoiceSyncBridge.jsfSpeak === 'function') {
+        return window.VoiceSyncBridge;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function _jsfLabsSynthesize(text, voice, run, opts) {
+    var bridge = _jsfBridge();
+    if (!bridge) return Promise.reject(new Error('not_configured'));
+    if (run && run.cancelled) return Promise.reject(new Error('cancelled'));
+    var vid = (voice && voice.engine === 'jsflabs' && voice.id)
+      ? String(voice.id).slice('jsflabs:'.length) : 'default';
+    var speed = (opts && typeof opts.speed === 'number') ? opts.speed : 1.0;
+    var raw;
+    try {
+      // The bridge call is synchronous — wrap it so async errors reject and
+      // the fallback chain can try the next engine.
+      raw = bridge.jsfSpeak(String(text), vid, speed);
+    } catch (e) {
+      return Promise.reject(new Error('not_configured'));
+    }
+    var res;
+    try {
+      res = JSON.parse(raw);
+    } catch (e) {
+      return Promise.reject(new Error('bad_response'));
+    }
+    if (!res || res.ok !== true) {
+      var code = String((res && res.error) || 'bad_response');
+      var err = new Error(code);
+      err.code = code; // 'not_configured' | 'rate_limited_retry_in_Ns' | 'http_...' | 'network_error' | 'bad_response'
+      return Promise.reject(err);
+    }
+    if (!res.base64) return Promise.reject(new Error('bad_response'));
+    var bytes;
+    try {
+      // base64 -> bytes -> Blob('audio/wav'), mirroring the chatterbox WAV
+      // path below (_finishWavResult builds audioBuffer/blob/url/duration).
+      var bin = (typeof atob !== 'undefined') ? atob(res.base64) : null;
+      if (bin === null) return Promise.reject(new Error('bad_response'));
+      bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    } catch (e) {
+      return Promise.reject(new Error('bad_response'));
+    }
+    if (run && run.cancelled) return Promise.reject(new Error('cancelled'));
+    _reportProgress(opts, 1, 1); // single-chunk engine
+    // JSF Labs returns PCM WAV — reuse the chatterbox WAV result builder for
+    // an identical SPEC result shape: {audioBuffer, blob, url, duration,
+    // engine:'jsflabs'}.
+    return _finishWavResult(bytes, text, 'jsflabs', run);
   }
 
   /* ------------------------------------------------------------------ */

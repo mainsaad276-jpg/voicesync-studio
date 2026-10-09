@@ -40,6 +40,12 @@ Shipped beyond the v1 core (all in `index.html` + `js/app.js`, user-verified 202
 13. **Chatterbox engine** — human-like voices + zero-shot voice cloning via
     ResembleAI's free keyless Hugging Face Space (`@gradio/client`,
     `engine:'chatterbox'` result; beta, no Urdu — maps ur→hi).
+13b. **JSF Labs engine** — studio-grade TTS via the user's own JSF Labs API key
+    (`engine:'jsflabs'` result). Android-app only: the key + voice ID are entered
+    in the native app settings and stored in EncryptedSharedPreferences — they
+    NEVER appear in web code, git, or logs. Web side exposes the engine only when
+    `window.VoiceSyncBridge.jsfSpeak` exists; explicit selection only (never in
+    the automatic fallback chain, so user credits are never spent silently).
 14. **Premium voice-cloning UI** (locked) — `#btnCloneSample`, `#btnClonePremium`,
     `#cloneName`, `#cloneFile`/`#cloneFileName`; payment-gated.
 15. **Engine guide cards** ("KAUN SA ENGINE KAB ISTEMAL KAREN?", `#guide-heading`)
@@ -79,7 +85,7 @@ voicesync-studio/
 
 ### TTS (js/tts.js — Usman)
 ```js
-TTS.getVoices(lang) -> Promise<[{id, name, lang, gender, engine}]>  // engine: 'edge'|'google'|'webspeech'|'chatterbox'; param lang: 'ur'|'en' (match voice.lang prefix, e.g. 'ur-PK')
+TTS.getVoices(lang) -> Promise<[{id, name, lang, gender, engine}]>  // engine: 'edge'|'google'|'webspeech'|'chatterbox'|'jsflabs'; param lang: 'ur'|'en' (match voice.lang prefix, e.g. 'ur-PK')
 TTS.synthesize(text, voiceId) -> Promise<Result | {error: string}>
 TTS.setReferenceAudio(blob)   // optional clone reference (mic recording) for the chatterbox engine
 TTS.cancel()   // abort in-flight request AND speechSynthesis
@@ -88,6 +94,7 @@ TTS.cancel()   // abort in-flight request AND speechSynthesis
 - `Result` (element path, engine `google`): `{audioBuffer: null, blob: null, url: string, urls: string[], duration: number, engine: 'google'}`. translate_tts sends no CORS headers (API.md §3), so JS cannot read the MP3 bytes — playback goes through `<audio>` elements (one per ≤200-char chunk URL in `urls`); app.js drives the mouth from `LipSync.makeTalkingCues(duration)` so there is never a dead mouth. MP3 export downloads straight from `url`; WAV/video export are gated with a message (no bytes available).
 - `Result` (offline path, engine `webspeech`): `{audioBuffer: null, blob: null, url: null, duration: number /* estimate */, engine: 'webspeech', utterance: SpeechSynthesisUtterance}`. No audio data exists on this path — app.js plays via `speechSynthesis`, animates the mouth from synthetic cues, and disables audio/video export with a message.
 - `Result` (human-like path, engine `chatterbox`): `{audioBuffer: AudioBuffer, blob: Blob, url: string, duration: number, engine: 'chatterbox'}`. Generated via ResembleAI's free keyless Hugging Face Space (`@gradio/client`), ≤250-char chunks, WAV bytes decoded into `audioBuffer`; the mic recording (when present, via `TTS.setReferenceAudio`) is the zero-shot clone reference. Fixed (C1, 2026-10-08): `blob` now carries honest `audio/wav` via `_finishWavResult` — exporters key off `blob.type` via `audioExtForType`.
+- `Result` (JSF Labs path, engine `jsflabs`): `{audioBuffer: AudioBuffer, blob: Blob /* WAV */, url: string, duration: number, engine: 'jsflabs'}`. Android-app only: the native `VoiceSyncBridge.jsfSpeak(text, voiceId, speed)` performs the authenticated `POST https://www.jsflabs.io/api/v1/text-to-speech` (key from EncryptedSharedPreferences, never in web code) and returns base64 WAV; tts.js decodes it into `audioBuffer` exactly like the chatterbox path. Single 50k-char chunk. Explicit selection only — never in the automatic fallback chain.
 - `Result` (mic path, engine `mic`): `{audioBuffer: AudioBuffer|null, blob: Blob, url: string, duration: number, engine: 'mic'}`. Produced by app.js `Record My Voice` (MediaRecorder) — flows through the same playback/lip-sync/export pipeline as TTS results; export uses the WAV route (`exportWav`/`encodeWAV`), never the `audio/mpeg` label.
 - `Result` (dialogue path, engine `dialogue`): `{audioBuffer: AudioBuffer, blob: Blob /* WAV */, url: string, duration: number, engine: 'dialogue'}`. app.js-side: `1:`/`2:`-prefixed segments synthesized per speaker with their own voice, resampled and merged into one buffer; full playback/lip-sync/export support.
 - Never rejects: every failure resolves to `{error}` with a human-readable message; app.js shows it.

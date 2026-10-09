@@ -110,6 +110,11 @@
     useWavForMic: 'For your recording use Download WAV (MP3 encoding is not available for mic audio).',
     chatterboxWorking: 'Making the human-like voice… (free shared server, may take a minute)',
     chatterboxBusy: 'Human-like voice server is busy right now — tap Play for the device voice, or try Chatterbox again later.',
+    // JSF Labs (native bridge, Android app only). The key is configured
+    // in-app; these messages never carry key material.
+    jsf_engine_name: 'JSF Labs',
+    jsfNotConfigured: 'JSF Labs is not configured yet — tap Configure to add your API key in the app settings.',
+    jsfRateLimited: 'JSF Labs is rate-limited — please wait {n}s and try again.',
     recordSaved: 'Recording saved to your device — tap Play to hear it.',
     btn_dictate: 'Voice to Text',
     btn_stop_dictate: 'Stop Listening',
@@ -258,7 +263,8 @@
     if (!r || !r.engine) { badge.hidden = true; return; }
     var engineNames = {
       edge: 'Edge Neural', google: 'Google', webspeech: 'Device voice',
-      chatterbox: 'Chatterbox', dialogue: 'Dialogue', mic: 'Recording'
+      chatterbox: 'Chatterbox', dialogue: 'Dialogue', mic: 'Recording',
+      jsflabs: t('jsf_engine_name')
     };
     var label = r.provider === 'azure' ? 'Studio Voice (Azure)' : (engineNames[r.engine] || r.engine);
     var isFallback = !!engNote;
@@ -273,6 +279,91 @@
     if (!el) return;
     el.textContent = msg || '';
     el.setAttribute('data-kind', isError ? 'error' : 'info');
+  }
+
+  // JSF Labs (native bridge): detect a bridge-side error kind — either as the
+  // terminal error string or among synthesize()'s per-engine errors list —
+  // and offer the in-app "Configure" button (opens the key settings inside
+  // the Android app). Returns 'not_configured', 'rate_limited_retry_in_Ns',
+  // or null.
+  function jsfErrorKind(result, errStr) {
+    var s = String(errStr == null ? '' : errStr);
+    if (s === 'not_configured') return 'not_configured';
+    if (s.indexOf('rate_limited_retry_in_') === 0) return s;
+    var errs = (result && result.errors) || [];
+    for (var i = 0; i < errs.length; i++) {
+      var e = errs[i] || {};
+      if (e.engine !== 'jsflabs') continue;
+      var m = String(e.error || '');
+      if (m === 'not_configured') return 'not_configured';
+      if (m.indexOf('rate_limited_retry_in_') === 0) return m;
+    }
+    return null;
+  }
+
+  // Turn a 'rate_limited_retry_in_Ns' code into a human message.
+  function jsfRateMsg(code) {
+    var n = String(code).replace(/^rate_limited_retry_in_/, '').replace(/s$/, '');
+    return t('jsfRateLimited').replace('{n}', n);
+  }
+
+  // Reveal/hide the "⚙️ Configure JSF Labs" button next to the status line.
+  // The button opens the in-app JSF Labs key settings via the native bridge.
+  function showJsfConfigure(show) {
+    var b = $('jsfConfigureBtn');
+    if (!b) return;
+    b.hidden = !show;
+    if (show && !b._jsfWired) {
+      b._jsfWired = true;
+      b.addEventListener('click', function () {
+        try {
+          var br = window.VoiceSyncBridge;
+          if (br && typeof br.openJsfSettings === 'function') br.openJsfSettings();
+        } catch (e) {}
+      });
+    }
+  }
+
+  // Preview-path JSF Labs errors: the key/rate-limit case gets its own user
+  // message + in-app Configure button. Returns true when handled (the caller
+  // returns); hides a stale Configure button for non-JSF errors.
+  function handleJsfPreviewError(r) {
+    var perr = (r && r.error) || '';
+    var jpk = jsfErrorKind(r, perr);
+    if (jpk === 'not_configured') { setMsg(t('jsfNotConfigured'), true); showJsfConfigure(true); return true; }
+    if (jpk && jpk.indexOf('rate_limited_retry_in_') === 0) { setMsg(jsfRateMsg(jpk), true); showJsfConfigure(true); return true; }
+    showJsfConfigure(false);
+    return false;
+  }
+
+  // JSF Labs engine card: active inside the Android app (the bridge exposes
+  // openJsfSettings) with a "⚙️ Configure" button; on the public website the
+  // card shows disabled with an "Available in the Android app" note.
+  function initJsfLabsCard() {
+    var card = $('jsfLabsCard'), note = $('jsfAppOnlyNote'), btn = $('jsfCardConfigureBtn');
+    if (!card) return;
+    var hasBridge = false;
+    try {
+      hasBridge = !!(window.VoiceSyncBridge &&
+        typeof window.VoiceSyncBridge.openJsfSettings === 'function');
+    } catch (e) { hasBridge = false; }
+    if (hasBridge) {
+      card.style.opacity = '';
+      if (note) note.hidden = true;
+      if (btn) {
+        btn.hidden = false;
+        if (!btn._jsfWired) {
+          btn._jsfWired = true;
+          btn.addEventListener('click', function () {
+            try { window.VoiceSyncBridge.openJsfSettings(); } catch (e) {}
+          });
+        }
+      }
+    } else {
+      card.style.opacity = '0.55'; // disabled look (no CSS file change)
+      if (note) note.hidden = false;
+      if (btn) btn.hidden = true;
+    }
   }
 
   /* ---------------- module status line ---------------- */
@@ -790,6 +881,7 @@
       if (!r || r.error) {
         state.previewing = false;
         if (r && isCancelled(r.error)) return; // superseded — clean abort
+        if (handleJsfPreviewError(r)) return;
         setMsg(t('ttsFailed') + ': ' + ((r && r.error) || ''), true);
         return;
       }
@@ -1970,6 +2062,7 @@
     state.generating = true; // M17/C8: from here the run owns the voice
     setBusy(true);
     bridgeKeepAwake(true); // wrapper: keep the screen on during generation
+    showJsfConfigure(false); // hide any stale JSF Labs "Configure" button
     ensureLipSync(); // B7: first Generate that needs lip-sync loads Rhubarb here
     // C4: a fire-and-forget loadVoices() may still be in flight — await it
     // before reading state.voiceId (a stale one resolves without writing).
@@ -2043,6 +2136,11 @@
       var rerr = (result && result.error) || 'unknown';
       if (isCancelled(rerr)) { state.generating = false; bridgeKeepAwake(false); setMsg(t('stopped')); return; } // M12: clean stop, not "failed: cancelled"
       state.generating = false; bridgeKeepAwake(false);
+      // JSF Labs bridge errors get a user message + in-app Configure button
+      // (the API key is configured in the Android app, never on the web).
+      var jsk = jsfErrorKind(result, rerr);
+      if (jsk === 'not_configured') { setMsg(t('jsfNotConfigured'), true); showJsfConfigure(true); return; }
+      if (jsk && jsk.indexOf('rate_limited_retry_in_') === 0) { setMsg(jsfRateMsg(jsk), true); showJsfConfigure(true); return; }
       setMsg(t('ttsFailed') + ': ' + rerr, true);
       return;
     }
@@ -2108,6 +2206,17 @@
     } else {
       setMsg(t('noAudio'), true);
     }
+    // JSF Labs in-app setup prompt: if the JSF voice was selected but failed
+    // with not_configured / rate-limited and another engine spoke instead,
+    // surface the message + Configure button (opens the in-app settings).
+    try {
+      if (state.voiceId && state.voiceId.indexOf('jsflabs:') === 0 &&
+          result.engine !== 'jsflabs') {
+        var jsk2 = jsfErrorKind(result, null);
+        if (jsk2 === 'not_configured') { setMsg(t('jsfNotConfigured'), true); showJsfConfigure(true); }
+        else if (jsk2 && jsk2.indexOf('rate_limited_retry_in_') === 0) { setMsg(jsfRateMsg(jsk2), true); showJsfConfigure(true); }
+      }
+    } catch (e) {}
     state.generating = false; bridgeKeepAwake(false); // M17/C8: run fully done — voice controls live again
   }
 
@@ -3022,6 +3131,7 @@
     applyI18n();
     initMicModal();
     applyWrapperVisibility();
+    initJsfLabsCard(); // JSF Labs engine card: bridge-gated configure button
     // B7: do NOT probe the lip-sync engine at boot — schedule it for idle
     // time instead (it also self-probes on the first Generate below).
     if (typeof window.requestIdleCallback === 'function') {

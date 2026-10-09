@@ -796,6 +796,42 @@ async function main() {
   t('wake_gen_on', (appjs.match(/bridgeKeepAwake\(true\)/g) || []).length >= 3);
   t('wake_gen_off', (appjs.match(/bridgeKeepAwake\(false\)/g) || []).length >= 8);
 
+  /* JSF Labs engine (web half) — security + wiring assertions */
+  var jsfAllWeb = ['js/tts.js', 'js/app.js', 'js/i18n.js', 'js/avatar.js',
+    'js/exporter.js', 'js/lipsync.js', 'js/native.js', 'js/tabs.js', 'index.html']
+    .map(function (f) { return fs.readFileSync(P + f, 'utf8'); }).join('\n');
+  // (a) HARD SECURITY RULE: no "x-api-key" string anywhere in web code.
+  t('jsf_no_api_key_header', jsfAllWeb.indexOf('x-api-key') === -1);
+  // (b) no jsf_ key literal anywhere in web code.
+  t('jsf_no_key_literal', !/jsf_[A-Za-z0-9]{16,}/.test(jsfAllWeb));
+  // (c) the jsflabs voice entry exists AND is bridge-gated.
+  t('jsf_voice_entry', ttsjs.indexOf("id: 'jsflabs:default'") !== -1);
+  t('jsf_voice_gated', /window\.VoiceSyncBridge && typeof window\.VoiceSyncBridge\.jsfSpeak === 'function'/.test(ttsjs));
+  // (d) jsflabs is NOT in the automatic fallback order (paid credits — explicit selection only).
+  t('jsf_not_in_fallback', (function () {
+    var m = ttsjs.match(/var order = \[preferredEngine\];[\s\S]*?\['edge', 'google', 'webspeech', 'chatterbox'\]/);
+    return !!m && m[0].indexOf('jsflabs') === -1;
+  })());
+  // (e) new i18n keys exist in en AND ur (the M39 FALLBACK ⊆ en ⊆ ur gate runs separately).
+  var jsfKeys = ['eng_jsf_h', 'eng_jsf_tag', 'eng_jsf_d', 'eng_jsf_configure',
+    'eng_jsf_app_only', 'jsf_engine_name', 'jsfNotConfigured', 'jsfRateLimited'];
+  jsfKeys.forEach(function (k) {
+    t('jsf_i18n_en_' + k, !!enKeys[k]);
+    t('jsf_i18n_ur_' + k, !!urKeys[k]);
+  });
+  // engine plumbing
+  t('jsf_runengine_branch', ttsjs.indexOf("if (engine === 'jsflabs')") !== -1);
+  t('jsf_chunk_limit', ttsjs.indexOf("if (engine === 'jsflabs') return JSF_CHUNK_LIMIT") !== -1);
+  t('jsf_bridge_call', ttsjs.indexOf('bridge.jsfSpeak(') !== -1);
+  t('jsf_wav_result_shape', ttsjs.indexOf("_finishWavResult(bytes, text, 'jsflabs', run)") !== -1);
+  t('jsf_badge', appjs.indexOf("jsflabs: t('jsf_engine_name')") !== -1);
+  t('jsf_card_html', html.indexOf('id="jsfLabsCard"') !== -1 &&
+    html.indexOf('data-i18n="eng_jsf_h"') !== -1 &&
+    html.indexOf('id="jsfConfigureBtn"') !== -1);
+  t('jsf_card_configure_wired', (appjs.match(/openJsfSettings/g) || []).length >= 3);
+  t('jsf_notconfigured_handled', appjs.indexOf("t('jsfNotConfigured')") !== -1 &&
+    appjs.indexOf("t('jsfRateLimited')") !== -1);
+
   console.log('\n==== 1000-TEST QA RESULT ====');
   console.log('PASSED: ' + pass + ' / ' + n);
   if (fails.length) { console.log('FAILED (' + fails.length + '):'); fails.forEach(function (f) { console.log('  ' + f); }); }

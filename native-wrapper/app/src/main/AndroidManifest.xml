@@ -38,6 +38,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Native JSF Labs API key / Voice ID settings screen, opened from the
+             web app via VoiceSyncBridge.openJsfSettings(). Internal only. -->
+        <activity
+            android:name=".JsfSettingsActivity"
+            android:exported="false"
+            android:label="JSF Labs Settings"
+            android:theme="@style/Theme.VoiceSync" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
