@@ -1,4 +1,4 @@
-// VoiceSync Studio — Pro tier tests (js/pro.js). Run: node qa/qa-pro.js
+// VoxNova — Pro tier tests (js/pro.js). Run: node qa/qa-pro.js
 var path = require('path');
 var n = 0, fails = [];
 function t(name, cond) { n++; if (!cond) fails.push(n + '. ' + name); }

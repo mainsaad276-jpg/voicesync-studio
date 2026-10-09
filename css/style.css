@@ -1,5 +1,5 @@
 /* ============================================================
-   VoiceSync Studio — dark studio theme (Sana)
+   VoxNova — dark studio theme (Sana)
    Vanilla CSS. Mobile-first; studio grid for wide screens.
    ============================================================ */
 
@@ -632,7 +632,7 @@ body.tabbed .preview-card > .btn-big { width: 100%; }
 .voice-row { display: flex; gap: 8px; }
 .voice-row .select { flex: 1 1 auto; min-width: 0; }
 .voice-row .btn { flex: 0 0 auto; }
-/* VoiceSync Studio — Play Store round (Part B, Team 1)
+/* VoxNova — Play Store round (Part B, Team 1)
  * B1: mic pre-permission disclosure modal.
  * B2: voice-cloning consent checkbox row.
  * B11: touch-action rules so sliders / timeline / text inputs behave on touch

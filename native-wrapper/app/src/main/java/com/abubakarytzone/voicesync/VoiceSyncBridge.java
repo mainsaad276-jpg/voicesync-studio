@@ -29,7 +29,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
- * JavaScript bridge exposed to the VoiceSync Studio web app as
+ * JavaScript bridge exposed to the VoxNova web app as
  * {@code window.VoiceSyncBridge}.
  *
  * <p>The web team implements the JS half: it feature-detects

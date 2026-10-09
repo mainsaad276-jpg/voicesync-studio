@@ -1,4 +1,4 @@
-# VoiceSync Studio — QA Checklist (Nadia, QA & Testing Lead)
+# VoxNova — QA Checklist (Nadia, QA & Testing Lead)
 
 **Rule:** no item passes without evidence. Evidence = command output, file read, or screenshot/video of a real run. "It should work" is not evidence.
 

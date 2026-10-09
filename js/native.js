@@ -1,5 +1,5 @@
 /*
- * VoiceSync Studio: Android native bridge (Capacitor).
+ * VoxNova: Android native bridge (Capacitor).
  *
  * On the website this file does nothing. Inside the Android app it swaps the
  * browser APIs that Android's WebView lacks for native plugins, so the rest of
@@ -105,7 +105,7 @@
 
   function shareUris(uris, title) {
     if (!Share) return Promise.reject(new Error('Share unavailable'));
-    return Share.share({ title: title || 'VoiceSync Studio', files: uris, dialogTitle: title || 'VoiceSync Studio' })
+    return Share.share({ title: title || 'VoxNova', files: uris, dialogTitle: title || 'VoxNova' })
       .catch(function (e) {
         // Closing the share sheet is not an error: report it like the web API does.
         if (e && /cancel/i.test(e.message || String(e))) {

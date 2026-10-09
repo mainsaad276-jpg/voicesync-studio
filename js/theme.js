@@ -1,5 +1,5 @@
 /*
- * VoiceSync Studio: theme picker. Loaded in <head> so the saved theme is
+ * VoxNova: theme picker. Loaded in <head> so the saved theme is
  * applied before the page paints (no flash). Adds a 🎨 button to the top bar;
  * the choice is saved on this device and can be changed any time.
  *   window.VSTheme.set('viral') / .get() / .list

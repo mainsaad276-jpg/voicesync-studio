@@ -1,4 +1,4 @@
-# VoiceSync Studio — Bug Log (Nadia, QA Lead)
+# VoxNova — Bug Log (Nadia, QA Lead)
 
 Severity: **CRITICAL** = release blocker, software cannot function | **MAJOR** = SPEC §5 acceptance item at risk | **MINOR** = quality/polish | **INFO** = watch-item.
 

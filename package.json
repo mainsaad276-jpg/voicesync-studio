@@ -2,7 +2,7 @@
   "name": "voicesync-studio",
   "private": true,
   "version": "1.0.0",
-  "description": "VoiceSync Studio: free voiceover + lip-sync (web + Android).",
+  "description": "VoxNova: free voiceover + lip-sync (web + Android).",
   "scripts": {
     "build:www": "node scripts/build-www.js",
     "qa": "bash qa/run-qa.sh"

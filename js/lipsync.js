@@ -1,4 +1,4 @@
-/* VoiceSync Studio — js/lipsync.js
+/* VoxNova — js/lipsync.js
  * Owner: Hina (Lip-Sync Engine Developer)
  *
  * Contract (SPEC.md §3):

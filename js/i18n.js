@@ -1,5 +1,5 @@
 /* ============================================================
-   VoiceSync Studio — i18n (Sana)
+   VoxNova — i18n (Sana)
    Contract (SPEC §3):
      I18N.strings = { en: {...}, ur: {...} }
      I18N.apply(lang)   // sets every [data-i18n] / [data-i18n-ph] element
@@ -12,7 +12,7 @@
 
   var strings = {
     en: {
-      app_title: 'VoiceSync Studio',
+      app_title: 'VoxNova',
       app_tagline: 'Free Voiceover + Lip-Sync',
       chars: 'chars',
       text_placeholder: 'Type or paste your script here...',
@@ -281,7 +281,7 @@
       char_gender_ur: { 'Male': 'مرد', 'Female': 'عورت' }
     },
     ur: {
-      app_title: 'وائس سنک اسٹوڈیو',
+      app_title: 'VoxNova',
       app_tagline: 'مفت وائس اوور + لپ سنک',
       text_placeholder: 'اپنا اسکرپٹ یہاں لکھیں یا پیسٹ کریں...',
       chars: 'حروف',

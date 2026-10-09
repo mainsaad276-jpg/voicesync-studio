@@ -1,5 +1,5 @@
 /*
- * VoiceSync Studio: mobile / Android tab navigation.
+ * VoxNova: mobile / Android tab navigation.
  * On narrow screens the studio shows one step at a time:
  *   Write -> Voices -> Listen -> Save
  * On wide screens (desktop) every section stays visible and this file only

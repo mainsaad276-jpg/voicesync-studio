@@ -1,5 +1,5 @@
 /*
- * VoiceSync Studio: Pro plans, activation codes and free-tier framework.
+ * VoxNova: Pro plans, activation codes and free-tier framework.
  *
  * What is paid today: HD voices from JSF Labs (your clones). They spend real
  * money per character, so they need an activation code with a character
@@ -93,7 +93,7 @@
       step2: 'Send the payment screenshot on WhatsApp.',
       step3: 'You get an activation code. Enter it below — done!',
       whatsapp: 'Buy on WhatsApp',
-      waMsg: 'Assalam o Alaikum! I want the VoiceSync Studio {plan} plan ({chars} characters). First month: {currency} {price}.',
+      waMsg: 'Assalam o Alaikum! I want the VoxNova {plan} plan ({chars} characters). First month: {currency} {price}.',
       copy: 'Copy',
       copied: 'Copied',
       offers: 'Offers',
@@ -139,7 +139,7 @@
       step2: 'ادائیگی کا اسکرین شاٹ واٹس ایپ پر بھیجیں۔',
       step3: 'آپ کو ایکٹیویشن کوڈ ملے گا۔ اسے نیچے لکھیں — بس!',
       whatsapp: 'واٹس ایپ پر خریدیں',
-      waMsg: 'Assalam o Alaikum! I want the VoiceSync Studio {plan} plan ({chars} characters). First month: {currency} {price}.',
+      waMsg: 'Assalam o Alaikum! I want the VoxNova {plan} plan ({chars} characters). First month: {currency} {price}.',
       copy: 'کاپی',
       copied: 'کاپی ہو گیا',
       offers: 'آفرز',
@@ -326,7 +326,7 @@
     if (!ctx || !shouldWatermark()) return;
     try {
       var size = Math.max(14, Math.round(w / 26));
-      var label = '🎙 Made with VoiceSync Studio';
+      var label = '🎙 Made with VoxNova';
       ctx.save();
       ctx.font = 'bold ' + size + 'px system-ui, sans-serif';
       ctx.textAlign = 'right';

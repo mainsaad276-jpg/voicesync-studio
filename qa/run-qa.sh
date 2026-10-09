@@ -1,5 +1,5 @@
 #!/bin/bash
-# VoiceSync Studio — automatic QA gate.
+# VoxNova — automatic QA gate.
 # Runs on every `git push` via the pre-push hook. Blocks the push if any check fails.
 cd "$(dirname "$0")/.."
 echo "=== VoiceSync QA: syntax ==="

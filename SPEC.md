@@ -1,4 +1,4 @@
-# VoiceSync Studio — Technical Spec (v1.1)
+# VoxNova — Technical Spec (v1.1)
 Free voiceover + lip-sync web software. Static site, zero build step, zero API keys, zero cost. Deployable to GitHub Pages as-is.
 
 > **v1.1 changelog (2026-10-08):** §1 lists the shipped feature set; §3 TTS contract

@@ -1,4 +1,4 @@
-# VoiceSync Studio
+# VoxNova
 
 **Free voiceover + lip-sync studio — 100% free, no API keys, no sign-up.**
 
@@ -73,7 +73,7 @@ Every push to `main` builds an Android app automatically (GitHub Actions →
 
 ## Team
 
-Built by the 10-person VoiceSync Studio team — duties in `TEAM.md`, tech spec
+Built by the 10-person VoxNova team — duties in `TEAM.md`, tech spec
 in `SPEC.md`:
 
 - **Daniyal** — Team Lead / Architect (`js/app.js`, integration)

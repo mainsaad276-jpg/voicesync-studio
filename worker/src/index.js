@@ -1,5 +1,5 @@
 /*
- * VoiceSync Studio: voice proxy (Cloudflare Worker).
+ * VoxNova: voice proxy (Cloudflare Worker).
  *
  * The app sends { text, voice } here; this Worker calls Azure AI Speech with
  * the secret key and returns MP3 audio. The Azure key never reaches the

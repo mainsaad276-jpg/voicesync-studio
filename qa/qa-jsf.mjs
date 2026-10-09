@@ -1,4 +1,4 @@
-// VoiceSync Studio — JSF Labs relay tests (worker/src/index.js + tts.js API).
+// VoxNova — JSF Labs relay tests (worker/src/index.js + tts.js API).
 // Run: node qa/qa-jsf.mjs   (JSF Labs is mocked; no network, no real key)
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);

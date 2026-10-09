@@ -1,4 +1,4 @@
-/* VoiceSync Studio — js/avatar.js (Kamran: Avatar & Animation Developer)
+/* VoxNova — js/avatar.js (Kamran: Avatar & Animation Developer)
  *
  * ORIGINAL character art (designed for this project, no copied assets):
  * "Presenter" — a friendly news-presenter style head-and-shoulders character.

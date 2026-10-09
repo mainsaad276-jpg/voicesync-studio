@@ -1,11 +1,11 @@
-# VoiceSync Studio — User Guide (English)
+# VoxNova — User Guide (English)
 
 Everything below is written against the real UI in `index.html`. Anything that
 needs the still-in-progress JavaScript is marked **(team working on it)**.
 
 ## The screen at a glance
 
-Top bar: **VoiceSync Studio** logo with the tagline **Free Voiceover + Lip-Sync**,
+Top bar: **VoxNova** logo with the tagline **Free Voiceover + Lip-Sync**,
 and a language-toggle button on the right showing **اردو** (switches the whole
 UI to Urdu).
 

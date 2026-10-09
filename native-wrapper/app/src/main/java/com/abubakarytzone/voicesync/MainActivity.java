@@ -37,7 +37,7 @@ import androidx.core.view.WindowCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 /**
- * Single-activity wrapper that loads the live VoiceSync Studio web app
+ * Single-activity wrapper that loads the live VoxNova web app
  * (https://mainsaad276-jpg.github.io/voicesync-studio/) in a WebView and
  * bridges the native capabilities the web side needs: microphone, file
  * picking, user-visible file saving, sharing, and audio-focus hygiene.

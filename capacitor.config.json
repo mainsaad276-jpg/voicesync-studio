@@ -1,6 +1,6 @@
 {
   "appId": "pk.voicesync.studio",
-  "appName": "VoiceSync Studio",
+  "appName": "VoxNova",
   "webDir": "www",
   "android": {
     "allowMixedContent": false,

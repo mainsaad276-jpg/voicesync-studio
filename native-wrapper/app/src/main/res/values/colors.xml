@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- VoiceSync Studio brand palette (from the live site's cream/dark-green skin). -->
+    <!-- VoxNova brand palette (from the live site's cream/dark-green skin). -->
     <color name="brand_green_dark">#1D5C4D</color>
     <color name="brand_green">#127925</color>
     <color name="cream">#FFFDF8</color>

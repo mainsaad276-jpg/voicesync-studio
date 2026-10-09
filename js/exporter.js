@@ -1,7 +1,7 @@
 /**
  * js/exporter.js — Faraz (Export & Storage Engineer)
  *
- * VoiceSync Studio export layer. Exposes exactly the SPEC.md contract:
+ * VoxNova export layer. Exposes exactly the SPEC.md contract:
  *
  *   Exporter.downloadAudio(blob, filename)
  *   Exporter.encodeWAV(audioBuffer) -> Blob            // RIFF-valid WAV

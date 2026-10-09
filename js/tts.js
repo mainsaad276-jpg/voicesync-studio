@@ -1,5 +1,5 @@
 /* ============================================================================
- * VoiceSync Studio — TTS module
+ * VoxNova — TTS module
  * Owner: Usman (TTS Engine Developer)
  *
  * Free text-to-speech with automatic fallback chain:

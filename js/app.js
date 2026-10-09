@@ -1,5 +1,5 @@
 /* ============================================================
- * VoiceSync Studio — js/app.js
+ * VoxNova — js/app.js
  * Owner: Daniyal (Team Lead / Architect)
  *
  * Defensive orchestrator. Feature-detects every teammate module
@@ -158,15 +158,15 @@
   // NOTE (Team 5 flag): Team 5's promised "exact verbatim text" file was not in
   // the repo — this text was written fresh by Team 1 (Part B) to be truthful.
   var DICTATION_PRIVACY_TEXT =
-    'Voice-to-Text (dictation) uses your browser\'s built-in speech recognition, which sends your spoken audio to Google\'s servers for transcription. It is NOT processed on-device, and it needs an internet connection. VoiceSync Studio itself does not record, store, or share your speech — the transcribed words go straight into your text box. / ' +
-    'وائس ٹو ٹیکسٹ (ڈکٹیشن) آپ کے براؤزر کی بلٹ اِن اسپیچ ریکگنیشن استعمال کرتا ہے جو آپ کی بولی ہوئی آواز گوگل کے سرورز پر ٹرانسکرپشن کے لیے بھیجتا ہے۔ یہ ڈیوائس پر پروسیس نہیں ہوتا اور انٹرنیٹ درکار ہے۔ VoiceSync Studio خود آپ کی آواز ریکارڈ، محفوظ یا شیئر نہیں کرتا — لکھے ہوئے الفاظ سیدھے آپ کے ٹیکسٹ باکس میں جاتے ہیں۔';
+    'Voice-to-Text (dictation) uses your browser\'s built-in speech recognition, which sends your spoken audio to Google\'s servers for transcription. It is NOT processed on-device, and it needs an internet connection. VoxNova itself does not record, store, or share your speech — the transcribed words go straight into your text box. / ' +
+    'وائس ٹو ٹیکسٹ (ڈکٹیشن) آپ کے براؤزر کی بلٹ اِن اسپیچ ریکگنیشن استعمال کرتا ہے جو آپ کی بولی ہوئی آواز گوگل کے سرورز پر ٹرانسکرپشن کے لیے بھیجتا ہے۔ یہ ڈیوائس پر پروسیس نہیں ہوتا اور انٹرنیٹ درکار ہے۔ VoxNova خود آپ کی آواز ریکارڈ، محفوظ یا شیئر نہیں کرتا — لکھے ہوئے الفاظ سیدھے آپ کے ٹیکسٹ باکس میں جاتے ہیں۔';
 
   // B1 (Team 5 flag: same note — verbatim text file was missing, written fresh):
   // mic pre-permission disclosure shown BEFORE any getUserMedia call.
   var MIC_MODAL_RECORD_TITLE = 'Microphone access / مائیک کی اجازت';
   var MIC_MODAL_RECORD_BODY =
-    'Tapping "Allow microphone" lets VoiceSync Studio use your microphone. Your recording is processed and kept ON YOUR DEVICE — nothing is uploaded. If you later use Chatterbox voice cloning, your recording is sent to a public Hugging Face Space so the AI can copy your voice style. / ' +
-    '"مائیک کی اجازت دیں" دبانے سے VoiceSync Studio آپ کا مائیک استعمال کرے گا۔ آپ کی ریکارڈنگ آپ کے ڈیوائس پر ہی پروسیس اور محفوظ رہتی ہے — کچھ بھی اپ لوڈ نہیں ہوتا۔ اگر آپ بعد میں Chatterbox وائس کلوننگ استعمال کریں تو آپ کی ریکارڈنگ ایک پبلک Hugging Face Space پر بھیجی جائے گی تاکہ AI آپ کی آواز کی نقل کر سکے۔';
+    'Tapping "Allow microphone" lets VoxNova use your microphone. Your recording is processed and kept ON YOUR DEVICE — nothing is uploaded. If you later use Chatterbox voice cloning, your recording is sent to a public Hugging Face Space so the AI can copy your voice style. / ' +
+    '"مائیک کی اجازت دیں" دبانے سے VoxNova آپ کا مائیک استعمال کرے گا۔ آپ کی ریکارڈنگ آپ کے ڈیوائس پر ہی پروسیس اور محفوظ رہتی ہے — کچھ بھی اپ لوڈ نہیں ہوتا۔ اگر آپ بعد میں Chatterbox وائس کلوننگ استعمال کریں تو آپ کی ریکارڈنگ ایک پبلک Hugging Face Space پر بھیجی جائے گی تاکہ AI آپ کی آواز کی نقل کر سکے۔';
   var MIC_MODAL_DICTATE_TITLE = 'Voice-to-Text / وائس ٹو ٹیکسٹ';
   var MIC_MODAL_ALLOW = 'Allow microphone / مائیک کی اجازت دیں';
   var MIC_MODAL_LATER = 'Not now / ابھی نہیں';
@@ -2991,13 +2991,13 @@
       var bridge = wrapperBridge();
       if (bridge && typeof bridge.shareFile === 'function') {
         try {
-          var shared = await bridgeShareFile(bridge, blob, shName, 'VoiceSync Studio voiceover');
+          var shared = await bridgeShareFile(bridge, blob, shName, 'VoxNova voiceover');
           if (shared) { setMsg(t('shared')); return; }
         } catch (e) { /* fall through to Web Share API below */ }
       }
       var file = new File([blob], shName, { type: blob.type || 'application/octet-stream' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'VoiceSync Studio' });
+        await navigator.share({ files: [file], title: 'VoxNova' });
         setMsg(t('shared'));
       } else {
         // Fallback: just download it.

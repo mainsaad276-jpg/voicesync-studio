@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "VoiceSync Studio"
+rootProject.name = "VoxNova"
 include ':app'

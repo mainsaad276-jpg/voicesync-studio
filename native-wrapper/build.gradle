@@ -1,4 +1,4 @@
-// Root build file for VoiceSync Studio Android wrapper.
+// Root build file for VoxNova Android wrapper.
 // AGP 8.5.2 is applied via the plugins DSL in app/build.gradle; the version is
 // declared there and resolved through pluginManagement in settings.gradle.
 // This root file intentionally stays minimal (no version catalog).

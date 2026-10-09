@@ -1,4 +1,4 @@
-# VoiceSync Studio — Free API Truth Table & Integration Spec
+# VoxNova — Free API Truth Table & Integration Spec
 **Owner:** Bilal (Free-API Research & Integration Specialist)
 **Status:** All endpoints live-tested 2026-10-08 (14:05 PKT / 09:05 UTC). Usman (TTS) and Hina (lip-sync) code against THIS document — not guesses.
 

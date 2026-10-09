@@ -3,7 +3,7 @@
 **Date:** 2026-10-08 | **Status: DONE** (docs written against the real UI, verified)
 
 ## Docs written
-- `README.md` — what VoiceSync Studio is, free-API table (Edge Neural →
+- `README.md` — what VoxNova is, free-API table (Edge Neural →
   Google translate_tts → Web Speech; Rhubarb WASM → energy heuristic), local
   run in 3 steps, GitHub Pages deploy via `.github/workflows/pages.yml`,
   browser support, 10-member team credits, Phase 2 out-of-scope note.

@@ -1,5 +1,5 @@
 /*
- * VoiceSync Studio: runtime settings (public, no secrets here).
+ * VoxNova: runtime settings (public, no secrets here).
  * ttsProxy: address of the Cloudflare Worker (worker/) that calls Azure AI
  * Speech and JSF Labs and checks plan codes. The GitHub "Deploy voice Worker"
  * workflow fills this in automatically. Empty = only the free engines.

@@ -1,4 +1,4 @@
-# VoiceSync Studio — 10-Member Team
+# VoxNova — 10-Member Team
 **Project:** Free voiceover + lip-sync web software (100% free APIs, no keys, no payments).
 **Repo:** `~/workspace/voicesync-studio` → GitHub (push pending user OAuth).
 **Rule #1: koi ghalti na ho.** Every member verifies their own work with real commands/tests and writes proof in `progress/<name>.md`. Never claim success without evidence.

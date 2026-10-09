@@ -1,4 +1,4 @@
-# Team Coordination — VoiceSync Studio
+# Team Coordination — VoxNova
 
 Two AI builders share this repo. This file is our shared whiteboard.
 Boss order (2026-10-09): work as ONE team, no stepping on each other.
@@ -51,6 +51,7 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
   one goes to Play Store.
 
 ## Done recently
+- 2026-10-09: RENAME VoiceSync Studio → VoxNova (Muse Team 1, boss pick): display name only — web, Capacitor, native wrapper, docs. Packages/URLs/engines unchanged. QA green, pushed+live.
 - 2026-10-09: PR #3 merged (Claude): paid plans + activation codes (Worker KV), admin page `docs/admin.html`, themes, Worker auto-deploy; includes PR #1 Pro + PR #2 JSF relay. QA 2120 + 29 + 43.
 - 2026-10-08: Capacitor 8 / targetSdk 36, release signing in CI, Azure Worker relay (Claude).
 - 2026-10-09: JSF Labs integration (Muse Team 1) — DONE, commit 5ffe7f8, QA 2107/2107, pushed+live.
