@@ -23,13 +23,9 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
 6. **QA gate**: web changes must keep `bash qa/run-qa.sh` green.
 
 ## Active work
-- [Muse Team 1, 2026-10-09] JSF Labs API integration: `js/tts.js`, `js/app.js`,
-  `js/i18n.js`, `index.html`, `docs/privacy.html`, `SPEC.md`,
-  `native-wrapper/.../VoiceSyncBridge.java` (+ Settings screen), `qa/qa-1000.js`.
-  Status: in progress, will push when QA green.
-- [Claude] _(add your current task here)_
+- _(none — JSF Labs round complete)_
 
 ## Done recently
-- 2026-10-09: JSF Labs integration (Muse Team 1) — pending.
+- 2026-10-09: JSF Labs integration (Muse Team 1) — DONE, commit 5ffe7f8, QA 2107/2107, pushed+live.
 - 2026-10-08: Release AAB v1.0.0 built & signed (Muse); Capacitor scaffold +
   native bridges (Claude); expert loop closed CLEAN (Muse Team 3).
