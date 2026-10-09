@@ -312,6 +312,7 @@
     run.cancelled = true;
     try { if (run.ws) { run.ws.close(); } } catch (e) {}
     run.ws = null;
+    try { if (run.jsfCtl) run.jsfCtl.abort(); } catch (e) {}
     _abortControllers(run.id);
     for (var i = 0; i < run.cancelWatchers.length; i++) {
       try { run.cancelWatchers[i](new Error('cancelled')); } catch (e) {}
@@ -489,6 +490,18 @@
         engine: 'jsflabs'
       });
     })();
+    // My cloned voices (JSF Labs, via the Worker relay). Shown in every
+    // language: a clone speaks whatever text it is given.
+    var jv = _jsfVoices();
+    for (i = 0; i < jv.length; i++) {
+      out.push({
+        id: 'jsf:' + jv[i].voiceId,
+        name: '\u2B50 ' + jv[i].name + ' (My clone \u2022 HD)',
+        lang: jv[i].language || '',
+        gender: jv[i].gender || '',
+        engine: 'jsf'
+      });
+    }
     return out;
   }
 
@@ -870,7 +883,8 @@
     var clean = String(text == null ? '' : text).trim();
     var engine = _preferredEngine(clean, voiceId);
     var timeoutMs;
-    if (engine === 'chatterbox') {
+    if (engine === 'chatterbox' || engine === 'jsf') {
+      // JSF: one long request with its own fetch timeout (JSF_TIMEOUT_MS).
       // M14: Chatterbox is chunked (<=250 chars each) with its own 120s
       // per-chunk bound — exempt from the global watchdog so legitimate
       // multi-chunk requests are never killed mid-flight. (Safer than a
@@ -1000,6 +1014,101 @@
     });
   }
 
+  /* ------------------------------------------------------------------ */
+  /* JSF Labs voice cloning via the same Worker relay (worker/)          */
+  /* The JSF key lives only in the Worker. Clones are saved on this      */
+  /* device as {voiceId, name, language, gender}.                        */
+  /* ------------------------------------------------------------------ */
+  var JSF_VOICES_KEY = 'voicesync.jsfVoices';
+  var JSF_MAX_CHARS = 10000;     // worker limit per request
+  var JSF_TIMEOUT_MS = 180000;   // long scripts take a while to render
+  var _jsfMem = null;            // fallback when localStorage is unavailable
+  function _jsfVoices() {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        var raw = window.localStorage.getItem(JSF_VOICES_KEY);
+        var list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list.filter(function (v) {
+          return v && /^jsf_/.test(String(v.voiceId || ''));
+        }) : [];
+      }
+    } catch (e) {}
+    return _jsfMem || [];
+  }
+  function _jsfSave(list) {
+    _jsfMem = list;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(JSF_VOICES_KEY, JSON.stringify(list));
+      }
+    } catch (e) {}
+  }
+  function jsfAvailable() { return !!_azureProxyUrl(); }
+  function jsfListVoices() { return _jsfVoices().slice(); }
+  function jsfRemoveVoice(voiceId) {
+    _jsfSave(_jsfVoices().filter(function (v) { return v.voiceId !== voiceId; }));
+  }
+  function _jsfErr(res, fallback) {
+    return res.json().catch(function () { return {}; }).then(function (j) {
+      var e = new Error((j && j.error) || fallback || ('HTTP ' + res.status));
+      e.status = res.status; e.code = j && j.code;
+      throw e;
+    });
+  }
+  // file: Blob/File (WAV or MP3), name: 2-80 chars. Resolves the saved voice.
+  function jsfClone(file, name, opts) {
+    opts = opts || {};
+    var base = _azureProxyUrl();
+    if (!base) return Promise.reject(new Error('Voice cloning server is not connected yet.'));
+    if (!file) return Promise.reject(new Error('Choose a voice sample first.'));
+    name = String(name || '').trim();
+    if (name.length < 2) return Promise.reject(new Error('Give your clone a name (at least 2 letters).'));
+    if (!getCloneConsent()) return Promise.reject(new Error('Tick the voice-cloning consent box first.'));
+    var fd = new FormData();
+    fd.append('audio', file, file.name || 'sample.wav');
+    fd.append('name', name.slice(0, 80));
+    if (opts.gender) fd.append('gender', opts.gender);
+    if (opts.language) fd.append('language', String(opts.language).slice(0, 2).toLowerCase());
+    return fetch(base + '/jsf/clone', { method: 'POST', body: fd }).then(function (res) {
+      if (!res.ok) return _jsfErr(res, 'Cloning failed');
+      return res.json();
+    }).then(function (d) {
+      if (!d || !/^jsf_/.test(String(d.voiceId || ''))) throw new Error('Cloning failed');
+      var v = { voiceId: d.voiceId, name: d.name || name, language: d.language || '', gender: d.gender || '' };
+      var list = _jsfVoices().filter(function (x) { return x.voiceId !== v.voiceId; });
+      list.unshift(v);
+      _jsfSave(list);
+      return v;
+    });
+  }
+  function _jsfSynthesize(voiceId, text, run, opts) {
+    var base = _azureProxyUrl();
+    if (!base) return Promise.reject(new Error('Voice cloning server is not connected yet.'));
+    if (text.length > JSF_MAX_CHARS) {
+      return Promise.reject(new Error('Cloned voice: text too long (max ' + JSF_MAX_CHARS + ' characters).'));
+    }
+    var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    if (run) run.jsfCtl = ctl;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, JSF_TIMEOUT_MS);
+    _reportProgress(opts, 0, 1);
+    return fetch(base + '/jsf/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, voice_id: voiceId, speed: 1 }),
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (res) {
+      clearTimeout(timer);
+      if (!res.ok) return _jsfErr(res, 'Cloned voice failed');
+      return res.arrayBuffer();
+    }, function (e) { clearTimeout(timer); throw e; }).then(function (buf) {
+      if (run && run.cancelled) throw new Error('cancelled');
+      var u8 = new Uint8Array(buf || []);
+      if (!u8.length) throw new Error('Cloned voice returned no audio');
+      _reportProgress(opts, 1, 1);
+      return _finishWavResult(u8, text, 'jsf', run);
+    });
+  }
+
   function _edgeWsSynthesize(shortName, lang, text, run, opts) {
     {
       var chunks = _chunkText(text, EDGE_CHUNK_LIMIT);
@@ -1024,6 +1133,10 @@
   }
 
   function _runOtherEngine(engine, text, voice, run, opts) {
+    if (engine === 'jsf') {
+      if (!voice || voice.engine !== 'jsf') return Promise.reject(new Error('no cloned voice chosen'));
+      return _jsfSynthesize(voice.id.slice('jsf:'.length), text, run, opts);
+    }
     if (engine === 'google') {
       var tl = _baseLang(voice && voice.lang ? voice.lang : _guessLang(text));
       if (GOOGLE_LANGS.indexOf(tl) === -1) tl = 'en';
@@ -1546,6 +1659,11 @@
     setReferenceAudio: setReferenceAudio, // mic recording blob for Chatterbox cloning
     getCloneConsent: getCloneConsent, // Terms §6: consent before any clone/reference upload
     setCloneConsent: setCloneConsent,
+    // JSF Labs cloned voices (via the Worker relay; key never in the app)
+    jsfAvailable: jsfAvailable,
+    jsfClone: jsfClone,
+    jsfListVoices: jsfListVoices,
+    jsfRemoveVoice: jsfRemoveVoice,
     // underscore helpers for QA/unit tests (not part of the UI contract)
     _chunkText: _chunkText,
     _guessLang: _guessLang,
