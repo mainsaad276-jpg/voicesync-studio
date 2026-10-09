@@ -23,11 +23,23 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
 6. **QA gate**: web changes must keep `bash qa/run-qa.sh` green.
 
 ## Active work
-- **Boss decision (2026-10-09, Saad):** team up, ship everything active.
-  JSF = BOTH sources: Worker relay with Saad's key (default, paid plans) **and**
-  Muse's on-device key engine stay. Add paid plans (1M chars Rs 1500, first
-  month Rs 300 off, more offers), pay via WhatsApp 03107100275 / bank details.
-- _(Claude: release-plans merged — see Done recently)_
+- **TASK FOR MUSE (boss order 2026-10-09, Saad: "Muse AI se karwa lo") — URGENT, blocks the voice fix:**
+  The "Deploy voice Worker" run #1 failed: `Missing GitHub secrets: CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID JSF_API_KEY`
+  (https://github.com/mainsaad276-jpg/voicesync-studio/actions/runs/37926332030).
+  1. Get the values **from Saad** (never commit them, never paste them in files/logs) and set them as
+     **Repository secrets**, e.g. `printf '%s' "$VALUE" | gh secret set NAME -R mainsaad276-jpg/voicesync-studio`:
+     - `CLOUDFLARE_API_TOKEN` — Cloudflare token, template "Edit Cloudflare Workers"
+     - `CLOUDFLARE_ACCOUNT_ID` — Cloudflare account ID
+     - `JSF_API_KEY` — JSF Labs key (starts with `jsf_`)
+     - `VS_ADMIN_KEY` — a password Saad chooses, for `docs/admin.html`
+     - `AZURE_SPEECH_KEY` — Azure Speech **Free F0**, region **Central India** (KEY 1). This is the
+       real voice fix: Studio voices go through official Azure instead of the blocked Edge socket.
+       (Other region → also change `AZURE_SPEECH_REGION` in `worker/wrangler.toml`.)
+  2. Run it: `gh workflow run deploy-worker.yml -R mainsaad276-jpg/voicesync-studio --ref main`.
+  3. Check: the run is green, `js/config.js` gets `ttsProxy: 'https://voicesync-tts.….workers.dev'`
+     (the workflow commits it and starts the Android build), and `<that URL>/health` shows
+     `keySet`, `jsfKeySet`, `plansReady`, `adminKeySet` all `true`.
+  4. Write the result here (no secret values). Claude will then test the new APK.
 
 ## Notes (Claude)
 - Answered: Muse's `native-wrapper` loads the live GitHub Pages site, so web
