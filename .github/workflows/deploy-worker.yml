@@ -1,0 +1,86 @@
+name: Deploy voice Worker (Cloudflare)
+
+# Deploys worker/ to Cloudflare and stores the JSF Labs key as a Worker
+# secret. The key comes from the GitHub secret JSF_API_KEY and never enters
+# the website, the APK or the repository.
+#
+# Needs these GitHub secrets (Settings -> Secrets and variables -> Actions):
+#   CLOUDFLARE_API_TOKEN   token from the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID  Cloudflare account ID
+#   JSF_API_KEY            JSF Labs API key (starts with jsf_)
+# Optional:
+#   AZURE_SPEECH_KEY       Azure Speech key (only if you use Azure Studio voices)
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/deploy-worker.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_AZURE: ${{ secrets.AZURE_SPEECH_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          JSF_KEY: ${{ secrets.JSF_API_KEY }}
+        run: |
+          missing=""
+          [ -z "$CF_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CF_ACCOUNT" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -z "$JSF_KEY" ] && missing="$missing JSF_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing GitHub secrets:$missing"
+            exit 1
+          fi
+          case "$JSF_KEY" in jsf_*) ;; *) echo "::warning::JSF_API_KEY does not start with jsf_ — check you pasted the whole key." ;; esac
+
+      - name: Deploy Worker + set secrets
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
+          secrets: |
+            JSF_API_KEY
+        env:
+          JSF_API_KEY: ${{ secrets.JSF_API_KEY }}
+
+      - name: Set Azure key (only if provided)
+        if: ${{ env.HAS_AZURE == 'true' }}
+        env:
+          AZ: ${{ secrets.AZURE_SPEECH_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: worker
+        run: printf '%s' "$AZ" | npx --yes wrangler@4 secret put AZURE_SPEECH_KEY
+
+      - name: Show the Worker address
+        env:
+          OUT: ${{ steps.deploy.outputs.command-output }}
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          addr="$URL"
+          [ -z "$addr" ] && addr=$(printf '%s' "$OUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
+          echo "Worker address: $addr"
+          {
+            echo "## Voice Worker deployed"
+            echo ""
+            echo "Address: \`$addr\`"
+            echo ""
+            echo "Check it: $addr/health (should show \"jsfKeySet\": true)"
+            echo ""
+            echo "Put this address in \`js/config.js\` → \`ttsProxy\`."
+          } >> "$GITHUB_STEP_SUMMARY"

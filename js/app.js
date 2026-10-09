@@ -258,7 +258,7 @@
     if (!r || !r.engine) { badge.hidden = true; return; }
     var engineNames = {
       edge: 'Edge Neural', google: 'Google', webspeech: 'Device voice',
-      chatterbox: 'Chatterbox', dialogue: 'Dialogue', mic: 'Recording'
+      chatterbox: 'Chatterbox', jsf: 'My clone (JSF Labs)', dialogue: 'Dialogue', mic: 'Recording'
     };
     var label = r.provider === 'azure' ? 'Studio Voice (Azure)' : (engineNames[r.engine] || r.engine);
     var isFallback = !!engNote;
@@ -2344,6 +2344,43 @@
     } catch (e) {}
     return false;
   }
+  // JSF Labs voice cloning (via the Worker relay — the API key never ships
+  // in the app). The new clone is saved on this device and appears in the
+  // Voice list as "jsf:<voiceId>".
+  var cloneBusy = false;
+  async function createJsfClone(cf, cb) {
+    if (cloneBusy) return;
+    if (!window.TTS || typeof window.TTS.jsfClone !== 'function' || !window.TTS.jsfAvailable()) {
+      setMsg(t('clone_locked_msg'), true); return;
+    }
+    if (window.Pro && !window.Pro.can('clone')) { window.Pro.showUpsell('clone'); return; }
+    var file = cf && cf.files && cf.files[0];
+    var nameEl = $('cloneName');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if (!file) { setMsg(t('clone_need_file'), true); return; }
+    if (name.length < 2) { setMsg(t('clone_need_name'), true); if (nameEl) nameEl.focus(); return; }
+    if (!cloneConsentOn()) { setMsg(t('clone_need_consent'), true); return; }
+    cloneBusy = true;
+    if (cb) cb.disabled = true;
+    setMsg(t('clone_working'));
+    bridgeKeepAwake(true);
+    try {
+      var lang = String(state.ttsLang || 'en').split('-')[0];
+      var v = await window.TTS.jsfClone(file, name, { language: lang });
+      try { localStorage.setItem('voicesync-voice', 'jsf:' + v.voiceId); } catch (e) {}
+      await loadVoices();
+      var sel = $('voiceSelect');
+      if (sel) { sel.value = 'jsf:' + v.voiceId; state.voiceId = sel.value; }
+      setMsg(t('clone_done').replace('{name}', v.name));
+    } catch (e) {
+      setMsg(t('clone_failed').replace('{msg}', (e && e.message) || 'error'), true);
+    } finally {
+      cloneBusy = false;
+      if (cb) cb.disabled = false;
+      bridgeKeepAwake(false);
+    }
+  }
+
   function initClone() {
     var sb = $('btnCloneSample'), cf = $('cloneFile'), cb = $('btnClonePremium');
     if (sb && cf) sb.addEventListener('click', function () { cf.click(); });
@@ -2351,9 +2388,7 @@
       var n = $('cloneFileName');
       if (n) n.textContent = (cf.files && cf.files[0]) ? cf.files[0].name : t('clone_nofile');
     });
-    if (cb) cb.addEventListener('click', function () {
-      setMsg(t('clone_locked_msg'), true);
-    });
+    if (cb) cb.addEventListener('click', function () { createJsfClone(cf, cb); });
     var cc = $('cloneConsent');
     if (cc) {
       try { cc.checked = cloneConsentOn(); } catch (e) {}
