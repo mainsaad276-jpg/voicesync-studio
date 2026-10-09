@@ -26,7 +26,16 @@ window.VS_CONFIG = window.VS_CONFIG || {
 
     // Plan cards. price = normal monthly price; firstMonth = offer price
     // for the first month (leave out for no offer). chars = HD characters.
+    // Boss pricing (2026-10-09): FREE tier = 10,000 tokens, no subscription.
+    // Paid plans multiply up to 10M characters; subscription via WhatsApp.
     plans: [
+      {
+        id: 'free', name: 'Free', chars: 10000, price: 0, badge: 'free',
+        perks: {
+          en: ['10,000 tokens FREE — no subscription needed', 'Try HD voices', 'Urdu + 60 languages', 'Upgrade anytime on WhatsApp'],
+          ur: ['10,000 ٹوکن مفت — سبسکرپشن کی ضرورت نہیں', 'ایچ ڈی آوازیں آزمائیں', 'اردو + 60 زبانیں', 'واٹس ایپ پر کسی بھی وقت اپ گریڈ کریں']
+        }
+      },
       {
         id: 'starter', name: 'Starter', chars: 1000000, price: 1500, firstMonth: 1200,
         perks: {
@@ -47,13 +56,21 @@ window.VS_CONFIG = window.VS_CONFIG || {
           en: ['6M HD characters / month', 'Clone up to 20 voices', 'For agencies & channels', 'Priority WhatsApp support'],
           ur: ['60 لاکھ ایچ ڈی حروف / ماہ', '20 تک آوازیں کلون کریں', 'ایجنسیوں اور چینلز کے لیے', 'ترجیحی واٹس ایپ سپورٹ']
         }
+      },
+      {
+        id: 'studio', name: 'Studio', chars: 10000000, price: 11999, firstMonth: 11699,
+        perks: {
+          en: ['10M HD characters / month', 'Clone up to 50 voices', 'For studios & heavy creators', 'Priority WhatsApp support'],
+          ur: ['1 کروڑ ایچ ڈی حروف / ماہ', '50 تک آوازیں کلون کریں', 'اسٹوڈیوز اور ہیوی کریئیٹرز کے لیے', 'ترجیحی واٹس ایپ سپورٹ']
+        }
       }
     ],
 
     offers: [
-      { en: 'First month Rs 300 off on every plan', ur: 'ہر پلان پر پہلے ماہ 300 روپے کی چھوٹ' },
+      { en: 'FREE: 10,000 tokens — no subscription needed', ur: 'مفت: 10,000 ٹوکن — سبسکرپشن کی ضرورت نہیں' },
+      { en: 'After free: get your subscription on WhatsApp', ur: 'مفت کے بعد: واٹس ایپ پر سبسکرپشن لیں' },
+      { en: 'First month Rs 300 off on every paid plan', ur: 'ہر پیڈ پلان پر پہلے ماہ 300 روپے کی چھوٹ' },
       { en: 'Pay 3 months together: 10% off', ur: '3 ماہ اکٹھے ادا کریں: 10% چھوٹ' },
-      { en: 'Free trial: 10,000 HD characters, just ask on WhatsApp', ur: 'مفت ٹرائل: 10,000 ایچ ڈی حروف، واٹس ایپ پر پوچھیں' },
       { en: 'Refer a friend: you both get 100,000 bonus characters', ur: 'دوست کو بتائیں: دونوں کو 1 لاکھ بونس حروف' }
     ],
 
