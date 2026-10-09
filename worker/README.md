@@ -65,3 +65,5 @@ The workflow creates a Cloudflare KV store (`voicesync-pro`, binding `PRO`).
 
 Each `/jsf/tts` call deducts the text length from the code (only when JSF
 succeeds). Top up or renew a code from the admin page.
+
+_Last deploy request: 2026-10-09 (after repository secrets were added)._
