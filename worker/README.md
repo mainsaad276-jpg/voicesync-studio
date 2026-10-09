@@ -45,8 +45,23 @@ It needs these repository secrets (Settings → Secrets and variables → Action
 | `CLOUDFLARE_API_TOKEN` | Cloudflare token from the "Edit Cloudflare Workers" template |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
 | `JSF_API_KEY` | JSF Labs API key (starts with `jsf_`) |
+| `VS_ADMIN_KEY` (recommended) | Your password for the admin page (plan codes) |
 | `AZURE_SPEECH_KEY` (optional) | Azure Speech key |
 
 After the first run, the job summary shows the Worker address. Open
 `<address>/health` — it should show `"jsfKeySet": true` — then put the address
 in `js/config.js` → `ttsProxy`.
+
+## Paid plans (activation codes)
+
+HD JSF voices and cloning need an activation code with a character balance.
+The workflow creates a Cloudflare KV store (`voicesync-pro`, binding `PRO`).
+
+1. Customer pays (WhatsApp / bank details from `js/config.js` → `pro.payment`).
+2. Open `https://mainsaad276-jpg.github.io/voicesync-studio/docs/admin.html`,
+   enter `VS_ADMIN_KEY` and the Worker address, pick the plan → **Create code**
+   → **Send on WhatsApp**.
+3. Customer: app → ⭐ Pro → *Have an activation code?* → Activate.
+
+Each `/jsf/tts` call deducts the text length from the code (only when JSF
+succeeds). Top up or renew a code from the admin page.

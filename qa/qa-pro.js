@@ -16,7 +16,7 @@ for (var i = 0; i < 50; i++) Pro.recordGeneration();
 t('free_now_no_daily_limit', Pro.checkGenerate({ chars: 10 }).ok === true);
 
 // 2) Enforced: free users get limits.
-VS_CONFIG.pro = { enforce: true, freeMaxChars: 100, freeDailyGenerations: 60 };
+VS_CONFIG.pro = { enforce: true, freeMaxChars: 100, freeDailyGenerations: 60, proFeatures: ['longText', 'unlimited', 'noWatermark', 'dialogue', 'music', 'shorts', 'clone'] };
 t('enforced_flag', Pro.enforced() === true);
 t('enforced_dialogue_locked', Pro.can('dialogue') === false);
 t('enforced_unknown_feature_free', Pro.can('somethingElse') === true);
@@ -43,9 +43,19 @@ t('custom_list_clone_locked', Pro.can('clone') === false);
 // 5) Watermark draws without throwing on a fake 2D context.
 var calls = 0, ctx = { save: function () {}, restore: function () {}, measureText: function () { return { width: 100 }; },
   fillRect: function () { calls++; }, fillText: function () { calls++; } };
-VS_CONFIG.pro = { enforce: true };
+VS_CONFIG.pro = { enforce: true, proFeatures: ['noWatermark'] };
 Pro.drawWatermark(ctx, 720, 1280);
 t('watermark_drawn', calls === 2);
 
-console.log('PRO QA: ' + (n - fails.length) + ' / ' + n);
-if (fails.length) { console.log(fails.join('\n')); process.exit(1); }
+// 6) Plans config + activation status handling (no network in Node).
+VS_CONFIG.pro = { plans: [{ id: 'starter', name: 'Starter', chars: 1000000, price: 1500, firstMonth: 1200 }] };
+t('plans_from_config', Pro._config().plans[0].firstMonth === 1200);
+t('default_paid_features', JSON.stringify(Pro._config().proFeatures) === JSON.stringify(['hd', 'clone']));
+t('no_code_initially', Pro.code() === '' && Pro.planActive() === false);
+var rejected = null;
+Pro.activate('not-a-code').then(null, function (e) { rejected = e && e.kind; });
+setTimeout(function () {
+  t('activate_rejects_bad_format', rejected === 'badCode');
+  console.log('PRO QA: ' + (n - fails.length) + ' / ' + n);
+  if (fails.length) { console.log(fails.join('\n')); process.exit(1); }
+}, 20);

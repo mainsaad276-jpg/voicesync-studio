@@ -2462,7 +2462,10 @@
     if (!window.TTS || typeof window.TTS.jsfClone !== 'function' || !window.TTS.jsfAvailable()) {
       setMsg(t('clone_locked_msg'), true); return;
     }
-    if (window.Pro && !window.Pro.can('clone')) { window.Pro.showUpsell('clone'); return; }
+    // HD cloning spends real JSF characters: it needs an activation code.
+    if (window.Pro && typeof window.Pro.code === 'function' && !window.Pro.code()) {
+      window.Pro.showPlans('needPlan'); return;
+    }
     var file = cf && cf.files && cf.files[0];
     var nameEl = $('cloneName');
     var name = nameEl ? nameEl.value.trim() : '';

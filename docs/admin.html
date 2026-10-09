@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>VoiceSync Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="../js/config.js"></script>
+  <style>
+    body { display: block; }
+    main { max-width: 900px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 22px; margin: 8px 0 4px; }
+    .muted { color: var(--ink-dim); }
+    .box { background: var(--card); border: 1px solid var(--card-edge); border-radius: 16px; padding: 16px; margin: 12px 0; }
+    label { display: block; font-weight: 700; margin: 10px 0 4px; }
+    input, select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--bg-soft); color: var(--ink); font: inherit; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .btn { cursor: pointer; }
+    .code { font: 800 22px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 1px; background: var(--tint); padding: 10px 12px; border-radius: 12px; display: inline-block; }
+    .msg { min-height: 1.2em; margin: 8px 0 0; }
+    .err { color: var(--danger); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--card-edge); vertical-align: top; }
+    td.mono { font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+    .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .tag.ok { background: var(--tint); color: var(--accent); }
+    .tag.bad { background: #f5e0c8; color: #8a4b00; }
+    .table-wrap { overflow-x: auto; }
+    .wa { background: #25d366; color: #fff; border: 0; text-decoration: none; display: inline-flex; padding: 10px 14px; border-radius: 999px; font-weight: 800; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>⭐ VoiceSync — Plan codes (admin)</h1>
+  <p class="muted">Payment mil jaye to yahan code banayein aur customer ko WhatsApp par bhejein. Ye page sirf aap ke liye hai — admin key kisi ko na dein.</p>
+
+  <section class="box" id="loginBox">
+    <label for="adminKey">Admin key</label>
+    <input id="adminKey" type="password" autocomplete="current-password" placeholder="GitHub secret VS_ADMIN_KEY wali value">
+    <label for="worker">Worker address</label>
+    <input id="worker" type="url" placeholder="https://voicesync-tts.xxxx.workers.dev">
+    <div class="actions">
+      <button class="btn btn-primary" id="btnLogin" type="button">Open</button>
+    </div>
+    <p class="msg" id="loginMsg"></p>
+  </section>
+
+  <section class="box" id="createBox" hidden>
+    <h2 style="margin:0">New code</h2>
+    <div class="row">
+      <div>
+        <label for="plan">Plan</label>
+        <select id="plan"></select>
+      </div>
+      <div>
+        <label for="chars">Characters</label>
+        <input id="chars" type="number" min="1" step="1000">
+      </div>
+      <div>
+        <label for="days">Valid for (days)</label>
+        <input id="days" type="number" min="0" value="30">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="note">Customer name / note</label>
+        <input id="note" type="text" maxlength="120" placeholder="e.g. Ali — paid Rs 1,200 JazzCash">
+      </div>
+      <div>
+        <label for="phone">Customer WhatsApp (optional)</label>
+        <input id="phone" type="tel" placeholder="03xx xxxxxxx">
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnCreate" type="button">Create code</button>
+    </div>
+    <p class="msg" id="createMsg"></p>
+    <div id="result" hidden>
+      <p><span class="code" id="newCode"></span></p>
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnCopy" type="button">Copy message</button>
+        <a class="wa" id="btnWa" target="_blank" rel="noopener">💬 Send on WhatsApp</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="box" id="listBox" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <h2 style="margin:0">Codes</h2>
+      <button class="btn btn-secondary btn-small" id="btnReload" type="button">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Code</th><th>Plan</th><th>Left</th><th>Valid until</th><th>Note</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="msg" id="listMsg"></p>
+  </section>
+</main>
+<script>
+(function () {
+  'use strict';
+  var C = (window.VS_CONFIG && window.VS_CONFIG.pro) || {};
+  var plans = (C.plans || []).slice();
+  plans.push({ id: 'trial', name: 'Free trial', chars: 10000, price: 0 });
+  plans.push({ id: 'custom', name: 'Custom', chars: 100000, price: 0 });
+  var $ = function (id) { return document.getElementById(id); };
+  var key = '', base = '';
+  try {
+    key = sessionStorage.getItem('vsAdminKey') || '';
+    base = localStorage.getItem('vsAdminWorker') || '';
+  } catch (e) {}
+  if (!base && window.VS_CONFIG && window.VS_CONFIG.ttsProxy) base = window.VS_CONFIG.ttsProxy;
+  $('adminKey').value = key; $('worker').value = base;
+
+  function nameOf(p) { return typeof p.name === 'object' ? (p.name.en || '') : p.name; }
+  plans.forEach(function (p, i) {
+    var o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = nameOf(p) + (p.chars ? ' — ' + Number(p.chars).toLocaleString('en-US') + ' chars' : '') + (p.price ? ' — Rs ' + p.price : '');
+    $('plan').appendChild(o);
+  });
+  function syncPlan() {
+    var p = plans[Number($('plan').value) || 0];
+    $('chars').value = p.chars || '';
+    $('days').value = p.id === 'trial' ? 7 : 30;
+  }
+  $('plan').addEventListener('change', syncPlan); syncPlan();
+
+  function api(path, opts) {
+    opts = opts || {};
+    var h = { 'X-Admin-Key': key };
+    if (opts.body) h['Content-Type'] = 'application/json';
+    return fetch(base.replace(/\/+$/, '') + path, {
+      method: opts.method || 'GET', headers: h, body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      });
+    });
+  }
+  function fmt(n) { return Number(n || 0).toLocaleString('en-US'); }
+  function waNumber(p) {
+    var d = String(p || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.indexOf('0') === 0) d = '92' + d.slice(1);
+    return d;
+  }
+  function codeMessage(c) {
+    return 'Assalam o Alaikum! Your VoiceSync Studio ' + c.plan + ' plan is active.\n\n' +
+      'Activation code: ' + c.code + '\n' + fmt(c.remaining) + ' HD characters' +
+      (c.expires ? ', valid until ' + new Date(c.expires).toLocaleDateString() : '') + '.\n\n' +
+      'Open the app → ⭐ Pro → "Have an activation code?" → paste the code → Activate. Shukriya!';
+  }
+
+  function load() {
+    $('listMsg').textContent = 'Loading…'; $('listMsg').className = 'msg';
+    return api('/admin/codes').then(function (j) {
+      var tb = $('rows'); tb.innerHTML = '';
+      (j.codes || []).forEach(function (c) {
+        var tr = document.createElement('tr');
+        function td(t, cls) { var d = document.createElement('td'); if (cls) d.className = cls; d.textContent = t; tr.appendChild(d); return d; }
+        td(c.code, 'mono');
+        td(c.plan);
+        var left = td(''); var tag = document.createElement('span');
+        tag.className = 'tag ' + (c.valid ? 'ok' : 'bad'); tag.textContent = fmt(c.remaining) + ' / ' + fmt(c.chars);
+        left.appendChild(tag);
+        td(c.expires ? new Date(c.expires).toLocaleDateString() + (c.expired ? ' (expired)' : '') : '—');
+        td(c.note || '');
+        var act = td('');
+        var b = document.createElement('button');
+        b.className = 'btn btn-secondary btn-small'; b.type = 'button'; b.textContent = 'Top up';
+        b.addEventListener('click', function () {
+          var more = prompt('Add how many characters to ' + c.code + '?', '1000000');
+          if (more === null) return;
+          var days = prompt('Add how many days? (0 = keep date)', '30');
+          if (days === null) return;
+          api('/admin/topup', { method: 'POST', body: { code: c.code, chars: Number(more) || 0, days: Number(days) || 0 } })
+            .then(load, function (e) { $('listMsg').textContent = e.message; $('listMsg').className = 'msg err'; });
+        });
+        act.appendChild(b);
+        tb.appendChild(tr);
+      });
+      $('listMsg').textContent = (j.codes || []).length ? '' : 'No codes yet.';
+    }, function (e) { $('listMsg').textContent = e.message; $('listMsg').className = 'msg err'; throw e; });
+  }
+
+  $('btnLogin').addEventListener('click', function () {
+    key = $('adminKey').value.trim(); base = $('worker').value.trim();
+    try { sessionStorage.setItem('vsAdminKey', key); localStorage.setItem('vsAdminWorker', base); } catch (e) {}
+    $('loginMsg').textContent = 'Checking…'; $('loginMsg').className = 'msg';
+    load().then(function () {
+      $('loginMsg').textContent = '✅ Connected';
+      $('createBox').hidden = false; $('listBox').hidden = false;
+    }, function (e) { $('loginMsg').textContent = e.message; $('loginMsg').className = 'msg err'; });
+  });
+
+  var last = null;
+  $('btnCreate').addEventListener('click', function () {
+    var p = plans[Number($('plan').value) || 0];
+    $('createMsg').textContent = 'Creating…'; $('createMsg').className = 'msg';
+    api('/admin/codes', { method: 'POST', body: {
+      plan: nameOf(p), chars: Number($('chars').value) || 0, days: Number($('days').value) || 0, note: $('note').value.trim()
+    } }).then(function (c) {
+      last = c;
+      $('createMsg').textContent = '✅ Code created';
+      $('newCode').textContent = c.code;
+      var num = waNumber($('phone').value);
+      var wa = $('btnWa');
+      wa.href = 'https://wa.me/' + num + '?text=' + encodeURIComponent(codeMessage(c));
+      $('result').hidden = false;
+      load();
+    }, function (e) { $('createMsg').textContent = e.message; $('createMsg').className = 'msg err'; });
+  });
+  $('btnCopy').addEventListener('click', function () {
+    if (!last) return;
+    try { navigator.clipboard.writeText(codeMessage(last)); $('btnCopy').textContent = 'Copied ✓'; } catch (e) {}
+  });
+  $('btnReload').addEventListener('click', load);
+  if (key && base) $('btnLogin').click();
+})();
+</script>
+</body>
+</html>

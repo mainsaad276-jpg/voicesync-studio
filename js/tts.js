@@ -1048,10 +1048,28 @@
   function jsfRemoveVoice(voiceId) {
     _jsfSave(_jsfVoices().filter(function (v) { return v.voiceId !== voiceId; }));
   }
+  // Plan code (js/pro.js) — the Worker checks it and keeps the balance.
+  function _jsfHeaders(extra) {
+    var h = extra || {};
+    try {
+      var c = typeof window !== 'undefined' && window.Pro && typeof window.Pro.code === 'function' ? window.Pro.code() : '';
+      if (c) h['X-VS-Code'] = c;
+    } catch (e) {}
+    return h;
+  }
+  function _jsfPlanPrompt(code) {
+    try {
+      if (typeof window === 'undefined' || !window.Pro || typeof window.Pro.showPlans !== 'function') return;
+      var reason = code === 'PLAN_BALANCE' ? 'noBalance' : code === 'EXPIRED' ? 'expired' : 'needPlan';
+      if (code === 'BAD_CODE' && typeof window.Pro.clearCode === 'function') window.Pro.clearCode();
+      window.Pro.showPlans(reason);
+    } catch (e) {}
+  }
   function _jsfErr(res, fallback) {
     return res.json().catch(function () { return {}; }).then(function (j) {
       var e = new Error((j && j.error) || fallback || ('HTTP ' + res.status));
       e.status = res.status; e.code = j && j.code;
+      if (res.status === 402) _jsfPlanPrompt(e.code);
       throw e;
     });
   }
@@ -1069,7 +1087,7 @@
     fd.append('name', name.slice(0, 80));
     if (opts.gender) fd.append('gender', opts.gender);
     if (opts.language) fd.append('language', String(opts.language).slice(0, 2).toLowerCase());
-    return fetch(base + '/jsf/clone', { method: 'POST', body: fd }).then(function (res) {
+    return fetch(base + '/jsf/clone', { method: 'POST', headers: _jsfHeaders(), body: fd }).then(function (res) {
       if (!res.ok) return _jsfErr(res, 'Cloning failed');
       return res.json();
     }).then(function (d) {
@@ -1093,12 +1111,16 @@
     _reportProgress(opts, 0, 1);
     return fetch(base + '/jsf/tts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _jsfHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ text: text, voice_id: voiceId, speed: 1 }),
       signal: ctl ? ctl.signal : undefined
     }).then(function (res) {
       clearTimeout(timer);
       if (!res.ok) return _jsfErr(res, 'Cloned voice failed');
+      try {
+        var left = res.headers && res.headers.get('X-Chars-Remaining');
+        if (left !== null && left !== '' && window.Pro && window.Pro.noteRemaining) window.Pro.noteRemaining(left);
+      } catch (e) {}
       return res.arrayBuffer();
     }, function (e) { clearTimeout(timer); throw e; }).then(function (buf) {
       if (run && run.cancelled) throw new Error('cancelled');
