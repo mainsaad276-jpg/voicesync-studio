@@ -1,0 +1,143 @@
+name: Deploy voice Worker (Cloudflare)
+
+# Deploys worker/ to Cloudflare, creates the plan-code storage (KV), stores
+# the keys as Worker secrets, writes the Worker address into js/config.js and
+# re-runs the Android build. Keys come from GitHub secrets and never enter
+# the website, the APK or the repository.
+#
+# GitHub secrets (Settings -> Secrets and variables -> Actions):
+#   CLOUDFLARE_API_TOKEN   required — Cloudflare token ("Edit Cloudflare Workers" template)
+#   CLOUDFLARE_ACCOUNT_ID  required — Cloudflare account ID
+#   JSF_API_KEY            required — JSF Labs API key (starts with jsf_)
+#   VS_ADMIN_KEY           recommended — your password for docs/admin.html (plan codes)
+#   AZURE_SPEECH_KEY       optional — Azure Speech key (Studio voices)
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/deploy-worker.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check secrets
+        env:
+          JSF_KEY: ${{ secrets.JSF_API_KEY }}
+          ADMIN: ${{ secrets.VS_ADMIN_KEY }}
+        run: |
+          missing=""
+          [ -z "$CLOUDFLARE_API_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -z "$JSF_KEY" ] && missing="$missing JSF_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing GitHub secrets:$missing"
+            exit 1
+          fi
+          case "$JSF_KEY" in jsf_*) ;; *) echo "::warning::JSF_API_KEY does not start with jsf_ — check you pasted the whole key." ;; esac
+          [ -z "$ADMIN" ] && echo "::warning::VS_ADMIN_KEY is not set — the admin page (plan codes) will not work until you add it."
+          exit 0
+
+      - name: Plan-code storage (Cloudflare KV)
+        working-directory: worker
+        run: |
+          find_id() {
+            npx --yes wrangler@4 kv namespace list 2>/dev/null | node -e '
+              let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+                try {
+                  const a = JSON.parse(s.slice(s.indexOf("[")));
+                  const n = a.find(x => /voicesync-pro$/.test(x.title));
+                  process.stdout.write(n ? n.id : "");
+                } catch (e) { process.stdout.write(""); }
+              });'
+          }
+          ID=$(find_id)
+          if [ -z "$ID" ]; then
+            npx --yes wrangler@4 kv namespace create voicesync-pro
+            ID=$(find_id)
+          fi
+          if [ -z "$ID" ]; then
+            echo "::warning::Could not create the KV storage — plans (activation codes) stay off. Check the API token has Workers KV Storage: Edit."
+            exit 0
+          fi
+          printf '\n[[kv_namespaces]]\nbinding = "PRO"\nid = "%s"\n' "$ID" >> wrangler.toml
+          echo "KV ready: $ID"
+
+      - name: Deploy Worker
+        id: deploy
+        working-directory: worker
+        run: |
+          OUT=$(npx --yes wrangler@4 deploy 2>&1) || { echo "$OUT"; exit 1; }
+          echo "$OUT"
+          URL=$(printf '%s' "$OUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Store keys as Worker secrets
+        working-directory: worker
+        env:
+          JSF_KEY: ${{ secrets.JSF_API_KEY }}
+          ADMIN: ${{ secrets.VS_ADMIN_KEY }}
+          AZ: ${{ secrets.AZURE_SPEECH_KEY }}
+        run: |
+          printf '%s' "$JSF_KEY" | npx --yes wrangler@4 secret put JSF_API_KEY
+          if [ -n "$ADMIN" ]; then printf '%s' "$ADMIN" | npx --yes wrangler@4 secret put ADMIN_KEY; fi
+          if [ -n "$AZ" ]; then printf '%s' "$AZ" | npx --yes wrangler@4 secret put AZURE_SPEECH_KEY; fi
+
+      - name: Health check
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          [ -z "$URL" ] && { echo "::warning::Could not read the Worker address from wrangler output."; exit 0; }
+          sleep 5
+          curl -sS "$URL/health" || true
+          echo
+
+      - name: Put the Worker address in js/config.js and rebuild the app
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -z "$URL" ] && exit 0
+          CUR=$(grep -oE "ttsProxy: '[^']*'" js/config.js | head -1 | sed -E "s/ttsProxy: '([^']*)'/\1/")
+          if [ "$CUR" = "$URL" ]; then
+            echo "js/config.js already points to $URL"
+          else
+            sed -i -E "0,/ttsProxy: '[^']*'/s##ttsProxy: '$URL'#" js/config.js
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add js/config.js
+            git commit -m "Set voice Worker address in js/config.js ($URL)"
+            for i in 1 2 3; do
+              git pull --rebase -q origin main && git push -q origin HEAD:main && break
+              sleep 5
+            done
+            # Pushes made with GITHUB_TOKEN do not start other workflows, so
+            # start the Android build explicitly.
+            gh workflow run android-apk.yml --ref main || echo "::warning::Could not start the Android build — run it from the Actions tab."
+          fi
+          {
+            echo "## Voice Worker deployed"
+            echo ""
+            echo "Address: \`$URL\`"
+            echo ""
+            echo "- Health: $URL/health (jsfKeySet, plansReady and adminKeySet should be true)"
+            echo "- Admin page: https://mainsaad276-jpg.github.io/voicesync-studio/docs/admin.html"
+          } >> "$GITHUB_STEP_SUMMARY"

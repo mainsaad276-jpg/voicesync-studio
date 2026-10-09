@@ -263,7 +263,7 @@
     if (!r || !r.engine) { badge.hidden = true; return; }
     var engineNames = {
       edge: 'Edge Neural', google: 'Google', webspeech: 'Device voice',
-      chatterbox: 'Chatterbox', dialogue: 'Dialogue', mic: 'Recording',
+      chatterbox: 'Chatterbox', jsf: 'My clone (JSF Labs)', dialogue: 'Dialogue', mic: 'Recording',
       jsflabs: t('jsf_engine_name')
     };
     var label = r.provider === 'azure' ? 'Studio Voice (Azure)' : (engineNames[r.engine] || r.engine);
@@ -2048,6 +2048,14 @@
       if (!go) return;
     }
 
+    // Pro tier (js/pro.js): free-plan limits. No-op while VS_CONFIG.pro.enforce
+    // is false (everything free today).
+    if (window.Pro && typeof window.Pro.checkGenerate === 'function') {
+      var proGate = window.Pro.checkGenerate({ chars: synthText.length, dialogue: !!state.dialogueMode });
+      if (!proGate.ok) { window.Pro.showUpsell(proGate.reason, synthText.length); return; }
+      try { window.Pro.recordGeneration(); } catch (e) {}
+    }
+
     // C8: cancel ONLY a stale preview run — never a bare cancel-all that could
     // clobber an in-flight generation started from another path.
     if (state.previewRunId) {
@@ -2445,6 +2453,46 @@
     } catch (e) {}
     return false;
   }
+  // JSF Labs voice cloning (via the Worker relay — the API key never ships
+  // in the app). The new clone is saved on this device and appears in the
+  // Voice list as "jsf:<voiceId>".
+  var cloneBusy = false;
+  async function createJsfClone(cf, cb) {
+    if (cloneBusy) return;
+    if (!window.TTS || typeof window.TTS.jsfClone !== 'function' || !window.TTS.jsfAvailable()) {
+      setMsg(t('clone_locked_msg'), true); return;
+    }
+    // HD cloning spends real JSF characters: it needs an activation code.
+    if (window.Pro && typeof window.Pro.code === 'function' && !window.Pro.code()) {
+      window.Pro.showPlans('needPlan'); return;
+    }
+    var file = cf && cf.files && cf.files[0];
+    var nameEl = $('cloneName');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if (!file) { setMsg(t('clone_need_file'), true); return; }
+    if (name.length < 2) { setMsg(t('clone_need_name'), true); if (nameEl) nameEl.focus(); return; }
+    if (!cloneConsentOn()) { setMsg(t('clone_need_consent'), true); return; }
+    cloneBusy = true;
+    if (cb) cb.disabled = true;
+    setMsg(t('clone_working'));
+    bridgeKeepAwake(true);
+    try {
+      var lang = String(state.ttsLang || 'en').split('-')[0];
+      var v = await window.TTS.jsfClone(file, name, { language: lang });
+      try { localStorage.setItem('voicesync-voice', 'jsf:' + v.voiceId); } catch (e) {}
+      await loadVoices();
+      var sel = $('voiceSelect');
+      if (sel) { sel.value = 'jsf:' + v.voiceId; state.voiceId = sel.value; }
+      setMsg(t('clone_done').replace('{name}', v.name));
+    } catch (e) {
+      setMsg(t('clone_failed').replace('{msg}', (e && e.message) || 'error'), true);
+    } finally {
+      cloneBusy = false;
+      if (cb) cb.disabled = false;
+      bridgeKeepAwake(false);
+    }
+  }
+
   function initClone() {
     var sb = $('btnCloneSample'), cf = $('cloneFile'), cb = $('btnClonePremium');
     if (sb && cf) sb.addEventListener('click', function () { cf.click(); });
@@ -2452,9 +2500,7 @@
       var n = $('cloneFileName');
       if (n) n.textContent = (cf.files && cf.files[0]) ? cf.files[0].name : t('clone_nofile');
     });
-    if (cb) cb.addEventListener('click', function () {
-      setMsg(t('clone_locked_msg'), true);
-    });
+    if (cb) cb.addEventListener('click', function () { createJsfClone(cf, cb); });
     var cc = $('cloneConsent');
     if (cc) {
       try { cc.checked = cloneConsentOn(); } catch (e) {}
@@ -2790,6 +2836,11 @@
     // Feature 2: 9:16 Shorts — composite canvas (avatar top + captions bottom).
     var fmtSel = $('videoFormat');
     var portrait = fmtSel && fmtSel.value === 'portrait';
+    // Pro tier: Shorts 9:16 is a Pro feature (no-op while everything is free).
+    if (portrait && window.Pro && !window.Pro.can('shorts')) {
+      bridgeKeepAwake(false); setMsg(''); window.Pro.showUpsell('shorts'); return;
+    }
+    var proMark = !!(window.Pro && window.Pro.shouldWatermark());
     var outCanvas = canvas, captionTimer = null, audioRef = { el: null };
     if (portrait) {
       var box = $('textInput');
@@ -2837,10 +2888,25 @@
               octx.fillText(ln, 360, 960 + li * 60);
             });
           }
+          if (proMark) window.Pro.drawWatermark(octx, 720, 1280);
         } catch (e) { /* keep recording even if a frame fails */ }
         captionTimer = requestAnimationFrame(drawFrame);
       };
       drawFrame();
+    } else if (proMark) {
+      // Free-plan square video: copy the avatar frame + watermark.
+      outCanvas = document.createElement('canvas');
+      outCanvas.width = canvas.width || 480; outCanvas.height = canvas.height || 480;
+      var wctx = outCanvas.getContext('2d');
+      var drawMarked = function () {
+        try {
+          wctx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+          wctx.drawImage(canvas, 0, 0, outCanvas.width, outCanvas.height);
+          window.Pro.drawWatermark(wctx, outCanvas.width, outCanvas.height);
+        } catch (e) { /* keep recording */ }
+        captionTimer = requestAnimationFrame(drawMarked);
+      };
+      drawMarked();
     }
     try {
       // SPEC §3: onAudio hook lets app.js attach lip-sync so the exported
