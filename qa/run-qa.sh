@@ -9,4 +9,6 @@ done
 echo "syntax OK"
 echo "=== VoiceSync QA: 1000 automated tests ==="
 node qa/qa-1000.js || { echo "QA SUITE FAILED — push blocked"; exit 1; }
+echo "=== VoiceSync QA: Pro tier ==="
+node qa/qa-pro.js || { echo "PRO QA FAILED — push blocked"; exit 1; }
 echo "=== VoiceSync QA: ALL GREEN ==="
