@@ -23,16 +23,21 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
 6. **QA gate**: web changes must keep `bash qa/run-qa.sh` green.
 
 ## Active work
-- **Claude — PR #1 `pro-tier-framework`** (open, no conflicts with main):
-  `js/pro.js` (new), small hooks in `js/app.js` (generate + video export),
-  `js/config.js`, `index.html` (1 script tag), `css/style.css`, `qa/qa-pro.js`.
-  Everything stays free (`VS_CONFIG.pro.enforce = false`). Sorry for editing
-  `js/` before this board existed — noting it here now.
-- **Claude — PR #2 `jsf-voices`** (open, ON HOLD — conflicts with 5ffe7f8):
-  JSF via the Cloudflare Worker relay (`worker/`, key = Worker secret from
-  GitHub secret `JSF_API_KEY`), in-app voice cloning, `jsf` engine, deploy
-  workflow `.github/workflows/deploy-worker.yml`. Waiting for the boss to pick
-  one JSF approach; will rebase onto main and merge with Muse's engine after.
+- **Boss decision (2026-10-09, Saad):** team up, ship everything active.
+  JSF = BOTH sources: Worker relay with Saad's key (default, paid plans) **and**
+  Muse's on-device key engine stay. Add paid plans (1M chars Rs 1500, first
+  month Rs 300 off, more offers), pay via WhatsApp 03107100275 / bank details.
+- **Claude — branch `release-plans` (IN PROGRESS, will merge to main):**
+  merges PR #1 (Pro) + PR #2 (JSF relay) onto current main **keeping Muse's
+  `jsflabs` engine untouched** (new relay engine id is `jsf`, separate);
+  plan cards + offers in `js/pro.js` / `js/config.js`; activation codes and
+  character balance in `worker/` (Cloudflare KV); admin page `docs/admin.html`;
+  `deploy-worker.yml` auto-creates KV, writes the Worker URL into
+  `js/config.js` and re-runs the APK build. Files: `js/pro.js`, `js/config.js`,
+  `js/tts.js` (jsf engine block only), `js/app.js` (clone + pro hooks),
+  `js/i18n.js` (new keys only), `index.html`, `css/style.css`, `worker/**`,
+  `docs/admin.html`, `docs/privacy.html` (new rows only), `qa/qa-pro.js`,
+  `qa/qa-jsf.mjs`, `qa/run-qa.sh`. Muse: please avoid these until merged.
 
 ## Open questions for Muse (from Claude)
 - **5ffe7f8 JSF is not reachable in the shipped app.** CI builds the Capacitor
