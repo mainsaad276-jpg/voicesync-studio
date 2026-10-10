@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact — {brand}</title>
+<meta name="description" content="Talk to the team on WhatsApp or email.">
+<meta name="theme-color" content="#070b18">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+</head>
+<body>
+<div id="site-header"></div>
+<header class="hero" style="padding:80px 0 40px"><div class="wrap"><span class="eyebrow">Contact</span><h1 style="font-size:clamp(2.2rem,5vw,3.6rem)">Let's <span class="grad-text">talk</span></h1><p class="lead">No ticket queues. Message us directly and a real person will reply.</p></div></header>
+<section class="section" style="padding-top:10px"><div class="wrap grid g3">
+  <div class="card"><div class="icon-tile">💬</div><h3>WhatsApp support</h3><p class="muted">Fastest for billing, payments and quick questions.</p><p><b data-b="whatsapp"></b></p><a class="btn btn-primary" data-wa target="_blank" rel="noopener">Open WhatsApp</a></div>
+  <div class="card"><div class="icon-tile">✉️</div><h3>Email</h3><p class="muted">Accounts, API, partnerships and anything detailed.</p><p><b data-b="email"></b></p><a class="btn btn-ghost" data-mail>Send email</a></div>
+  <div class="card"><div class="icon-tile">🏢</div><h3>Business details</h3><p class="muted" style="margin-bottom:6px"><b data-b="company" style="color:var(--text)"></b></p><p class="muted" style="margin-bottom:6px"><span data-b="address"></span></p><p class="muted"><span data-b="hours"></span></p></div>
+</div></section>
+<section class="section" style="padding-top:0"><div class="wrap grid g2" style="align-items:center;gap:40px">
+  <div class="card"><div class="row"><span class="avatar" style="width:64px;height:64px;font-size:24px" id="fi"></span><div><h3 style="margin:0" data-b="founder"></h3><div class="dim" data-b="founderTitle"></div></div></div>
+    <p class="muted" style="margin-top:18px">We are building affordable, high-quality voice AI for creators and businesses in Pakistan and beyond. Have an idea or a partnership in mind? Reach out directly.</p></div>
+  <div><h2>Send us a message</h2><p class="muted">Write your message and we will open it in WhatsApp for you.</p>
+    <div class="field"><label>Your name</label><input id="cn"></div><div class="field"><label>Message</label><textarea id="cm" style="min-height:120px"></textarea></div>
+    <button class="btn btn-primary" id="cs">Send via WhatsApp</button></div>
+</div></section>
+<div id="site-footer"></div>
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/content.js"></script>
+<script>document.addEventListener('vs:ready', ({ detail: { cfg } }) => {
+  document.getElementById('fi').textContent = cfg.brand.founder[0];
+  document.getElementById('cs').onclick = () => { const t = `Hi ${cfg.brand.short}, I'm ${document.getElementById('cn').value}.\n\n${document.getElementById('cm').value}`; window.open(`https://wa.me/${cfg.brand.whatsapp}?text=${encodeURIComponent(t)}`, '_blank'); };
+});</script>
+</body>
+</html>

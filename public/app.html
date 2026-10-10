@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — {brand}</title>
+<meta name="theme-color" content="#070b18">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<style>
+  body { background: var(--bg); }
+  .shell { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+  .side { background: var(--bg-2); border-right: 1px solid var(--line); padding: 18px 14px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .side .logo { padding: 6px 8px 18px; }
+  .side a.nav-i { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: var(--muted); font-weight: 500; font-size: 14px; }
+  .side a.nav-i:hover { background: var(--card); color: var(--text); }
+  .side a.nav-i.on { background: linear-gradient(90deg, rgba(46,230,200,.14), rgba(139,123,255,.08)); color: var(--text); box-shadow: inset 2px 0 0 var(--brand); }
+  .side a.nav-i svg { width: 18px; height: 18px; flex: none; }
+  .side .sep { height: 1px; background: var(--line); margin: 10px 4px; }
+  .side .meter { margin-top: auto; padding: 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+  .bar { height: 8px; border-radius: 99px; background: var(--card-2); overflow: hidden; } .bar i { display: block; height: 100%; background: var(--grad); border-radius: 99px; }
+  .main { min-width: 0; }
+  .top { position: sticky; top: 0; z-index: 20; height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 28px; border-bottom: 1px solid var(--line); background: rgba(7,11,24,.8); backdrop-filter: blur(14px); }
+  .top h2 { font-size: 1.15rem; margin: 0; }
+  .content { padding: 28px; max-width: 1280px; }
+  .studio { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+  .stat b { display: block; font: 800 1.7rem var(--head); } .stat span { color: var(--dim); font-size: 13px; }
+  .gen { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); margin-bottom: 12px; }
+  .gen .t { font-weight: 600; } .gen .s { color: var(--dim); font-size: 13px; }
+  .gen p { color: var(--muted); font-size: 14px; margin: 6px 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .drop { border: 2px dashed var(--line-2); border-radius: 18px; padding: 34px 20px; text-align: center; cursor: pointer; transition: .15s; }
+  .drop.over, .drop:hover { border-color: var(--brand); background: rgba(46,230,200,.04); }
+  .rec { width: 74px; height: 74px; border-radius: 50%; border: 0; background: var(--grad); color: #04122a; font-size: 26px; cursor: pointer; }
+  .rec.on { background: var(--bad); color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 14px rgba(248,113,113,.15); } }
+  .seg { display: inline-flex; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 4px; }
+  .seg button { border: 0; background: none; color: var(--muted); padding: 8px 14px; border-radius: 9px; cursor: pointer; font: 600 13px var(--body); }
+  .seg button.on { background: var(--card-2); color: var(--text); }
+  .pay-box { background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .mburger { display: none; }
+  @media (max-width: 1080px) { .studio { grid-template-columns: 1fr; } }
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .side { position: fixed; inset: 0 auto 0 0; width: 270px; z-index: 60; transform: translateX(-100%); transition: .25s; }
+    .side.open { transform: none; box-shadow: var(--shadow); }
+    .mburger { display: inline-flex; }
+    .content { padding: 18px 16px; } .top { padding: 0 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side" id="side"></aside>
+  <div class="main">
+    <div class="top"><button class="btn btn-ghost btn-sm mburger" onclick="document.getElementById('side').classList.toggle('open')">☰</button><h2 id="title">Studio</h2>
+      <div style="margin-left:auto" class="row"><span class="badge soft" id="topcred"></span><a class="btn btn-primary btn-sm" href="#billing">Upgrade</a></div></div>
+    <div class="content" id="view"><div class="empty"><span class="spin"></span></div></div>
+  </div>
+</div>
+<script>window.VS_NO_BOOT = true;</script>
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

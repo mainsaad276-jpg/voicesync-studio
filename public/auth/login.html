@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — {brand}</title><meta name="theme-color" content="#070b18"><link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/css/site.css"></head>
+<body><div class="auth"><div class="auth-side"><a class="logo" href="/"><span class="logo-mark" id="lm"></span><span data-b="short"></span></a>
+  <div><h2 style="font-size:2.4rem">Studio-grade AI voice,<br><span class="grad-text">in seconds.</span></h2>
+  <p class="muted" style="max-width:420px">Turn words into natural, human-sounding speech in Urdu, English and 20+ languages — or clone your own voice from a short sample.</p>
+  <div class="grid g2" style="margin-top:26px;max-width:440px">
+    <div class="card" style="padding:16px"><b style="font-size:1.4rem" data-b="freeShort"></b><div class="dim" style="font-size:13px">free chars / month</div></div>
+    <div class="card" style="padding:16px"><b style="font-size:1.4rem">20+</b><div class="dim" style="font-size:13px">languages</div></div>
+    <div class="card" style="padding:16px"><b style="font-size:1.4rem">~60s</b><div class="dim" style="font-size:13px">voice cloning</div></div>
+    <div class="card" style="padding:16px"><b style="font-size:1.4rem">Instant</b><div class="dim" style="font-size:13px">access</div></div></div></div>
+  <p class="dim" style="font-size:13px">— <span data-b="founder"></span>, <span data-b="founderTitle"></span></p></div><div class="auth-main"><div class="auth-box"><h1 style="font-size:2rem">Welcome back</h1><p class="muted">Sign in to your studio.</p>
+<form id="f" novalidate style="margin-top:24px"><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div>
+<div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
+<div class="err" id="e" style="color:var(--bad);font-size:14px;margin-bottom:12px"></div>
+<button class="btn btn-primary btn-block btn-lg">Sign in</button></form>
+<p class="muted" style="margin-top:20px;text-align:center">New here? <a href="/auth/register" style="color:var(--brand);font-weight:600">Create a free account</a></p>
+<p class="dim" style="text-align:center;font-size:13px">Forgot your password? <a data-wa="Hi, I need help resetting my password" target="_blank" style="color:var(--muted)">Contact support</a></p></div></div></div>
+<script src="/assets/js/site.js"></script><script>document.getElementById('lm').innerHTML = VS.LOGO;
+document.addEventListener('vs:ready', ({detail:{me}}) => { if (me) location.href = '/app'; });
+document.getElementById('f').onsubmit = async (ev) => { ev.preventDefault(); const f = ev.target, b = f.querySelector('button');
+  VS.busy(b, true, 'Signing in…'); document.getElementById('e').textContent = '';
+  try { await VS.api('/api/auth/login', { method: 'POST', body: Object.fromEntries(new FormData(f)) }); const n = new URLSearchParams(location.search).get('next') || ''; location.href = /^\/(?!\/)/.test(n) ? n : '/app'; }
+  catch (e) { document.getElementById('e').textContent = e.message; VS.busy(b, false); } };</script></body></html>

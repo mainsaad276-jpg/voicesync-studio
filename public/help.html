@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help center — {brand}</title>
+<meta name="description" content="Answers about credits, billing, account and voice quality.">
+<meta name="theme-color" content="#070b18">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+</head>
+<body>
+<div id="site-header"></div>
+<header class="hero" style="padding:80px 0 40px"><div class="wrap"><span class="eyebrow">Help center</span><h1 style="font-size:clamp(2.2rem,5vw,3.6rem)">How can we <span class="grad-text">help?</span></h1><p class="lead">Search the most common questions, or message us directly.</p></div></header>
+<section class="section" style="padding-top:0"><div class="wrap" style="max-width:900px">
+  <input id="hs" placeholder="Search help articles…" style="padding:16px 18px;font-size:16px;margin-bottom:28px">
+  <div id="hc"></div>
+  <div class="card" style="margin-top:30px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center"><div><h3 style="margin:0">Still stuck?</h3><p class="muted" style="margin:4px 0 0">WhatsApp <b data-b="whatsapp"></b> or email <b data-b="email"></b></p></div><a class="btn btn-primary" data-wa target="_blank" rel="noopener">Chat with support</a></div>
+</div></section>
+<div id="site-footer"></div>
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/content.js"></script>
+<script>const draw = (q = '') => { q = q.toLowerCase(); document.getElementById('hc').innerHTML = VS.HELP.map(s => { const items = s.items.filter(([a, b]) => !q || (a + b).toLowerCase().includes(q)); return items.length ? `<h3 style="margin:26px 0 12px">${s.icon} ${s.t}</h3><div class="faq">${items.map(([a, b]) => `<details><summary>${VS.esc(a)}</summary><p>${VS.esc(b)}</p></details>`).join('')}</div>` : ''; }).join('') || '<div class="empty">No articles match. Try another word or contact support.</div>'; };
+draw(); document.getElementById('hs').oninput = e => draw(e.target.value);</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: voicesync-studio
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/config
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ENGINE_BASE_URL
+        value: https://www.jsflabs.io/api/v1
+      - key: ENGINE_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        value: mainsaad276@gmail.com
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: voicesync-data
+      mountPath: /var/data
+      sizeGB: 1

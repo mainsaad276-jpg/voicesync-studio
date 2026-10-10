@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice library — {brand}</title>
+<meta name="description" content="Preview the voice library.">
+<meta name="theme-color" content="#070b18">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+</head>
+<body>
+<div id="site-header"></div>
+<header class="hero" style="padding:80px 0 40px"><div class="wrap"><span class="eyebrow">Voice library</span><h1 style="font-size:clamp(2.2rem,5vw,3.6rem)">Hear the <span class="grad-text">voices</span></h1><p class="lead">Preview library voices below. Sign up to use them — or clone your own in about a minute.</p></div></header>
+<section class="section" style="padding-top:10px"><div class="wrap"><div class="voice-list" id="vl" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))"></div></div></section>
+<div id="site-footer"></div>
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/content.js"></script>
+<script>document.addEventListener('vs:ready', async () => {
+  const v = (await VS.api('/api/public-voices')).data; const el = document.getElementById('vl'); let a;
+  el.innerHTML = v.length ? v.map(x => `<div class="voice-item"><span class="avatar">${VS.esc(x.name[0]).toUpperCase()}</span><span><b>${VS.esc(x.name)}</b><small>${VS.esc(x.gender)} · ${VS.flag(x.language)} ${VS.langName(x.language)}${x.description ? ' · ' + VS.esc(x.description) : ''}</small></span>${x.sample ? `<button class="play-btn" data-play="${x.sample}">▶</button>` : ''}</div>`).join('') : '<div class="empty" style="grid-column:1/-1">Library voices are coming soon. <a href="/auth/register" style="color:var(--brand)">Create an account</a> to clone your own voice now.</div>';
+  el.onclick = e => { const b = e.target.closest('[data-play]'); if (!b) return; a?.pause(); if (b.textContent === '■') { b.textContent = '▶'; return; } VS.$$('[data-play]').forEach(x => x.textContent = '▶'); a = new Audio(b.dataset.play); a.play(); b.textContent = '■'; a.onended = () => b.textContent = '▶'; };
+});</script>
+</body>
+</html>

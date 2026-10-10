@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API documentation — {brand}</title>
+<meta name="description" content="REST API for text to speech and voice cloning.">
+<meta name="theme-color" content="#070b18">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<style>
+  .docs { display: grid; grid-template-columns: 220px 1fr; gap: 40px; padding: 50px 0 80px; }
+  .docs aside { position: sticky; top: 90px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+  .docs aside a { padding: 7px 12px; border-radius: 8px; color: var(--muted); font-size: 14px; }
+  .docs aside a:hover { background: var(--card); color: var(--text); }
+  .docs section { scroll-margin-top: 90px; margin-bottom: 56px; }
+  .method { font: 700 12px var(--mono); padding: 4px 8px; border-radius: 6px; background: rgba(46,230,200,.15); color: var(--brand); margin-right: 8px; }
+  .method.get { background: rgba(139,123,255,.18); color: #c4bbff; }
+  .tabs { display: flex; gap: 4px; margin-bottom: -1px; }
+  .tabs button { background: none; border: 1px solid transparent; border-bottom: 0; color: var(--dim); padding: 8px 14px; border-radius: 10px 10px 0 0; cursor: pointer; font: 500 13px var(--body); }
+  .tabs button.on { background: #050814; border-color: var(--line); color: var(--text); }
+  .tabs + pre { border-top-left-radius: 0; }
+  @media (max-width: 860px) { .docs { grid-template-columns: minmax(0,1fr); } .docs aside { position: static; flex-direction: row; flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+<div class="wrap docs">
+  <aside>
+    <span class="label">API v1</span>
+    <a href="#intro">Introduction</a><a href="#auth">Authentication</a><a href="#limits">Rate limits</a><a href="#credits">Credits</a>
+    <a href="#voices">List voices</a><a href="#clone">Clone a voice</a><a href="#tts">Text to speech</a><a href="#balance">Check credits</a><a href="#errors">Errors</a>
+  </aside>
+  <main>
+    <section id="intro"><span class="eyebrow">Developers</span><h1 style="font-size:2.6rem">API documentation</h1>
+      <p class="muted">Generate speech and clone voices from your own app. All endpoints are REST over HTTPS and return JSON.</p>
+      <div class="card"><span class="label">Base URL</span><code class="mono" data-base></code></div>
+      <p class="muted" style="margin-top:14px">API access is included in the <b>Pro</b> and <b>Scale</b> plans. Create keys in <a href="/app#api" style="color:var(--brand)">Dashboard → API keys</a>.</p></section>
+
+    <section id="auth"><h2>Authentication</h2><p class="muted">Send your secret key in the <code>x-api-key</code> header. Keys start with <code>vs_</code>. Keep keys on your server — never put them in browser or mobile code.</p>
+      <pre><code>x-api-key: vs_your_api_key</code></pre></section>
+
+    <section id="limits"><h2>Rate limits</h2><p class="muted">50 requests per minute per key (sliding window). Over the limit you get <code>429 RATE_LIMITED</code> with a <code>Retry-After</code> header in seconds.</p></section>
+
+    <section id="credits"><h2>Credits</h2><p class="muted">Usage is metered in characters: one character of input text = one credit. Cloning is free. Every success response includes a <code>credits</code> object. If a request costs more than your balance it fails with <code>402</code> before any audio is generated.</p></section>
+
+    <section id="voices"><h2><span class="method get">GET</span>/v1/voices</h2><p class="muted">Returns your cloned voices plus library voices you can use.</p>
+      <pre><code data-ex="voices"></code></pre>
+      <pre><code>{
+  "success": true,
+  "data": [
+    { "voice_id": "v_8hK2…", "name": "Morgan", "gender": "Female", "language": "en", "owner": "you" }
+  ]
+}</code></pre></section>
+
+    <section id="clone"><h2><span class="method">POST</span>/v1/voice-clone</h2><p class="muted"><code>multipart/form-data</code></p>
+      <div class="table-wrap"><table><tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>audio</code></td><td>file · required</td><td>WAV or MP3, max 25 MB. Clean 10–30s recording works best.</td></tr>
+        <tr><td><code>name</code></td><td>string · required</td><td>2–80 characters.</td></tr>
+        <tr><td><code>gender</code></td><td>string</td><td><code>Male</code>, <code>Female</code>, <code>Neutral</code>, <code>Unspecified</code> (default).</td></tr>
+        <tr><td><code>language</code></td><td>string</td><td>ISO 639-1 code, e.g. <code>en</code>, <code>ur</code>, <code>ar</code>. Default <code>en</code>.</td></tr></table></div>
+      <div class="tabs" data-tabs="clone"></div><pre><code data-ex="clone"></code></pre>
+      <pre><code>{
+  "success": true,
+  "message": "Your voice has been cloned successfully.",
+  "data": { "voiceId": "v_8hK2…", "name": "Morgan", "language": "en", "gender": "Female", "createdAt": "2026-10-09T09:20:44.120Z" },
+  "credits": { "cost": 0, "used": 0, "remaining": 1000000, "total": 1000000 }
+}</code></pre>
+      <p class="muted">You may only clone voices you own or have the speaker’s written permission to use.</p></section>
+
+    <section id="tts"><h2><span class="method">POST</span>/v1/text-to-speech</h2><p class="muted"><code>application/json</code></p>
+      <div class="table-wrap"><table><tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>text</code></td><td>string · required</td><td>Up to 50,000 characters. Long input is generated in parallel and stitched into one file.</td></tr>
+        <tr><td><code>voice_id</code></td><td>string · required</td><td>From <code>/v1/voices</code> or <code>/v1/voice-clone</code>.</td></tr>
+        <tr><td><code>speed</code></td><td>number</td><td>0.5 – 2.0, default 1.</td></tr>
+        <tr><td><code>title</code></td><td>string</td><td>Optional label shown in your dashboard history.</td></tr></table></div>
+      <div class="tabs" data-tabs="tts"></div><pre><code data-ex="tts"></code></pre>
+      <pre><code>{
+  "success": true,
+  "message": "Your audio has been generated successfully.",
+  "data": { "audio_url": "<span data-base></span>/v1/audio/g_x7…", "id": "g_x7…", "voice_id": "v_8hK2…", "format": "wav", "characters": 44, "speed": 1 },
+  "credits": { "cost": 44, "used": 44, "remaining": 999956, "total": 1000000 }
+}</code></pre>
+      <p class="muted"><code>audio_url</code> is a WAV file, loudness-normalised. Append <code>?dl=1</code> to force a download.</p></section>
+
+    <section id="balance"><h2><span class="method get">GET</span>/v1/credits</h2><p class="muted">Returns your current plan and character balance.</p><pre><code data-ex="credits"></code></pre></section>
+
+    <section id="errors"><h2>Errors</h2><p class="muted">Always branch on <code>success</code>. Failures return <code>{"success": false, "error": {"code", "message", "fields?"}}</code>.</p>
+      <div class="table-wrap"><table><tr><th>HTTP</th><th>Code</th><th>Meaning</th></tr>
+        <tr><td>401</td><td><code>MISSING_API_KEY</code></td><td>No <code>x-api-key</code> header.</td></tr>
+        <tr><td>401</td><td><code>INVALID_KEY_FORMAT</code></td><td>Key does not start with <code>vs_</code>.</td></tr>
+        <tr><td>401</td><td><code>INVALID_API_KEY</code></td><td>Key not recognised or deleted.</td></tr>
+        <tr><td>403</td><td><code>PLAN_REQUIRED</code></td><td>API needs Pro or Scale plan.</td></tr>
+        <tr><td>429</td><td><code>RATE_LIMITED</code></td><td>Over 50 req/min — wait <code>Retry-After</code> seconds.</td></tr>
+        <tr><td>422</td><td><code>VALIDATION_ERROR</code></td><td>See <code>fields</code> for details.</td></tr>
+        <tr><td>402</td><td><code>INSUFFICIENT_CHARACTERS</code></td><td>Not enough balance.</td></tr>
+        <tr><td>422</td><td><code>AUDIO_REJECTED</code></td><td>Sample couldn’t be processed — try a cleaner recording.</td></tr>
+        <tr><td>502/504</td><td><code>GENERATION_FAILED</code> / <code>GENERATION_TIMEOUT</code></td><td>Retry, or shorten the text.</td></tr>
+        <tr><td>503</td><td><code>ENGINE_UNAVAILABLE</code></td><td>Temporary outage — retry shortly.</td></tr>
+        <tr><td>500</td><td><code>INTERNAL_ERROR</code></td><td>Unexpected error — retry, then contact support.</td></tr></table></div></section>
+  </main>
+</div>
+<div id="site-footer"></div>
+<script src="/assets/js/site.js"></script>
+<script>
+document.addEventListener('vs:ready', () => {
+  const B = location.origin;
+  VS.$$('[data-base]').forEach(e => e.textContent = B);
+  const ex = {
+    voices: { cURL: `curl ${B}/v1/voices \\\n  -H "x-api-key: vs_your_api_key"` },
+    credits: { cURL: `curl ${B}/v1/credits \\\n  -H "x-api-key: vs_your_api_key"` },
+    clone: {
+      cURL: `curl -X POST ${B}/v1/voice-clone \\\n  -H "x-api-key: vs_your_api_key" \\\n  -F "audio=@sample.wav" \\\n  -F "name=Morgan" \\\n  -F "gender=Female" \\\n  -F "language=en"`,
+      'Node.js': `import fs from "node:fs";\n\nconst form = new FormData();\nform.append("audio", new Blob([fs.readFileSync("sample.wav")]), "sample.wav");\nform.append("name", "Morgan");\nform.append("language", "en");\n\nconst res = await fetch("${B}/v1/voice-clone", {\n  method: "POST",\n  headers: { "x-api-key": process.env.VS_API_KEY },\n  body: form,\n});\nconst json = await res.json();\nif (!json.success) throw new Error(json.error.message);\nconsole.log(json.data.voiceId);`,
+      Python: `import os, requests\n\nr = requests.post(\n    "${B}/v1/voice-clone",\n    headers={"x-api-key": os.environ["VS_API_KEY"]},\n    files={"audio": open("sample.wav", "rb")},\n    data={"name": "Morgan", "language": "en"},\n)\nj = r.json()\nprint(j["data"]["voiceId"] if j["success"] else j["error"])`,
+    },
+    tts: {
+      cURL: `curl -X POST ${B}/v1/text-to-speech \\\n  -H "x-api-key: vs_your_api_key" \\\n  -H "Content-Type: application/json" \\\n  -d '{"text": "The quick brown fox jumps over the lazy dog.", "voice_id": "v_8hK2...", "speed": 1}'`,
+      'Node.js': `const res = await fetch("${B}/v1/text-to-speech", {\n  method: "POST",\n  headers: { "x-api-key": process.env.VS_API_KEY, "Content-Type": "application/json" },\n  body: JSON.stringify({ text: "Hello from my app!", voice_id: "v_8hK2...", speed: 1 }),\n});\nconst json = await res.json();\nif (!json.success) throw new Error(json.error.message);\nconsole.log(json.data.audio_url);`,
+      Python: `import os, requests\n\nr = requests.post(\n    "${B}/v1/text-to-speech",\n    headers={"x-api-key": os.environ["VS_API_KEY"]},\n    json={"text": "Hello from my app!", "voice_id": "v_8hK2...", "speed": 1},\n)\nj = r.json()\nprint(j["data"]["audio_url"] if j["success"] else j["error"])`,
+    },
+  };
+  VS.$$('[data-ex]').forEach(c => { const k = c.dataset.ex; c.textContent = ex[k].cURL; const t = VS.$(`[data-tabs="${k}"]`);
+    if (t) { t.innerHTML = Object.keys(ex[k]).map((n, i) => `<button class="${i ? '' : 'on'}" data-n="${n}">${n}</button>`).join('');
+      t.onclick = e => { const b = e.target.closest('button'); if (!b) return; VS.$$('button', t).forEach(x => x.classList.toggle('on', x === b)); c.textContent = ex[k][b.dataset.n]; }; } });
+});
+</script>
+</body>
+</html>

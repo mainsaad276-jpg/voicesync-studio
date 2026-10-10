@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAQs — {brand}</title>
+<meta name="description" content="Frequently asked questions.">
+<meta name="theme-color" content="#070b18">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+</head>
+<body>
+<div id="site-header"></div>
+<header class="hero" style="padding:80px 0 40px"><div class="wrap"><span class="eyebrow">FAQs</span><h1 style="font-size:clamp(2.2rem,5vw,3.6rem)">Frequently asked <span class="grad-text">questions</span></h1><p class="lead">Product, pricing, technical and account questions.</p></div></header>
+<section class="section" style="padding-top:0"><div class="wrap" style="max-width:860px"><div class="chips" id="fc" style="justify-content:center;margin-bottom:24px"></div><div class="faq" id="faq-list"></div></div></section>
+<div id="site-footer"></div>
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/content.js"></script>
+<script>document.addEventListener('vs:ready', () => { const cats = ['All', ...new Set(VS.FAQ.map(f => f.c))]; let c = 'All'; const fc = document.getElementById('fc');
+  const draw = () => { fc.innerHTML = cats.map(x => `<button class="chip ${x === c ? 'on' : ''}" data-c="${x}">${x}</button>`).join(''); VS.renderFaq(document.getElementById('faq-list'), VS.FAQ.filter(f => c === 'All' || f.c === c)); };
+  fc.onclick = e => { const b = e.target.closest('[data-c]'); if (b) { c = b.dataset.c; draw(); } }; draw(); });</script>
+</body>
+</html>
