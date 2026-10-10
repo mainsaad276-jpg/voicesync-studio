@@ -13,6 +13,10 @@ AI voiceover website: text to speech, voice cloning, accounts, credits, PKR bill
 3. Open http://localhost:3000
 4. **Register first.** The first account becomes the **admin**, and so does the `ADMIN_EMAIL` in `.env`.
 
+## Voice library
+
+107 ready-made voices come built in: 47 English, 8 each of Urdu, Hindi, Spanish, Turkish, Russian, Korean and Cantonese, plus 4 Hebrew. They live in `lib/library.js` and use the engine's default voices (`jsf_default_<id>`). In **Admin panel → Voices** you can hide any of them and click **Generate missing previews** once, which uses about 13K engine characters, so every voice gets a ▶ sample.
+
 ## First things to do as admin
 
 1. **Clone 3–5 house voices** (your own voice, or team members who agree to it) in *Voice Cloning*.
@@ -39,7 +43,8 @@ Vercel limits: requests are capped at about 4.5 MB, so the browser automatically
 
 - Every customer's generation uses characters from **one** JSF Labs account. Keep that account topped up, and price your plans above your cost.
 - That account has a fixed number of **voice slots (50)** shared by all customers. `cloneLimits` in `config.js` caps clones per customer.
-- The engine API offers **clone + text-to-speech only**. It has no stock voice list, and models can't be chosen through the API.
+- The engine API offers clone, text-to-speech and the built-in default voices. Models can't be chosen through the API.
+- **API characters are separate from dashboard characters.** The JSF key must have its own API character balance, or every generation fails.
 - Output is **WAV**.
 
 ## Files

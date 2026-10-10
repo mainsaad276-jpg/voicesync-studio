@@ -7,6 +7,7 @@ const config = require('./config');
 const { db, tx, attach, id, now, backend } = require('./lib/db');
 const A = require('./lib/auth');
 const engine = require('./lib/upstream');
+const { LIBRARY, previewText } = require('./lib/library');
 
 const app = express();
 app.disable('x-powered-by');
@@ -28,7 +29,7 @@ app.use(['/api', '/v1'], express.json({ limit: '1mb' }), attach());
 const MAX_UPLOAD = process.env.VERCEL ? 4_400_000 : 25 * 1024 * 1024;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD } });
 const MAX_TTS = 50000;
-const LANGS = ['en', 'ur', 'ar', 'hi', 'es', 'fr', 'de', 'pt', 'it', 'ru', 'tr', 'zh', 'ja', 'ko', 'bn', 'pa', 'fa', 'id', 'ms', 'nl'];
+const LANGS = ['en', 'ur', 'ar', 'hi', 'es', 'fr', 'de', 'pt', 'it', 'ru', 'tr', 'zh', 'ja', 'ko', 'bn', 'pa', 'fa', 'id', 'ms', 'nl', 'he'];
 
 // ── helpers ───────────────────────────────────────────────
 const ok = (res, data, extra = {}, status = 200) => res.status(status).json({ success: true, ...extra, data });
@@ -60,9 +61,18 @@ function limiter(key, max, windowMs) {
   arr.push(t); hits.set(key, arr); return 0;
 }
 
-const voiceView = (v) => ({ id: v.id, name: v.name, gender: v.gender, language: v.language, public: !!v.public, createdAt: v.createdAt, sample: v.sampleUrl ? `/api/voice-sample/${v.id}` : null, category: v.category || 'Cloned', description: v.description || '' });
+const voiceView = (v) => ({ id: v.id, name: v.name, gender: v.gender, language: v.language, locale: v.locale || v.language, library: !!v.library, public: !!v.public, createdAt: v.createdAt, sample: v.sampleUrl ? `/api/voice-sample/${v.id}` : null, category: v.category || 'Cloned', description: v.description || '' });
 const genView = (g) => ({ id: g.id, title: g.title, text: g.text, voiceId: g.voiceId, voiceName: g.voiceName, speed: g.speed, characters: g.characters, format: g.format, createdAt: g.createdAt, audio: `/api/audio/${g.id}`, download: `/api/audio/${g.id}?dl=1` });
-const visibleVoices = (data, uid) => data.voices.filter((v) => !v.deleted && (v.public || (uid && v.userId === uid)));
+const libraryVoices = (data) => {
+  const hidden = new Set(data.hiddenLib || []);
+  const prev = data.previews || {};
+  return LIBRARY.filter((v) => !hidden.has(v.id)).map((v) => ({ ...v, sampleUrl: prev[v.id] || null }));
+};
+const visibleVoices = (data, uid) => [
+  ...data.voices.filter((v) => !v.deleted && uid && v.userId === uid),
+  ...data.voices.filter((v) => !v.deleted && v.public && v.userId !== uid),
+  ...libraryVoices(data),
+];
 const STORE_TEXT = 3000; // keep stored script short so the database stays small
 
 // core TTS used by dashboard + developer API
@@ -156,7 +166,7 @@ app.get('/api/audio/:id', wrap(async (req, res) => {
   await pipeAudio(g.upstreamUrl, req, res, `${config.brand.short}-${safe}.${g.format || 'wav'}`, req.query.dl);
 }));
 app.get('/api/voice-sample/:id', wrap(async (req, res) => {
-  const v = db.voices.find((x) => x.id === req.params.id && !x.deleted);
+  const v = libraryVoices(db).find((x) => x.id === req.params.id) || db.voices.find((x) => x.id === req.params.id && !x.deleted);
   if (!v || !v.sampleUrl) return fail(res, 404, 'NOT_FOUND', 'Sample not found.');
   if (!v.public) { const u = A.userFromReq(req); if (!u || (u.id !== v.userId && u.role !== 'admin')) return fail(res, 404, 'NOT_FOUND', 'Sample not found.'); }
   await pipeAudio(v.sampleUrl, req, res, `${v.name}-sample.wav`, false);
@@ -377,7 +387,7 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
     revenue: db.payments.filter((p) => p.status === 'approved').reduce((s, p) => s + p.amount, 0),
     generations24h: recent.length,
     chars24h: recent.reduce((s, g) => s + g.characters, 0),
-    voices: db.voices.filter((v) => !v.deleted).length,
+    voices: db.voices.filter((v) => !v.deleted).length + libraryVoices(db).length,
     storage: backend.name,
   });
 });
@@ -417,8 +427,34 @@ app.post('/api/admin/payments/:id/:action', requireAdmin, wrap(async (req, res) 
   });
   p ? ok(res, p) : fail(res, 404, 'NOT_FOUND', 'Pending payment not found.');
 }));
-app.get('/api/admin/voices', requireAdmin, (req, res) => ok(res, db.voices.filter((v) => !v.deleted).map((v) => ({ ...voiceView(v), owner: db.users.find((u) => u.id === v.userId)?.email || '—' }))));
+app.get('/api/admin/voices', requireAdmin, (req, res) => {
+  const hidden = new Set(db.hiddenLib || []);
+  const prev = db.previews || {};
+  ok(res, [
+    ...db.voices.filter((v) => !v.deleted).map((v) => ({ ...voiceView(v), owner: db.users.find((u) => u.id === v.userId)?.email || '—' })),
+    ...LIBRARY.map((v) => ({ ...voiceView({ ...v, sampleUrl: prev[v.id] }), public: !hidden.has(v.id), owner: 'Library' })),
+  ]);
+});
+// Generate short preview clips for library voices (uses engine characters). Call repeatedly until remaining = 0.
+app.post('/api/admin/previews', requireAdmin, wrap(async (req, res) => {
+  const prev = db.previews || {};
+  const todo = LIBRARY.filter((v) => req.body.force ? (req.body.ids || []).includes(v.id) : !prev[v.id] && (!req.body.ids || req.body.ids.includes(v.id)));
+  const batch = todo.slice(0, 6);
+  const made = {}; const errors = [];
+  await Promise.all(batch.map(async (v) => {
+    try { const out = await engine.tts({ text: previewText(v), voiceId: v.engineId, speed: 1 }); made[v.id] = out.audioUrl; }
+    catch (e) { errors.push(`${v.name}: ${e.message}`); }
+  }));
+  if (Object.keys(made).length) await tx((d) => { d.previews = { ...(d.previews || {}), ...made }; });
+  ok(res, { generated: Object.keys(made).length, remaining: todo.length - batch.length + errors.length, errors });
+}));
 app.post('/api/admin/voices/:id', requireAdmin, wrap(async (req, res) => {
+  if (req.params.id.startsWith('lib_')) {
+    const lv = LIBRARY.find((x) => x.id === req.params.id);
+    if (!lv) return fail(res, 404, 'NOT_FOUND', 'Voice not found.');
+    await tx((d) => { const h = new Set(d.hiddenLib || []); req.body.public ? h.delete(lv.id) : h.add(lv.id); d.hiddenLib = [...h]; });
+    return ok(res, voiceView({ ...lv, public: !!req.body.public }));
+  }
   const v = await tx((d) => {
     const v = d.voices.find((x) => x.id === req.params.id && !x.deleted);
     if (!v) return null;

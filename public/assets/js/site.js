@@ -7,7 +7,11 @@ VS.esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<':
 VS.num = (n) => Number(n || 0).toLocaleString('en-US');
 VS.short = (n) => (n >= 1e6 ? +(n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? +(n / 1e3).toFixed(1) + 'K' : String(n));
 VS.ago = (iso) => { const s = (Date.now() - Date.parse(iso)) / 1000; if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
-VS.flag = (l) => ({ en: '🇺🇸', ur: '🇵🇰', ar: '🇸🇦', hi: '🇮🇳', es: '🇪🇸', fr: '🇫🇷', de: '🇩🇪', pt: '🇧🇷', it: '🇮🇹', ru: '🇷🇺', tr: '🇹🇷', zh: '🇨🇳', ja: '🇯🇵', ko: '🇰🇷', bn: '🇧🇩', pa: '🇵🇰', fa: '🇮🇷', id: '🇮🇩', ms: '🇲🇾', nl: '🇳🇱' }[l] || '🌐');
+VS.flag = (l) => {
+  l = String(l || '');
+  const region = l.includes('-') ? l.split('-')[1] : ({ en: 'US', ur: 'PK', ar: 'SA', hi: 'IN', es: 'ES', fr: 'FR', de: 'DE', pt: 'BR', it: 'IT', ru: 'RU', tr: 'TR', zh: 'CN', ja: 'JP', ko: 'KR', bn: 'BD', pa: 'PK', fa: 'IR', id: 'ID', ms: 'MY', nl: 'NL', he: 'IL' })[l];
+  return region ? String.fromCodePoint(...[...region.toUpperCase()].map((c) => 127397 + c.charCodeAt(0))) : '🌐';
+};
 VS.langName = (l) => { try { return new Intl.DisplayNames(['en'], { type: 'language' }).of(l); } catch { return l; } };
 
 VS.api = async (url, opts = {}) => {
@@ -129,29 +133,38 @@ VS.renderPricing = (el, cfg) => {
 
 // ── voice picker modal (used by playground + studio) ────
 VS.voicePicker = ({ voices, current, onPick, title = 'Choose a voice' }) => {
-  let filter = { g: 'All', l: 'All', q: '' };
+  let filter = { tab: 'All', g: 'All', l: 'All', q: '' };
+  const mine = voices.filter((v) => v.mine).length, lib = voices.filter((v) => v.library).length;
+  const tabs = [['All', voices.length], ['Library', lib], ...(mine ? [['My clones', mine]] : []), ...(voices.length - lib - mine ? [['Community', voices.length - lib - mine]] : [])];
   const langs = ['All', ...new Set(voices.map((v) => v.language))];
   const back = document.createElement('div'); back.className = 'modal-back open';
-  back.innerHTML = `<div class="modal" role="dialog" aria-label="${title}"><div class="modal-head"><div><span class="label" style="margin:0 0 6px">Voice library</span><h3 style="margin:0">${title}</h3><small class="dim">${voices.length} voices</small></div><button class="x" aria-label="Close">×</button></div>
-    <div class="modal-body"><div class="row wrapr" style="margin-bottom:14px"><input placeholder="Search voices…" data-q style="flex:1;min-width:180px">
+  back.innerHTML = `<div class="modal" role="dialog" aria-label="${title}"><div class="modal-head"><div><span class="label" style="margin:0 0 6px">Voice library</span><h3 style="margin:0">${title}</h3><small class="dim">${voices.length} voices · ${langs.length - 1} languages</small></div><button class="x" aria-label="Close">×</button></div>
+    <div class="modal-body"><div class="chips" data-tabs style="margin-bottom:12px"></div>
+      <div class="row wrapr" style="margin-bottom:14px"><input placeholder="Search voices…" data-q style="flex:1;min-width:160px">
       <div class="chips">${['All', 'Male', 'Female'].map((g) => `<button class="chip" data-g="${g}">${g}</button>`).join('')}</div>
-      <select data-l style="width:auto">${langs.map((l) => `<option value="${l}">${l === 'All' ? 'All languages' : VS.langName(l)}</option>`).join('')}</select></div>
-      <div class="voice-list" data-list></div></div></div>`;
+      <select data-l style="width:auto">${langs.map((l) => `<option value="${l}">${l === 'All' ? 'All languages' : VS.flag(l) + ' ' + VS.langName(l)}</option>`).join('')}</select></div>
+      <div data-list></div></div></div>`;
   document.body.appendChild(back);
   let audio;
   const close = () => { audio?.pause(); back.remove(); };
   back.onclick = (e) => { if (e.target === back) close(); };
   $('.x', back).onclick = close;
+  const item = (v) => `<div class="voice-item ${current === v.id ? 'on' : ''}" data-id="${v.id}" role="button" tabindex="0">
+      <span class="avatar">${VS.esc((v.name[0] || '?').toUpperCase())}</span><span style="min-width:0"><b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${VS.esc(v.name)}</b><small>${VS.flag(v.locale || v.language)} ${VS.langName(v.language)} · ${VS.esc(v.gender)}${v.mine ? ' · <span style="color:var(--brand)">Your clone</span>' : ''}</small></span>
+      ${v.sample ? `<button class="play-btn" data-play="${v.sample}" aria-label="Preview">▶</button>` : ''}</div>`;
   const draw = () => {
+    $('[data-tabs]', back).innerHTML = tabs.map(([t, n]) => `<button class="chip ${filter.tab === t ? 'on' : ''}" data-tab="${t}">${t} <span class="dim">${n}</span></button>`).join('');
     $$('[data-g]', back).forEach((c) => c.classList.toggle('on', c.dataset.g === filter.g));
-    const list = voices.filter((v) => (filter.g === 'All' || v.gender === filter.g) && (filter.l === 'All' || v.language === filter.l) && (!filter.q || v.name.toLowerCase().includes(filter.q)));
-    $('[data-list]', back).innerHTML = list.length ? list.map((v) => `<div class="voice-item ${current === v.id ? 'on' : ''}" data-id="${v.id}" role="button" tabindex="0">
-      <span class="avatar">${VS.esc(v.name[0] || '?').toUpperCase()}</span><span style="min-width:0"><b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${VS.esc(v.name)}</b><small>${VS.esc(v.gender)} · ${VS.flag(v.language)} ${VS.langName(v.language)}${v.mine ? ' · <span style="color:var(--brand)">Your clone</span>' : ''}</small></span>
-      ${v.sample ? `<button class="play-btn" data-play="${v.sample}" aria-label="Preview">▶</button>` : ''}</div>`).join('') : '<div class="empty" style="grid-column:1/-1">No voices match.</div>';
+    const list = voices.filter((v) => (filter.tab === 'All' || (filter.tab === 'Library' && v.library) || (filter.tab === 'My clones' && v.mine) || (filter.tab === 'Community' && !v.library && !v.mine))
+      && (filter.g === 'All' || v.gender === filter.g) && (filter.l === 'All' || v.language === filter.l) && (!filter.q || v.name.toLowerCase().includes(filter.q)));
+    const groups = {};
+    list.forEach((v) => { const k = v.mine ? 'My clones' : !v.library ? 'Community' : VS.langName(v.language); (groups[k] = groups[k] || []).push(v); });
+    $('[data-list]', back).innerHTML = list.length ? Object.entries(groups).map(([k, vs]) => `<div class="label" style="margin:16px 0 10px">${VS.esc(k)} <span class="dim">· ${vs.length}</span></div><div class="voice-list">${vs.map(item).join('')}</div>`).join('') : '<div class="empty">No voices match.</div>';
   };
   $('[data-q]', back).oninput = (e) => { filter.q = e.target.value.toLowerCase(); draw(); };
   $('[data-l]', back).onchange = (e) => { filter.l = e.target.value; draw(); };
   back.addEventListener('click', (e) => {
+    const tb = e.target.closest('[data-tab]'); if (tb) { filter.tab = tb.dataset.tab; draw(); return; }
     const g = e.target.closest('[data-g]'); if (g) { filter.g = g.dataset.g; draw(); return; }
     const pl = e.target.closest('[data-play]');
     if (pl) { e.stopPropagation(); audio?.pause(); if (pl.textContent === '■') { pl.textContent = '▶'; return; } $$('[data-play]', back).forEach((b) => (b.textContent = '▶')); audio = new Audio(pl.dataset.play); audio.play(); pl.textContent = '■'; audio.onended = () => (pl.textContent = '▶'); return; }
@@ -189,7 +202,7 @@ VS.playground = async (root, cfg) => {
         <div class="kv"><span>Words</span><b data-d-w>0</b></div><div class="kv"><span>Est. duration</span><b data-d-t>—</b></div><div class="kv"><span>Model</span><b>Studio HD</b></div></div>
     </div></div>`;
   const ta = $('[data-text]', root);
-  const drawVoice = () => ($('[data-voice]', root).innerHTML = voice ? `<span class="avatar">${VS.esc(voice.name[0]).toUpperCase()}</span><div><b>${VS.esc(voice.name)}</b><div class="dim" style="font-size:13px">${VS.flag(voice.language)} ${VS.langName(voice.language)} · ${VS.esc(voice.gender)}</div></div>` : '<span class="dim">Library voices are being added — create a free account to clone your own.</span>');
+  const drawVoice = () => ($('[data-voice]', root).innerHTML = voice ? `<span class="avatar">${VS.esc(voice.name[0]).toUpperCase()}</span><div><b>${VS.esc(voice.name)}</b><div class="dim" style="font-size:13px">${VS.flag(voice.locale || voice.language)} ${VS.langName(voice.language)} · ${VS.esc(voice.gender)}</div></div>` : '<span class="dim">Library voices are being added — create a free account to clone your own.</span>');
   const update = () => {
     const t = ta.value, w = t.trim() ? t.trim().split(/\s+/).length : 0;
     $('[data-count]', root).textContent = `${t.length}/${cfg.playgroundLimit}`;

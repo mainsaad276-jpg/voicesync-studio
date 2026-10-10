@@ -119,7 +119,7 @@ VIEWS.studio = async (v) => {
   const save = () => { state.draft = { text: txt.value, title: $('#ttl').value, speed: +sp.value }; store('vs_draft', state.draft); };
   const drawVoice = () => {
     const vc = voiceById(state.voiceId);
-    $('#vp').innerHTML = vc ? `<span class="avatar">${esc(vc.name[0]).toUpperCase()}</span><div style="min-width:0"><b>${esc(vc.name)}</b><div class="dim" style="font-size:13px">${VS.flag(vc.language)} ${VS.langName(vc.language)} · ${esc(vc.gender)}${vc.mine ? ' · your clone' : ''}</div></div>${vc.sample ? `<button class="play-btn" id="pv">▶</button>` : ''}`
+    $('#vp').innerHTML = vc ? `<span class="avatar">${esc(vc.name[0]).toUpperCase()}</span><div style="min-width:0"><b>${esc(vc.name)}</b><div class="dim" style="font-size:13px">${VS.flag(vc.locale || vc.language)} ${VS.langName(vc.language)} · ${esc(vc.gender)}${vc.mine ? ' · your clone' : ''}</div></div>${vc.sample ? `<button class="play-btn" id="pv">▶</button>` : ''}`
       : `<div class="dim" style="font-size:14px">No voices yet. <a href="#clone" style="color:var(--brand)">Clone your first voice →</a></div>`;
     const pv = $('#pv'); let a;
     if (pv) pv.onclick = () => { if (a && !a.paused) { a.pause(); pv.textContent = '▶'; return; } a = new Audio(vc.sample); a.play(); pv.textContent = '■'; a.onended = () => (pv.textContent = '▶'); };
@@ -260,12 +260,16 @@ VIEWS.clone = async (v) => {
 VIEWS.voices = async (v) => {
   await loadVoices();
   const mine = VOICES.filter((x) => x.mine), lib = VOICES.filter((x) => !x.mine);
-  const card = (x) => `<div class="card" data-v="${x.id}"><div class="row"><span class="avatar">${esc(x.name[0]).toUpperCase()}</span><div style="min-width:0;flex:1"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</b><div class="dim" style="font-size:13px">${esc(x.gender)} · ${VS.flag(x.language)} ${VS.langName(x.language)}</div></div>${x.sample ? `<button class="play-btn" data-play="${x.sample}">▶</button>` : ''}</div>
+  const card = (x) => `<div class="card" data-v="${x.id}"><div class="row"><span class="avatar">${esc(x.name[0]).toUpperCase()}</span><div style="min-width:0;flex:1"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</b><div class="dim" style="font-size:13px">${esc(x.gender)} · ${VS.flag(x.locale || x.language)} ${VS.langName(x.language)}</div></div>${x.sample ? `<button class="play-btn" data-play="${x.sample}">▶</button>` : ''}</div>
     <div class="dim" style="font-size:12px;margin:12px 0">${x.mine ? 'Cloned ' + VS.ago(x.createdAt) : 'Library voice'}${x.public && x.mine ? ' · in public library' : ''}</div>
     <div class="row wrapr" style="gap:8px"><button class="btn btn-primary btn-sm" data-use="${x.id}">Use</button>${x.mine ? `<button class="btn btn-ghost btn-sm" data-ren="${x.id}">Rename</button><button class="btn btn-danger btn-sm" data-delv="${x.id}">Delete</button>` : ''}</div></div>`;
   v.innerHTML = `<div class="row between wrapr"><div><h2 style="font-size:1.5rem;margin:0">My voices</h2><p class="muted" style="margin:4px 0 0">${mine.length} cloned · ${lib.length} library</p></div><a class="btn btn-primary" href="#clone">+ Clone new voice</a></div>
     <div class="grid g3" style="margin:20px 0 36px">${mine.length ? mine.map(card).join('') : '<div class="empty" style="grid-column:1/-1">You haven\'t cloned a voice yet. <a href="#clone" style="color:var(--brand)">Clone one in a minute →</a></div>'}</div>
-    ${lib.length ? `<h3>Library voices</h3><div class="grid g3" style="margin-top:14px">${lib.map(card).join('')}</div>` : ''}`;
+    <div class="row between wrapr"><h3 style="margin:0">Voice library <span class="dim" style="font-size:14px">· ${lib.length}</span></h3><div class="row wrapr"><input id="lq" placeholder="Search…" style="width:180px"><select id="ll" style="width:auto"><option value="All">All languages</option>${[...new Set(lib.map((x) => x.language))].map((l) => `<option value="${l}">${VS.flag(l)} ${VS.langName(l)}</option>`).join('')}</select></div></div>
+    <div id="libl" style="margin-top:14px"></div>`;
+  const libItem = (x) => `<div class="voice-item"><span class="avatar">${esc(x.name[0]).toUpperCase()}</span><span style="min-width:0;flex:1"><b>${esc(x.name)}</b><small>${VS.flag(x.locale || x.language)} ${VS.langName(x.language)} · ${esc(x.gender)}</small></span>${x.sample ? `<button class="play-btn" data-play="${x.sample}">▶</button>` : ''}<button class="btn btn-ghost btn-sm" data-use="${x.id}">Use</button></div>`;
+  const drawLib = () => { const q = ($('#lq')?.value || '').toLowerCase(), l = $('#ll')?.value || 'All'; const f = lib.filter((x) => (l === 'All' || x.language === l) && (!q || x.name.toLowerCase().includes(q))); $('#libl').innerHTML = f.length ? `<div class="voice-list" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">${f.map(libItem).join('')}</div>` : '<div class="empty">No voices match.</div>'; };
+  drawLib(); $('#lq').oninput = drawLib; $('#ll').onchange = drawLib;
   let a;
   v.onclick = async (e) => {
     const t = e.target;
@@ -419,10 +423,43 @@ VIEWS.admin = async (v) => {
   }
   if (tab === 'voices') {
     const vs = (await api('/api/admin/voices')).data;
-    at.innerHTML = `<div class="notice info" style="margin-bottom:14px">Voices marked <b>Public</b> appear in the free playground and in every user's library. Only publish voices you own or have written consent for.</div>
-      <div class="table-wrap"><table><tr><th>Voice</th><th>Owner</th><th>Language</th><th>Created</th><th>Public library</th></tr>
-      ${vs.map((x) => `<tr><td><b>${esc(x.name)}</b><div class="dim">${esc(x.gender)}</div></td><td>${esc(x.owner)}</td><td>${VS.flag(x.language)} ${VS.langName(x.language)}</td><td>${VS.ago(x.createdAt)}</td><td><label class="row"><input type="checkbox" data-pub="${x.id}" ${x.public ? 'checked' : ''}> ${x.public ? 'Public' : 'Private'}</label></td></tr>`).join('') || '<tr><td colspan="5" class="dim" style="text-align:center;padding:24px">No voices yet — clone one in Voice Cloning first.</td></tr>'}</table></div>`;
-    at.onchange = async (e) => { const id = e.target.dataset.pub; if (id) { await api('/api/admin/voices/' + id, { method: 'POST', body: { public: e.target.checked } }); toast('Saved', 'ok'); route(); } };
+    const missing = vs.filter((x) => x.library && !x.sample).length;
+    at.innerHTML = `<div class="notice info" style="margin-bottom:14px">Library voices are the engine's built-in stock voices. Voices marked <b>Public</b> appear in the playground and every user's library. Only publish your own clones if you have the speaker's written consent.</div>
+      <div class="card row between wrapr" style="margin-bottom:14px"><div><b>Preview clips</b><div class="dim" style="font-size:13px">${vs.filter((x) => x.library).length - missing} of ${vs.filter((x) => x.library).length} library voices have a ▶ preview. Generating them uses about ${VS.num(missing * 120)} engine characters, one time.</div></div>
+        <button class="btn btn-primary" id="genp" ${missing ? '' : 'disabled'}>${missing ? 'Generate missing previews' : 'All previews ready'}</button></div>
+      <div class="row wrapr" style="margin-bottom:12px"><input id="avq" placeholder="Search voices…" style="max-width:260px"><div class="chips">${['All', 'Library', 'Clones'].map((t) => `<button class="chip" data-avt="${t}">${t}</button>`).join('')}</div></div>
+      <div class="table-wrap"><table id="avt"></table></div>`;
+    let tabF = 'All';
+    const draw = () => {
+      const q = $('#avq').value.toLowerCase();
+      $$('[data-avt]', at).forEach((c) => c.classList.toggle('on', c.dataset.avt === tabF));
+      const list = vs.filter((x) => (tabF === 'All' || (tabF === 'Library') === !!x.library) && (!q || x.name.toLowerCase().includes(q)));
+      $('#avt').innerHTML = `<tr><th>Voice</th><th>Owner</th><th>Language</th><th>Preview</th><th>Public</th></tr>` + list.map((x) => `<tr><td><b>${esc(x.name)}</b><div class="dim">${esc(x.gender)}</div></td><td>${esc(x.owner)}</td><td>${VS.flag(x.locale || x.language)} ${VS.langName(x.language)}</td>
+        <td>${x.sample ? `<button class="play-btn" data-play="${x.sample}">▶</button>` : '<span class="dim">—</span>'}</td><td><label class="row"><input type="checkbox" data-pub="${x.id}" ${x.public ? 'checked' : ''}> ${x.public ? 'Public' : 'Hidden'}</label></td></tr>`).join('');
+    };
+    draw();
+    $('#avq').oninput = draw;
+    let au;
+    at.onclick = (e) => {
+      const t = e.target.closest('[data-avt]'); if (t) { tabF = t.dataset.avt; draw(); }
+      const p = e.target.closest('[data-play]'); if (p) { au?.pause(); au = new Audio(p.dataset.play); au.play(); }
+    };
+    at.onchange = async (e) => { const id = e.target.dataset.pub; if (id) { await api('/api/admin/voices/' + id, { method: 'POST', body: { public: e.target.checked } }); const x = vs.find((y) => y.id === id); x.public = e.target.checked; draw(); toast('Saved', 'ok'); } };
+    const gb = $('#genp');
+    if (gb) gb.onclick = async () => {
+      if (!confirmBox(`Generate ${missing} preview clips? This uses about ${VS.num(missing * 120)} characters from your engine account.`)) return;
+      gb.disabled = true; let done = 0, errs = [];
+      try {
+        for (let i = 0; i < 40; i++) {
+          gb.innerHTML = `<span class="spin"></span> ${done} / ${missing}…`;
+          const r = (await api('/api/admin/previews', { method: 'POST', body: {} })).data;
+          done += r.generated; errs = r.errors;
+          if (!r.remaining || (!r.generated && r.errors.length)) break;
+        }
+      } catch (e) { errs = [e.message]; }
+      if (errs.length) toast('Some previews failed: ' + errs[0], 'bad'); else toast(`${done} previews ready`, 'ok');
+      route();
+    };
   }
 };
 
