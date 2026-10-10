@@ -39,6 +39,26 @@ VS.busy = (btn, on, label) => { if (on) { btn.dataset.label = btn.innerHTML; btn
 const LOGO = `<svg viewBox="0 0 24 24" fill="none" stroke="#04122a" stroke-width="2.6" stroke-linecap="round"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg>`;
 VS.LOGO = LOGO;
 
+// One shared demo player: ▶ / spinner / ■, with readable errors
+VS.player = { audio: null, btn: null };
+VS.play = async (btn, url) => {
+  const P = VS.player;
+  const reset = (b) => { if (b) { b.innerHTML = '▶'; b.disabled = false; } };
+  if (P.btn === btn && P.audio && !P.audio.paused) { P.audio.pause(); reset(btn); P.btn = null; return; }
+  P.audio?.pause(); reset(P.btn);
+  P.btn = btn; btn.innerHTML = '<span class="spin" style="width:12px;height:12px"></span>'; btn.disabled = true;
+  const a = new Audio(url); P.audio = a;
+  a.onplaying = () => { btn.disabled = false; btn.innerHTML = '■'; };
+  a.onended = () => { reset(btn); P.btn = null; };
+  a.onerror = async () => {
+    reset(btn); P.btn = null;
+    let msg = 'Preview not available right now.';
+    try { const j = await fetch(url).then((r) => r.json()); if (j?.error?.message) msg = j.error.message; } catch {}
+    VS.toast(msg, 'bad');
+  };
+  a.play().catch(() => {});
+};
+
 VS.config = null;
 VS.loadConfig = async () => { if (!VS.config) VS.config = (await VS.api('/api/config')).data; return VS.config; };
 VS.me = undefined;
@@ -146,7 +166,7 @@ VS.voicePicker = ({ voices, current, onPick, title = 'Choose a voice' }) => {
       <div data-list></div></div></div>`;
   document.body.appendChild(back);
   let audio;
-  const close = () => { audio?.pause(); back.remove(); };
+  const close = () => { VS.player.audio?.pause(); back.remove(); };
   back.onclick = (e) => { if (e.target === back) close(); };
   $('.x', back).onclick = close;
   const item = (v) => `<div class="voice-item ${current === v.id ? 'on' : ''}" data-id="${v.id}" role="button" tabindex="0">
@@ -167,7 +187,7 @@ VS.voicePicker = ({ voices, current, onPick, title = 'Choose a voice' }) => {
     const tb = e.target.closest('[data-tab]'); if (tb) { filter.tab = tb.dataset.tab; draw(); return; }
     const g = e.target.closest('[data-g]'); if (g) { filter.g = g.dataset.g; draw(); return; }
     const pl = e.target.closest('[data-play]');
-    if (pl) { e.stopPropagation(); audio?.pause(); if (pl.textContent === '■') { pl.textContent = '▶'; return; } $$('[data-play]', back).forEach((b) => (b.textContent = '▶')); audio = new Audio(pl.dataset.play); audio.play(); pl.textContent = '■'; audio.onended = () => (pl.textContent = '▶'); return; }
+    if (pl) { e.stopPropagation(); VS.play(pl, pl.dataset.play); return; }
     const it = e.target.closest('.voice-item'); if (it) { onPick(voices.find((v) => v.id === it.dataset.id)); close(); }
   });
   draw();

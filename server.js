@@ -35,7 +35,12 @@ const LANGS = ['en', 'ur', 'ar', 'hi', 'es', 'fr', 'de', 'pt', 'it', 'ru', 'tr',
 const ok = (res, data, extra = {}, status = 200) => res.status(status).json({ success: true, ...extra, data });
 const fail = (res, status, code, message, fields) => res.status(status).json({ success: false, error: { code, message, ...(fields ? { fields } : {}) } });
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
-  if (e instanceof engine.EngineError) return fail(res, e.status, e.code, e.message, e.fields);
+  if (e instanceof engine.EngineError) {
+    if (e.adminDetail) console.error('[engine]', e.adminDetail);
+    // admins see the real reason so they can fix it; customers get the friendly message
+    const isAdmin = (() => { try { return A.userFromReq(req)?.role === 'admin'; } catch { return false; } })();
+    return res.status(e.status).json({ success: false, error: { code: e.code, message: isAdmin && e.adminDetail ? `[Admin] ${e.adminDetail}` : e.message, ...(e.fields ? { fields: e.fields } : {}) } });
+  }
   if (e?.code === 'LIMIT_FILE_SIZE') return fail(res, 413, 'AUDIO_TOO_LARGE', 'Sample is too large. Use a shorter clip (10–30s).');
   console.error(e);
   fail(res, 500, 'INTERNAL_ERROR', 'Something went wrong. Please try again.');
@@ -61,7 +66,7 @@ function limiter(key, max, windowMs) {
   arr.push(t); hits.set(key, arr); return 0;
 }
 
-const voiceView = (v) => ({ id: v.id, name: v.name, gender: v.gender, language: v.language, locale: v.locale || v.language, library: !!v.library, public: !!v.public, createdAt: v.createdAt, sample: v.sampleUrl ? `/api/voice-sample/${v.id}` : null, category: v.category || 'Cloned', description: v.description || '' });
+const voiceView = (v) => ({ id: v.id, name: v.name, gender: v.gender, language: v.language, locale: v.locale || v.language, library: !!v.library, public: !!v.public, createdAt: v.createdAt, sample: v.sampleUrl || v.library ? `/api/voice-sample/${v.id}` : null, hasPreview: !!v.sampleUrl, category: v.category || 'Cloned', description: v.description || '' });
 const genView = (g) => ({ id: g.id, title: g.title, text: g.text, voiceId: g.voiceId, voiceName: g.voiceName, speed: g.speed, characters: g.characters, format: g.format, createdAt: g.createdAt, audio: `/api/audio/${g.id}`, download: `/api/audio/${g.id}?dl=1` });
 const libraryVoices = (data) => {
   const hidden = new Set(data.hiddenLib || []);
@@ -165,8 +170,16 @@ app.get('/api/audio/:id', wrap(async (req, res) => {
   const safe = (g.title || 'voiceover').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 40) || 'voiceover';
   await pipeAudio(g.upstreamUrl, req, res, `${config.brand.short}-${safe}.${g.format || 'wav'}`, req.query.dl);
 }));
+// Library voices get their demo clip generated on first play (official API, ~120 characters, once), then cached.
+const previewJobs = new Map();
 app.get('/api/voice-sample/:id', wrap(async (req, res) => {
-  const v = libraryVoices(db).find((x) => x.id === req.params.id) || db.voices.find((x) => x.id === req.params.id && !x.deleted);
+  let v = libraryVoices(db).find((x) => x.id === req.params.id) || db.voices.find((x) => x.id === req.params.id && !x.deleted);
+  if (v && v.library && !v.sampleUrl) {
+    if (!previewJobs.has(v.id)) previewJobs.set(v.id, engine.tts({ text: previewText(v), voiceId: v.engineId, speed: 1 }).finally(() => setTimeout(() => previewJobs.delete(v.id), 60e3)));
+    const out = await previewJobs.get(v.id);
+    await tx((d) => { d.previews = { ...(d.previews || {}), [v.id]: out.audioUrl }; });
+    v = { ...v, sampleUrl: out.audioUrl };
+  }
   if (!v || !v.sampleUrl) return fail(res, 404, 'NOT_FOUND', 'Sample not found.');
   if (!v.public) { const u = A.userFromReq(req); if (!u || (u.id !== v.userId && u.role !== 'admin')) return fail(res, 404, 'NOT_FOUND', 'Sample not found.'); }
   await pipeAudio(v.sampleUrl, req, res, `${v.name}-sample.wav`, false);

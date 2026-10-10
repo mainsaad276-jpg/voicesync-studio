@@ -122,7 +122,7 @@ VIEWS.studio = async (v) => {
     $('#vp').innerHTML = vc ? `<span class="avatar">${esc(vc.name[0]).toUpperCase()}</span><div style="min-width:0"><b>${esc(vc.name)}</b><div class="dim" style="font-size:13px">${VS.flag(vc.locale || vc.language)} ${VS.langName(vc.language)} · ${esc(vc.gender)}${vc.mine ? ' · your clone' : ''}</div></div>${vc.sample ? `<button class="play-btn" id="pv">▶</button>` : ''}`
       : `<div class="dim" style="font-size:14px">No voices yet. <a href="#clone" style="color:var(--brand)">Clone your first voice →</a></div>`;
     const pv = $('#pv'); let a;
-    if (pv) pv.onclick = () => { if (a && !a.paused) { a.pause(); pv.textContent = '▶'; return; } a = new Audio(vc.sample); a.play(); pv.textContent = '■'; a.onended = () => (pv.textContent = '▶'); };
+    if (pv) pv.onclick = () => VS.play(pv, vc.sample);
   };
   const upd = () => {
     const t = txt.value, w = t.trim() ? t.trim().split(/\s+/).length : 0, sec = Math.round(w / 2.5 / (+sp.value));
@@ -273,7 +273,7 @@ VIEWS.voices = async (v) => {
   let a;
   v.onclick = async (e) => {
     const t = e.target;
-    if (t.dataset.play) { a?.pause(); if (t.textContent === '■') { t.textContent = '▶'; return; } $$('[data-play]', v).forEach((b) => (b.textContent = '▶')); a = new Audio(t.dataset.play); a.play(); t.textContent = '■'; a.onended = () => (t.textContent = '▶'); }
+    const pb = t.closest('[data-play]'); if (pb) VS.play(pb, pb.dataset.play);
     if (t.dataset.use) { state.voiceId = t.dataset.use; store('vs_voice', t.dataset.use); location.hash = 'studio'; }
     if (t.dataset.ren) { const n = prompt('New name', voiceById(t.dataset.ren).name); if (n && n.trim().length >= 2) { await api('/api/voices/' + t.dataset.ren, { method: 'PATCH', body: { name: n } }); toast('Renamed', 'ok'); route(); } }
     if (t.dataset.delv && confirmBox('Delete this voice? Generations made with it stay in your history.')) { await api('/api/voices/' + t.dataset.delv, { method: 'DELETE' }); toast('Voice deleted', 'ok'); route(); }
@@ -423,7 +423,7 @@ VIEWS.admin = async (v) => {
   }
   if (tab === 'voices') {
     const vs = (await api('/api/admin/voices')).data;
-    const missing = vs.filter((x) => x.library && !x.sample).length;
+    const missing = vs.filter((x) => x.library && !x.hasPreview).length;
     at.innerHTML = `<div class="notice info" style="margin-bottom:14px">Library voices are the engine's built-in stock voices. Voices marked <b>Public</b> appear in the playground and every user's library. Only publish your own clones if you have the speaker's written consent.</div>
       <div class="card row between wrapr" style="margin-bottom:14px"><div><b>Preview clips</b><div class="dim" style="font-size:13px">${vs.filter((x) => x.library).length - missing} of ${vs.filter((x) => x.library).length} library voices have a ▶ preview. Generating them uses about ${VS.num(missing * 120)} engine characters, one time.</div></div>
         <button class="btn btn-primary" id="genp" ${missing ? '' : 'disabled'}>${missing ? 'Generate missing previews' : 'All previews ready'}</button></div>
@@ -435,14 +435,14 @@ VIEWS.admin = async (v) => {
       $$('[data-avt]', at).forEach((c) => c.classList.toggle('on', c.dataset.avt === tabF));
       const list = vs.filter((x) => (tabF === 'All' || (tabF === 'Library') === !!x.library) && (!q || x.name.toLowerCase().includes(q)));
       $('#avt').innerHTML = `<tr><th>Voice</th><th>Owner</th><th>Language</th><th>Preview</th><th>Public</th></tr>` + list.map((x) => `<tr><td><b>${esc(x.name)}</b><div class="dim">${esc(x.gender)}</div></td><td>${esc(x.owner)}</td><td>${VS.flag(x.locale || x.language)} ${VS.langName(x.language)}</td>
-        <td>${x.sample ? `<button class="play-btn" data-play="${x.sample}">▶</button>` : '<span class="dim">—</span>'}</td><td><label class="row"><input type="checkbox" data-pub="${x.id}" ${x.public ? 'checked' : ''}> ${x.public ? 'Public' : 'Hidden'}</label></td></tr>`).join('');
+        <td>${x.sample ? `<button class="play-btn" data-play="${x.sample}">▶</button>` : '<span class="dim">—</span>'}${x.library && !x.hasPreview ? ' <span class="dim" style="font-size:12px">not generated</span>' : ''}</td><td><label class="row"><input type="checkbox" data-pub="${x.id}" ${x.public ? 'checked' : ''}> ${x.public ? 'Public' : 'Hidden'}</label></td></tr>`).join('');
     };
     draw();
     $('#avq').oninput = draw;
     let au;
     at.onclick = (e) => {
       const t = e.target.closest('[data-avt]'); if (t) { tabF = t.dataset.avt; draw(); }
-      const p = e.target.closest('[data-play]'); if (p) { au?.pause(); au = new Audio(p.dataset.play); au.play(); }
+      const p = e.target.closest('[data-play]'); if (p) VS.play(p, p.dataset.play);
     };
     at.onchange = async (e) => { const id = e.target.dataset.pub; if (id) { await api('/api/admin/voices/' + id, { method: 'POST', body: { public: e.target.checked } }); const x = vs.find((y) => y.id === id); x.public = e.target.checked; draw(); toast('Saved', 'ok'); } };
     const gb = $('#genp');

@@ -35,7 +35,7 @@
   VS.$('#vlang').onchange = e => { f.l = e.target.value; draw(); };
   document.addEventListener('click', e => {
     const g = e.target.closest('[data-g]'); if (g) { f.g = g.dataset.g; draw(); return; }
-    const b = e.target.closest('[data-play]'); if (!b) return; a?.pause(); if (b.textContent === '■') { b.textContent = '▶'; return; } VS.$$('[data-play]').forEach(x => x.textContent = '▶'); a = new Audio(b.dataset.play); a.play(); b.textContent = '■'; a.onended = () => b.textContent = '▶';
+    const b = e.target.closest('[data-play]'); if (!b) return; VS.play(b, b.dataset.play);
   });
 });</script>
 </body>
