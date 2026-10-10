@@ -162,17 +162,23 @@ VIEWS.studio = async (v) => {
 };
 
 // encode recorded audio to 16-bit mono WAV (engine accepts WAV/MP3)
+// Decode any audio, mix to mono, resample to 24 kHz and trim to 60s → small 16-bit WAV (engine accepts WAV/MP3)
 async function toWav(blob) {
+  const RATE = 24000, MAX_S = 60;
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
-  const ch = buf.getChannelData(0), rate = buf.sampleRate, len = ch.length;
+  const src = await ctx.decodeAudioData(await blob.arrayBuffer());
+  ctx.close();
+  const dur = Math.min(src.duration, MAX_S);
+  const off = new OfflineAudioContext(1, Math.ceil(dur * RATE), RATE);
+  const node = off.createBufferSource(); node.buffer = src; node.connect(off.destination); node.start(0, 0, dur);
+  const buf = await off.startRendering();
+  const ch = buf.getChannelData(0), len = ch.length;
   const out = new DataView(new ArrayBuffer(44 + len * 2));
   const w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
   w(0, 'RIFF'); out.setUint32(4, 36 + len * 2, true); w(8, 'WAVE'); w(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
-  out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, len * 2, true);
+  out.setUint32(24, RATE, true); out.setUint32(28, RATE * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, len * 2, true);
   for (let i = 0; i < len; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, ch[i])) * 0x7fff, true);
-  ctx.close();
-  return { blob: new Blob([out], { type: 'audio/wav' }), seconds: buf.duration };
+  return { blob: new Blob([out], { type: 'audio/wav' }), seconds: dur };
 }
 
 VIEWS.clone = async (v) => {
@@ -190,12 +196,12 @@ VIEWS.clone = async (v) => {
       <div class="field"><label class="row" style="align-items:flex-start;gap:10px;color:var(--text);font-weight:500"><input type="checkbox" name="consent" style="margin-top:4px"> <span>This is my own voice, or I have the speaker's explicit permission to clone it. I won't use it to impersonate or deceive anyone.</span></label></div>
       <button class="btn btn-primary btn-lg" id="cb">Clone voice</button></form><div id="cres"></div></div>
     <div class="grid" style="align-content:start"><div class="card"><span class="label">Tips for a great clone</span>
-      <ul class="muted" style="padding-left:18px;margin:0;font-size:14px;line-height:1.9"><li>10–30 seconds is ideal</li><li>Quiet room, no music or echo</li><li>One speaker only</li><li>Speak naturally, in the tone you want</li><li>WAV or MP3, up to 25 MB</li></ul></div>
+      <ul class="muted" style="padding-left:18px;margin:0;font-size:14px;line-height:1.9"><li>10–30 seconds is ideal</li><li>Quiet room, no music or echo</li><li>One speaker only</li><li>Speak naturally, in the tone you want</li><li>WAV, MP3, M4A or OGG</li></ul></div>
       <div class="card"><span class="label">Cost</span><p style="margin:0"><b class="grad-text" style="font-size:1.4rem">Free</b> <span class="muted">— cloning doesn't use characters.</span></p></div></div></div>`;
   const drawSrc = () => {
     $$('[data-m]', v).forEach((b) => b.classList.toggle('on', b.dataset.m === mode));
     $('#src').innerHTML = mode === 'upload'
-      ? `<label class="drop" id="drop"><input type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" hidden id="fi"><div style="font-size:30px">🎙️</div><b>Drop your audio here or click to browse</b><div class="dim" style="font-size:13px">WAV or MP3 · max 25 MB</div></label>`
+      ? `<label class="drop" id="drop"><input type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg" hidden id="fi"><div style="font-size:30px">🎙️</div><b>Drop your audio here or click to browse</b><div class="dim" style="font-size:13px">WAV, MP3, M4A or OGG · long files are trimmed to 60s</div></label>`
       : `<div class="drop" style="cursor:default"><button type="button" class="rec" id="rb">●</button><div style="margin-top:12px"><b id="rs">Tap to start recording</b><div class="dim mono" id="rt">0:00</div></div>
          <p class="muted" style="font-size:13px;margin:12px auto 0;max-width:420px">Read this: “Hello! I'm recording a short sample so I can create my own AI voice. I'm speaking clearly, at a natural pace, in a quiet room.”</p></div>`;
     if (mode === 'upload') {
@@ -219,10 +225,15 @@ VIEWS.clone = async (v) => {
       };
     }
   };
-  const setFile = (f, seconds) => {
+  const setFile = async (f, seconds) => {
     if (!f) return;
-    if (!/\.(wav|mp3)$/i.test(f.name) && !/audio\/(wav|x-wav|mpeg|mp3)/.test(f.type)) return toast('Please use a WAV or MP3 file.', 'bad');
-    if (f.size > 25 * 1024 * 1024) return toast('File is over 25 MB.', 'bad');
+    if (!/\.(wav|mp3|m4a|ogg|webm)$/i.test(f.name) && !/^audio\//.test(f.type)) return toast('Please use an audio file (WAV, MP3, M4A, OGG).', 'bad');
+    if (f.size > 100 * 1024 * 1024) return toast('File is over 100 MB.', 'bad');
+    // convert anything that is not small WAV/MP3 into a compact WAV in the browser
+    if (f.size > CFG.maxUpload * 0.9 || !/\.(wav|mp3)$/i.test(f.name)) {
+      try { toast('Optimising sample…'); const r = await toWav(f); f = new File([r.blob], f.name.replace(/\.\w+$/, '') + '.wav', { type: 'audio/wav' }); seconds = r.seconds; }
+      catch { return toast('Could not read this audio file. Try a WAV or MP3.', 'bad'); }
+    }
     file = f;
     const url = URL.createObjectURL(f);
     $('#prev').innerHTML = `<div class="player"><div class="row between" style="margin-bottom:8px"><b style="font-size:14px">${esc(f.name)}</b><span class="dim" style="font-size:13px">${(f.size / 1048576).toFixed(2)} MB${seconds ? ' · ' + seconds.toFixed(1) + 's' : ''}</span></div><audio controls src="${url}"></audio></div>`;

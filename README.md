@@ -23,11 +23,17 @@ AI voiceover website: text to speech, voice cloning, accounts, credits, PKR bill
 
 Customer picks a plan → sends money to the account shown → enters the transaction ID → you check your EasyPaisa/JazzCash/bank → **Admin panel → Payments → Approve** → characters are added instantly.
 
-## Put it online
+## Put it online (Vercel)
 
-The site needs a Node server with a persistent disk (the database is `data/db.json`). GitHub Pages cannot run it, because it only hosts static files.
-- **Render.com:** New Web Service → connect the repo → Build `npm install`, Start `npm start` → add a Disk mounted at `/var/data` and set `DATA_DIR=/var/data` → add the env vars from `.env.example` (with `NODE_ENV=production`).
-- **Railway / any VPS:** same idea. Set the env vars and keep `DATA_DIR` on a volume.
+1. Import this GitHub repo in Vercel. Set **Production Branch** to `studio-server` (Settings → Git).
+2. **Storage → Create Database → Upstash for Redis** (free) and connect it to the project. This adds `KV_REST_API_URL` / `KV_REST_API_TOKEN` automatically. Without it, nothing is saved.
+3. **Settings → Environment Variables:**
+   - `ENGINE_API_KEY` = your JSF key
+   - `ADMIN_EMAIL` = your email
+   - `SESSION_SECRET` = any long random text
+4. Redeploy. Open `/api/health` and check it says `"storage":"redis","engine":true`.
+
+Vercel limits: requests are capped at about 4.5 MB, so the browser automatically compresses voice samples (24 kHz mono, max 60s). A function can run for up to 300s, so very long scripts may time out. Split them into parts.
 
 ## Important limits from the upstream engine
 
@@ -41,6 +47,7 @@ The site needs a Node server with a persistent disk (the database is `data/db.js
 | Path | What it is |
 |---|---|
 | `config.js` | Brand, prices, payment accounts, limits — edit this |
+| `api/index.js`, `vercel.json` | Vercel entry point and routing |
 | `server.js` | All API routes: auth, studio, cloning, billing, admin, public `/v1` API |
 | `lib/upstream.js` | Calls the voice engine with the secret key |
 | `public/` | Website pages; `app.html` + `assets/js/app.js` is the dashboard |
