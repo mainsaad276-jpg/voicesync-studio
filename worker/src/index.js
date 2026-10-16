@@ -514,6 +514,7 @@ export default {
       return json(200, {
         ok: true, region: env.AZURE_SPEECH_REGION || null, keySet: !!env.AZURE_SPEECH_KEY,
         jsfKeySet: !!env.JSF_API_KEY, plansReady: !!env.PRO, adminKeySet: !!env.ADMIN_KEY,
+        origin: origin || null, originAllowed: !!_ok,
       }, cors);
     }
     // Admin (code management) — protected by ADMIN_KEY, any allowed origin.

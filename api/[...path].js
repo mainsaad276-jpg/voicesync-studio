@@ -65,6 +65,9 @@ export default async function handler(request) {
   // Strip the /api prefix so the Worker sees /health, /tts, /pro/..., /admin/...
   const url = new URL(request.url);
   url.pathname = url.pathname.replace(/^\/api(?=\/|$)/, '') || '/';
-  const inner = new Request(url.toString(), request);
+  // Copy method, every header (incl. Origin) and the body explicitly.
+  const init = { method: request.method, headers: new Headers(request.headers) };
+  if (request.method !== 'GET' && request.method !== 'HEAD') init.body = await request.arrayBuffer();
+  const inner = new Request(url.toString(), init);
   return worker.fetch(inner, env);
 }
