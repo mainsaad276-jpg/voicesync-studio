@@ -9,7 +9,7 @@
 //   'https://voxnova.vercel.app/api'   ya   'https://voicesync-tts.xxxx.workers.dev'
 // Vercel par site aur API saath hon to khali chhod dein (khud /api ban jata hai).
 // API KEYS (JSF / Azure) yahan NAHI likhni — wo admin page → "API settings" mein.
-var VS_API_ADDRESS = '';
+var VS_API_ADDRESS = 'https://voicesync-studio-psi.vercel.app/api';
 // ======================================================================================
 
 window.VS_CONFIG = window.VS_CONFIG || {
