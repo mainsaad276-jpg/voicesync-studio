@@ -21,7 +21,7 @@ Project → **Settings → Environment Variables** → add:
 Phir **Deployments → … → Redeploy**.
 
 ## 4. API keys (yahi "API ki jagah" hai)
-`https://<aap-ki-site>.vercel.app/docs/admin.html` kholein:
+`https://<aap-ki-site>.vercel.app/admin` kholein (Dashboard, Requests, Users, Payments, Plans, API settings):
 - Admin key = `VS_ADMIN_KEY`, API address = `https://<aap-ki-site>.vercel.app/api`
 - **API settings** tab → JSF Labs key aur Azure Speech key + region (`centralindia`) → **Save keys**.
 
