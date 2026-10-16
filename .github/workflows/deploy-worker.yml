@@ -116,11 +116,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           [ -z "$URL" ] && exit 0
-          CUR=$(grep -oE "ttsProxy: '[^']*'" js/config.js | head -1 | sed -E "s/ttsProxy: '([^']*)'/\1/")
+          CUR=$(grep -oE "VS_API_ADDRESS = '[^']*'" js/config.js | head -1 | sed -E "s/VS_API_ADDRESS = '([^']*)'/\1/")
           if [ "$CUR" = "$URL" ]; then
             echo "js/config.js already points to $URL"
           else
-            sed -i -E "0,/ttsProxy: '[^']*'/s##ttsProxy: '$URL'#" js/config.js
+            sed -i -E "0,/VS_API_ADDRESS = '[^']*'/s##VS_API_ADDRESS = '$URL'#" js/config.js
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add js/config.js

@@ -14,6 +14,14 @@
  *   POST /admin/codes         x-admin-key; json {plan, chars, days, note} -> new code
  *   GET  /admin/codes         x-admin-key                      -> recent codes
  *   POST /admin/topup         x-admin-key; json {code, chars, days}
+ *   POST /pro/trial           json {device}  -> free trial code (FREE_TRIAL_CHARS, default 10,000)
+ *   POST /pro/request         json {name, phone, plan, chars, price, method, tid, screenshot?, device}
+ *   POST /pro/request/status  json {id, secret} -> {status, code?} (app activates itself when approved)
+ *   GET  /admin/requests      x-admin-key -> subscription requests
+ *   GET  /admin/requests/image?id=  x-admin-key -> payment screenshot
+ *   POST /admin/requests/approve    x-admin-key; json {id, chars?, days?, plan?}
+ *   POST /admin/requests/reject     x-admin-key; json {id, reason}
+ *   GET/POST /admin/settings  x-admin-key -> API keys saved in storage (a Worker secret wins)
  *   /jsf/* need header X-VS-Code with a valid code; /jsf/tts deducts characters.
  *
  * Secrets / vars (set with wrangler, never committed):
@@ -35,10 +43,11 @@ const JSF_MAX_SAMPLE = 15 * 1024 * 1024;      // 15 MB voice sample
 const JSF_VOICE_RE = /^jsf_[A-Za-z0-9_\-=]{8,200}$/;
 const JSF_AUDIO_HOST = /^https:\/\/([a-z0-9-]+\.)*jsflabs\.io\//;
 
-function corsHeaders(origin, env) {
-  const allowed = String(env.ALLOWED_ORIGINS || '')
+const DEFAULT_ORIGINS = 'https://mainsaad276-jpg.github.io,https://localhost,http://localhost,capacitor://localhost,http://localhost:8000';
+function corsHeaders(origin, env, selfOrigin) {
+  const allowed = String(env.ALLOWED_ORIGINS || DEFAULT_ORIGINS)
     .split(',').map((s) => s.trim()).filter(Boolean);
-  const ok = origin && allowed.includes(origin);
+  const ok = !!origin && (allowed.includes(origin) || origin === selfOrigin);
   return {
     'Access-Control-Allow-Origin': ok ? origin : 'null',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
@@ -152,6 +161,140 @@ function sameKey(a, b) {
   return d === 0;
 }
 
+// ---------------- API settings saved from the admin page ----------------
+// KV "settings" -> {jsfKey, azureKey, azureRegion}. A real Worker secret /
+// environment variable always wins over a saved value.
+let _settingsCache = null, _settingsAt = 0;
+async function loadSettings(env) {
+  if (!env.PRO) return {};
+  if (_settingsCache && Date.now() - _settingsAt < 30000) return _settingsCache;
+  let st = {};
+  try { st = JSON.parse((await env.PRO.get('settings')) || '{}') || {}; } catch { st = {}; }
+  _settingsCache = st; _settingsAt = Date.now();
+  return st;
+}
+async function withSettings(env) {
+  const st = await loadSettings(env);
+  return {
+    ...env,
+    _secretJsf: !!env.JSF_API_KEY,
+    _secretAzure: !!env.AZURE_SPEECH_KEY,
+    JSF_API_KEY: env.JSF_API_KEY || st.jsfKey || '',
+    AZURE_SPEECH_KEY: env.AZURE_SPEECH_KEY || st.azureKey || '',
+    AZURE_SPEECH_REGION: env.AZURE_SPEECH_REGION || st.azureRegion || '',
+  };
+}
+function hint(k) { k = String(k || ''); return k ? k.slice(0, 4) + '\u2026' + k.slice(-4) : ''; }
+
+function randomId(n) {
+  const bytes = new Uint8Array(n);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < n; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return out;
+}
+function clientIp(request) {
+  return request.headers.get('CF-Connecting-IP') ||
+    (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim() || 'unknown';
+}
+function today() { return new Date().toISOString().slice(0, 10); }
+async function bumpDaily(env, key, max) {
+  const k = key + ':' + today();
+  const n = Number((await env.PRO.get(k)) || 0);
+  if (n >= max) return false;
+  await env.PRO.put(k, String(n + 1), { expirationTtl: 172800 });
+  return true;
+}
+
+async function createCode(env, { plan, chars, days, note }) {
+  let code = newCode();
+  for (let i = 0; i < 3 && (await env.PRO.get('code:' + code)); i++) code = newCode();
+  const now = Date.now();
+  const rec = {
+    plan: String(plan || 'Custom').slice(0, 40),
+    chars, used: 0, clones: 0, created: now,
+    expires: days ? now + days * 86400000 : null,
+    note: String(note || '').slice(0, 120),
+  };
+  await saveCode(env, code, rec);
+  return { code, rec };
+}
+
+// Free trial: one per device (and at most a few per network per day).
+const DEVICE_RE = /^[A-Za-z0-9_-]{16,64}$/;
+async function proTrial(request, env, cors) {
+  if (!env.PRO) return json(503, { error: 'plans are not set up yet', code: 'PLANS_OFF' }, cors);
+  let body;
+  try { body = await request.json(); } catch { return json(400, { error: 'bad json' }, cors); }
+  const device = String(body.device || '');
+  if (!DEVICE_RE.test(device)) return json(400, { error: 'bad device id' }, cors);
+  const existing = await env.PRO.get('trial:' + device);
+  if (existing) {
+    const rec = await loadCode(env, existing);
+    if (rec) return json(200, publicStatus(existing, rec), cors);
+  }
+  if (!(await bumpDaily(env, 'trialip:' + clientIp(request), Number(env.TRIALS_PER_IP_PER_DAY) || 3))) {
+    return json(429, { error: 'free trial limit reached on this network today', code: 'TRIAL_LIMIT' }, cors);
+  }
+  const chars = Math.max(0, Math.floor(Number(env.FREE_TRIAL_CHARS) || 10000));
+  const { code, rec } = await createCode(env, { plan: 'Free', chars, days: 0, note: 'free trial ' + device.slice(0, 8) });
+  await env.PRO.put('trial:' + device, code);
+  return json(200, publicStatus(code, rec), cors);
+}
+
+// Subscription requests (customer -> admin -> approve -> code).
+const MAX_SHOT = 450 * 1024; // data URL size cap for the payment screenshot
+function cleanStr(v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001F]/g, ' ').trim().slice(0, n); }
+async function proRequest(request, env, cors) {
+  if (!env.PRO) return json(503, { error: 'plans are not set up yet', code: 'PLANS_OFF' }, cors);
+  let body;
+  try { body = await request.json(); } catch { return json(400, { error: 'bad json' }, cors); }
+  const name = cleanStr(body.name, 60);
+  const phone = String(body.phone || '').replace(/[^0-9+]/g, '').slice(0, 16);
+  const plan = cleanStr(body.plan, 40);
+  const chars = Math.floor(Number(body.chars) || 0);
+  const price = Math.floor(Number(body.price) || 0);
+  const method = cleanStr(body.method, 40);
+  const tid = cleanStr(body.tid, 60);
+  const shot = typeof body.screenshot === 'string' ? body.screenshot : '';
+  if (name.length < 2) return json(400, { error: 'name required', field: 'name' }, cors);
+  if (phone.replace(/\D/g, '').length < 10) return json(400, { error: 'WhatsApp number required', field: 'phone' }, cors);
+  if (!plan || chars < 1) return json(400, { error: 'plan required', field: 'plan' }, cors);
+  if (!tid && !shot) return json(400, { error: 'transaction ID or screenshot required', field: 'tid' }, cors);
+  if (shot && (shot.length > MAX_SHOT || !/^data:image\/(jpeg|png|webp);base64,/.test(shot))) {
+    return json(413, { error: 'screenshot too large or not an image', field: 'screenshot' }, cors);
+  }
+  if (!(await bumpDaily(env, 'reqip:' + clientIp(request), Number(env.REQUESTS_PER_IP_PER_DAY) || 10))) {
+    return json(429, { error: 'too many requests today, try tomorrow or message us on WhatsApp' }, cors);
+  }
+  const id = 'R' + randomId(8);
+  const secret = randomId(24);
+  const rec = {
+    id, secret, status: 'pending', created: Date.now(),
+    name, phone, plan, chars, price, method, tid,
+    device: DEVICE_RE.test(String(body.device || '')) ? String(body.device) : '',
+    hasShot: !!shot,
+  };
+  await env.PRO.put('req:' + id, JSON.stringify(rec));
+  if (shot) await env.PRO.put('reqimg:' + id, shot);
+  return json(200, { id, secret, status: 'pending' }, cors);
+}
+async function loadReq(env, id) {
+  if (!/^R[A-Z2-9]{8}$/.test(String(id || ''))) return null;
+  try { return JSON.parse((await env.PRO.get('req:' + id)) || 'null'); } catch { return null; }
+}
+async function proRequestStatus(request, env, cors) {
+  if (!env.PRO) return json(503, { error: 'plans are not set up yet', code: 'PLANS_OFF' }, cors);
+  let body;
+  try { body = await request.json(); } catch { return json(400, { error: 'bad json' }, cors); }
+  const rec = await loadReq(env, String(body.id || '').toUpperCase());
+  if (!rec || !sameKey(body.secret, rec.secret)) return json(404, { error: 'request not found' }, cors);
+  const out = { id: rec.id, status: rec.status, plan: rec.plan, chars: rec.chars };
+  if (rec.status === 'approved') out.code = rec.code;
+  if (rec.status === 'rejected') out.reason = rec.reason || '';
+  return json(200, out, cors);
+}
+
 async function admin(request, env, cors, url) {
   if (!env.ADMIN_KEY) return json(503, { error: 'admin key not set on the Worker' }, cors);
   if (!sameKey(request.headers.get('X-Admin-Key'), env.ADMIN_KEY)) return json(401, { error: 'wrong admin key' }, cors);
@@ -169,6 +312,30 @@ async function admin(request, env, cors, url) {
     return json(200, { codes: out }, cors);
   }
 
+  if (url.pathname === '/admin/requests' && request.method === 'GET') {
+    const list = await env.PRO.list({ prefix: 'req:', limit: 500 });
+    const out = [];
+    for (const k of list.keys) {
+      const rec = await loadReq(env, k.name.slice(4));
+      if (rec) { const { secret, ...pub } = rec; out.push(pub); }
+    }
+    out.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.created - a.created);
+    return json(200, { requests: out }, cors);
+  }
+  if (url.pathname === '/admin/requests/image' && request.method === 'GET') {
+    const id = String(url.searchParams.get('id') || '');
+    if (!/^R[A-Z2-9]{8}$/.test(id)) return json(400, { error: 'bad id' }, cors);
+    return json(200, { image: (await env.PRO.get('reqimg:' + id)) || '' }, cors);
+  }
+  if (url.pathname === '/admin/settings' && request.method === 'GET') {
+    const st = await loadSettings(env);
+    return json(200, {
+      jsfKeySet: !!(env.JSF_API_KEY || st.jsfKey), jsfFromSecret: !!env._secretJsf, jsfHint: hint(st.jsfKey),
+      azureKeySet: !!(env.AZURE_SPEECH_KEY || st.azureKey), azureFromSecret: !!env._secretAzure, azureHint: hint(st.azureKey),
+      azureRegion: env.AZURE_SPEECH_REGION || st.azureRegion || '',
+    }, cors);
+  }
+
   let body;
   try { body = await request.json(); } catch { return json(400, { error: 'bad json' }, cors); }
   const chars = Math.floor(Number(body.chars) || 0);
@@ -176,18 +343,49 @@ async function admin(request, env, cors, url) {
   if (chars < 0 || chars > 100000000) return json(400, { error: 'chars must be 0..100,000,000' }, cors);
   if (days < 0 || days > 3660) return json(400, { error: 'days must be 0..3660' }, cors);
 
+  if (url.pathname === '/admin/settings' && request.method === 'POST') {
+    const st = { ...(await loadSettings(env)) };
+    const clear = Array.isArray(body.clear) ? body.clear : [];
+    if (typeof body.jsfKey === 'string' && body.jsfKey.trim()) {
+      if (!/^jsf_[A-Za-z0-9_-]{8,200}$/.test(body.jsfKey.trim())) return json(400, { error: 'JSF key should start with jsf_' }, cors);
+      st.jsfKey = body.jsfKey.trim();
+    }
+    if (typeof body.azureKey === 'string' && body.azureKey.trim()) st.azureKey = body.azureKey.trim().slice(0, 200);
+    if (typeof body.azureRegion === 'string' && body.azureRegion.trim()) {
+      if (!/^[a-z0-9]{3,30}$/.test(body.azureRegion.trim())) return json(400, { error: 'region like centralindia' }, cors);
+      st.azureRegion = body.azureRegion.trim();
+    }
+    for (const k of clear) if (['jsfKey', 'azureKey', 'azureRegion'].includes(k)) delete st[k];
+    await env.PRO.put('settings', JSON.stringify(st));
+    _settingsCache = st; _settingsAt = Date.now();
+    return json(200, { ok: true, jsfKeySet: !!(env.JSF_API_KEY || st.jsfKey), azureKeySet: !!(env.AZURE_SPEECH_KEY || st.azureKey), azureRegion: env.AZURE_SPEECH_REGION || st.azureRegion || '' }, cors);
+  }
+
+  if (url.pathname === '/admin/requests/approve' && request.method === 'POST') {
+    const rec = await loadReq(env, body.id);
+    if (!rec) return json(404, { error: 'request not found' }, cors);
+    if (rec.status === 'approved') return json(409, { error: 'already approved', code: rec.code }, cors);
+    const c = await createCode(env, {
+      plan: body.plan || rec.plan, chars: chars || rec.chars, days: days || 30,
+      note: rec.name + ' ' + rec.phone + (rec.tid ? ' TID ' + rec.tid : ''),
+    });
+    rec.status = 'approved'; rec.code = c.code; rec.decided = Date.now();
+    await env.PRO.put('req:' + rec.id, JSON.stringify(rec));
+    const { secret, ...pub } = rec;
+    return json(200, { request: pub, ...publicStatus(c.code, c.rec) }, cors);
+  }
+  if (url.pathname === '/admin/requests/reject' && request.method === 'POST') {
+    const rec = await loadReq(env, body.id);
+    if (!rec) return json(404, { error: 'request not found' }, cors);
+    rec.status = 'rejected'; rec.reason = cleanStr(body.reason, 160); rec.decided = Date.now();
+    await env.PRO.put('req:' + rec.id, JSON.stringify(rec));
+    const { secret, ...pub } = rec;
+    return json(200, { request: pub }, cors);
+  }
+
   if (url.pathname === '/admin/codes' && request.method === 'POST') {
     if (chars < 1) return json(400, { error: 'chars required' }, cors);
-    let code = newCode();
-    for (let i = 0; i < 3 && (await env.PRO.get('code:' + code)); i++) code = newCode();
-    const now = Date.now();
-    const rec = {
-      plan: String(body.plan || 'Custom').slice(0, 40),
-      chars, used: 0, clones: 0, created: now,
-      expires: days ? now + days * 86400000 : null,
-      note: String(body.note || '').slice(0, 120),
-    };
-    await saveCode(env, code, rec);
+    const { code, rec } = await createCode(env, { plan: body.plan, chars, days, note: body.note });
     return json(200, { ...publicStatus(code, rec), note: rec.note }, cors);
   }
 
@@ -303,8 +501,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '';
-    const cors = corsHeaders(origin, env);
+    const cors = corsHeaders(origin, env, url.origin);
     const { _ok, ...corsOut } = cors;
+    env = await withSettings(env);
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: _ok ? 204 : 403, headers: corsOut });
@@ -322,7 +521,8 @@ export default {
     }
 
     const isJsf = url.pathname === '/jsf/clone' || url.pathname === '/jsf/tts';
-    const isPro = url.pathname === '/pro/status';
+    const PRO_ROUTES = { '/pro/status': proStatus, '/pro/trial': proTrial, '/pro/request': proRequest, '/pro/request/status': proRequestStatus };
+    const isPro = !!PRO_ROUTES[url.pathname];
     if (request.method !== 'POST' || (url.pathname !== '/tts' && !isJsf && !isPro)) {
       return json(404, { error: 'not found' }, cors);
     }
@@ -334,7 +534,7 @@ export default {
         const { success } = await env.RATE_LIMITER.limit({ key: ip });
         if (!success) return json(429, { error: 'too many requests, try again in a minute' }, cors);
       }
-      if (isPro) return proStatus(request, env, cors);
+      if (isPro) return PRO_ROUTES[url.pathname](request, env, cors);
       if (!env.JSF_API_KEY) return json(500, { error: 'cloning service not configured' }, cors);
       const acct = await requireCode(request, env, cors);
       if (acct.error) return acct.error;

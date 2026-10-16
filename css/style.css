@@ -908,3 +908,28 @@ input[type="range"] { touch-action: pan-y; }
 .plan-inner { display: grid; }
 .plan-face { position: relative; inset: auto; grid-area: 1 / 1; overflow: visible; }
 .pro-sheet .btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 800; }
+
+/* ---------- Free card, subscription request form, toast ---------- */
+.plan-free .plan-face { border: 2px dashed var(--accent); }
+.plan-badge.free { background: #25d366; color: #fff; }
+.req-form { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; border-top: 1px solid var(--card-edge); padding-top: 10px; }
+.req-title { margin: 0; font-size: 16px; }
+.req-field { display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.req-label { font-size: 13px; font-weight: 700; color: var(--ink-dim); }
+.req-field .char-search, .req-field .select { margin: 0; width: 100%; }
+.req-file { font-size: 13px; color: var(--ink-dim); }
+.req-send { width: 100%; justify-content: center; }
+.req-msg { margin: 0; min-height: 1.2em; font-size: 14px; }
+.req-msg.err { color: var(--danger); }
+.req-msg.ok { color: var(--accent); font-weight: 700; }
+.req-after .plan-wa { width: 100%; }
+.plans-btn { position: relative; }
+.plans-btn.pending::after {
+  content: ""; position: absolute; top: -3px; inset-inline-end: -3px; width: 10px; height: 10px;
+  border-radius: 50%; background: #ff3b30; border: 2px solid var(--card);
+}
+.pro-toast {
+  position: fixed; z-index: 10000; left: 50%; bottom: 96px; transform: translateX(-50%);
+  max-width: min(92vw, 520px); background: #1d2b27; color: #fff; padding: 12px 16px;
+  border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.3); font-weight: 700; text-align: center;
+}

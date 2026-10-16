@@ -4,8 +4,17 @@
  * Speech and JSF Labs and checks plan codes. The GitHub "Deploy voice Worker"
  * workflow fills this in automatically. Empty = only the free engines.
  */
+// ==================== API PLACE (yahan apna API address lagayein) ====================
+// Apna API address in quotes ke andar likhein, jaise:
+//   'https://voxnova.vercel.app/api'   ya   'https://voicesync-tts.xxxx.workers.dev'
+// Vercel par site aur API saath hon to khali chhod dein (khud /api ban jata hai).
+// API KEYS (JSF / Azure) yahan NAHI likhni — wo admin page → "API settings" mein.
+var VS_API_ADDRESS = '';
+// ======================================================================================
+
 window.VS_CONFIG = window.VS_CONFIG || {
-  ttsProxy: '',
+  ttsProxy: VS_API_ADDRESS ||
+    ((typeof location !== 'undefined' && /\.vercel\.app$/.test(location.hostname)) ? location.origin + '/api' : ''),
 
   /*
    * Pro plans (see js/pro.js). Edit prices, offers and payment details here.
@@ -24,18 +33,13 @@ window.VS_CONFIG = window.VS_CONFIG || {
     proFeatures: ['hd', 'clone'],
     currency: 'Rs',
 
-    // Plan cards. price = normal monthly price; firstMonth = offer price
-    // for the first month (leave out for no offer). chars = HD characters.
-    // Boss pricing (2026-10-09): FREE tier = 10,000 tokens, no subscription.
-    // Paid plans multiply up to 10M characters; subscription via WhatsApp.
+    // Plan cards. price = normal monthly price; firstMonth = offer price for
+    // the first month. chars = HD characters per month.
+    // Boss pricing: Rs 1,500 per 1M characters, multiplied up to 10M; first
+    // month Rs 300 off. Free tier (freeTrialChars) is granted by the API,
+    // once per device; after it is used up, a subscription is needed.
+    freeTrialChars: 10000,
     plans: [
-      {
-        id: 'free', name: 'Free', chars: 10000, price: 0, badge: 'free',
-        perks: {
-          en: ['10,000 tokens FREE — no subscription needed', 'Try HD voices', 'Urdu + 60 languages', 'Upgrade anytime on WhatsApp'],
-          ur: ['10,000 ٹوکن مفت — سبسکرپشن کی ضرورت نہیں', 'ایچ ڈی آوازیں آزمائیں', 'اردو + 60 زبانیں', 'واٹس ایپ پر کسی بھی وقت اپ گریڈ کریں']
-        }
-      },
       {
         id: 'starter', name: 'Starter', chars: 1000000, price: 1500, firstMonth: 1200,
         perks: {
@@ -44,31 +48,38 @@ window.VS_CONFIG = window.VS_CONFIG || {
         }
       },
       {
-        id: 'creator', name: 'Creator', chars: 3000000, price: 3999, firstMonth: 3699, badge: 'popular',
+        id: 'plus', name: 'Plus', chars: 2000000, price: 3000, firstMonth: 2700,
         perks: {
-          en: ['3M HD characters / month', 'Clone up to 20 voices', 'Best for YouTubers', 'Priority WhatsApp support'],
-          ur: ['30 لاکھ ایچ ڈی حروف / ماہ', '20 تک آوازیں کلون کریں', 'یوٹیوبرز کے لیے بہترین', 'ترجیحی واٹس ایپ سپورٹ']
+          en: ['2M HD characters / month', 'Clone up to 20 voices', 'Good for weekly videos', 'WhatsApp support'],
+          ur: ['20 لاکھ ایچ ڈی حروف / ماہ', '20 تک آوازیں کلون کریں', 'ہفتہ وار ویڈیوز کے لیے', 'واٹس ایپ سپورٹ']
         }
       },
       {
-        id: 'business', name: 'Business', chars: 6000000, price: 7499, firstMonth: 7199,
+        id: 'creator', name: 'Creator', chars: 3000000, price: 4500, firstMonth: 4200, badge: 'popular',
         perks: {
-          en: ['6M HD characters / month', 'Clone up to 20 voices', 'For agencies & channels', 'Priority WhatsApp support'],
-          ur: ['60 لاکھ ایچ ڈی حروف / ماہ', '20 تک آوازیں کلون کریں', 'ایجنسیوں اور چینلز کے لیے', 'ترجیحی واٹس ایپ سپورٹ']
+          en: ['3M HD characters / month', 'Clone up to 20 voices', 'Best for YouTubers', 'WhatsApp support'],
+          ur: ['30 لاکھ ایچ ڈی حروف / ماہ', '20 تک آوازیں کلون کریں', 'یوٹیوبرز کے لیے بہترین', 'واٹس ایپ سپورٹ']
         }
       },
       {
-        id: 'studio', name: 'Studio', chars: 10000000, price: 11999, firstMonth: 11699,
+        id: 'pro', name: 'Pro', chars: 5000000, price: 7500, firstMonth: 7200,
         perks: {
-          en: ['10M HD characters / month', 'Clone up to 50 voices', 'For studios & heavy creators', 'Priority WhatsApp support'],
-          ur: ['1 کروڑ ایچ ڈی حروف / ماہ', '50 تک آوازیں کلون کریں', 'اسٹوڈیوز اور ہیوی کریئیٹرز کے لیے', 'ترجیحی واٹس ایپ سپورٹ']
+          en: ['5M HD characters / month', 'Clone up to 20 voices', 'For agencies & channels', 'WhatsApp support'],
+          ur: ['50 لاکھ ایچ ڈی حروف / ماہ', '20 تک آوازیں کلون کریں', 'ایجنسیوں اور چینلز کے لیے', 'واٹس ایپ سپورٹ']
+        }
+      },
+      {
+        id: 'studio', name: 'Studio', chars: 10000000, price: 15000, firstMonth: 14700,
+        perks: {
+          en: ['10M HD characters / month', 'Clone up to 50 voices', 'For studios & heavy creators', 'WhatsApp support'],
+          ur: ['1 کروڑ ایچ ڈی حروف / ماہ', '50 تک آوازیں کلون کریں', 'اسٹوڈیوز اور ہیوی کریئیٹرز کے لیے', 'واٹس ایپ سپورٹ']
         }
       }
     ],
 
     offers: [
       { en: 'FREE: 10,000 tokens — no subscription needed', ur: 'مفت: 10,000 ٹوکن — سبسکرپشن کی ضرورت نہیں' },
-      { en: 'After free: get your subscription on WhatsApp', ur: 'مفت کے بعد: واٹس ایپ پر سبسکرپشن لیں' },
+      { en: 'After free: request your subscription in the app or on WhatsApp', ur: 'مفت کے بعد: ایپ میں یا واٹس ایپ پر سبسکرپشن کی درخواست دیں' },
       { en: 'First month Rs 300 off on every paid plan', ur: 'ہر پیڈ پلان پر پہلے ماہ 300 روپے کی چھوٹ' },
       { en: 'Pay 3 months together: 10% off', ur: '3 ماہ اکٹھے ادا کریں: 10% چھوٹ' },
       { en: 'Refer a friend: you both get 100,000 bonus characters', ur: 'دوست کو بتائیں: دونوں کو 1 لاکھ بونس حروف' }
