@@ -49,7 +49,9 @@ function corsHeaders(origin, env, selfOrigin) {
   // allowed; ALLOWED_ORIGINS can only add more.
   const allowed = (DEFAULT_ORIGINS + ',' + String(env.ALLOWED_ORIGINS || ''))
     .split(',').map((s) => s.trim()).filter(Boolean);
-  const ok = !!origin && (allowed.includes(origin) || origin === selfOrigin);
+  const ok = !!origin && (allowed.includes(origin) || origin === selfOrigin ||
+    // the project's own Vercel addresses (production, git-branch and preview URLs)
+    /^https:\/\/voicesync-studio(-[a-z0-9-]+)?\.vercel\.app$/.test(origin));
   return {
     'Access-Control-Allow-Origin': ok ? origin : 'null',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',

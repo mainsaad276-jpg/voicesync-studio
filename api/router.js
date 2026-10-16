@@ -59,7 +59,11 @@ export default async function handler(request) {
     AZURE_SPEECH_KEY: e.AZURE_SPEECH_KEY || '',
     AZURE_SPEECH_REGION: e.AZURE_SPEECH_REGION || '',
     ADMIN_KEY: e.VS_ADMIN_KEY || e.ADMIN_KEY || '',
-    ALLOWED_ORIGINS: e.ALLOWED_ORIGINS || '',
+    // The site this function is served from is always allowed (after a
+    // rewrite request.url can carry an internal host, so use the real one).
+    ALLOWED_ORIGINS: [e.ALLOWED_ORIGINS || '',
+      request.headers.get('x-forwarded-host') ? 'https://' + request.headers.get('x-forwarded-host') : '',
+      request.headers.get('host') ? 'https://' + request.headers.get('host') : ''].filter(Boolean).join(','),
     FREE_TRIAL_CHARS: e.FREE_TRIAL_CHARS || '',
     PRO: kvFromEnv(e),
   };

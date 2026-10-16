@@ -273,6 +273,11 @@ t('same_origin_allowed', r.status === 200);
   t('vercel_rewrite_path', vr.status === 200 && (await vr.json()).remaining === 1000);
   vr = await vercel(new Request('https://voxnova.vercel.app/api/router?__path=pro/status', { method: 'OPTIONS', headers: { Origin: 'https://mainsaad276-jpg.github.io', 'Access-Control-Request-Method': 'POST' } }));
   t('vercel_preflight_github_pages', vr.status === 204 && vr.headers.get('access-control-allow-origin') === 'https://mainsaad276-jpg.github.io');
+  // Admin page on the project's own Vercel site (request.url host differs after the rewrite)
+  vr = await vercel(new Request('https://internal-host.example/api/router?__path=admin/codes', { headers: { Origin: 'https://voicesync-studio-psi.vercel.app', host: 'voicesync-studio-psi.vercel.app', 'X-Admin-Key': 'vercel-admin' } }));
+  t('vercel_self_origin_admin', vr.status === 200);
+  vr = await vercel(new Request('https://internal-host.example/api/router?__path=admin/codes', { headers: { Origin: 'https://evil.vercel.app', 'X-Admin-Key': 'vercel-admin' } }));
+  t('vercel_other_site_blocked', vr.status === 403);
   globalThis.fetch = prevFetch;
 }
 
