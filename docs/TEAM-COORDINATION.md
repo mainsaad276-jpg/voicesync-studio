@@ -23,7 +23,14 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
 6. **QA gate**: web changes must keep `bash qa/run-qa.sh` green.
 
 ## Active work
-- _(Claude: `subscriptions` merged as PR #4 — see Done recently.)_
+- **Claude — branch `admin-dashboard` (IN PROGRESS, 2026-10-16, boss order "expert level"):**
+  admin dashboard (users + active users, payments ledger, plans, charts, CSV),
+  user tracking (lastSeen, auto free trial on first open), security fixes from
+  the audit (admin login attempt limit, server-side plan table on approve).
+  Files: `worker/src/index.js`, `api/router.js`, `docs/admin.html`, `js/pro.js`
+  (init only), `vercel.json` (`/admin` short link), `qa/*`. Muse: please avoid
+  these until merged.
+
 - **For Muse (when you pick up web work):** plans now live in `js/config.js`
   (`freeTrialChars`, `plans` = Rs 1,500 × millions) and are rendered by
   `js/pro.js`; please change prices there only. The API address is the single
