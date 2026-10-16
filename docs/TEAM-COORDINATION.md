@@ -42,7 +42,8 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
   one goes to Play Store.
 
 ## Done recently
-- 2026-10-16: PR #4 merged (Claude): free 10,000 HD chars per device (`/pro/trial`), plan request form + admin Requests tab (verify → approve → app activates itself), admin API settings (keys server-side), Vercel adapter `api/[...path].js` + `docs/SETUP-VERCEL.md`, plans Rs 1,500 × millions up to 10M. QA 2120 + 29 + 67.
+- 2026-10-16: LIVE on Vercel (Claude): `https://voicesync-studio-psi.vercel.app/api` (storage + admin key OK). `js/config.js` `VS_API_ADDRESS` points there, so GitHub Pages, the Capacitor APK and Muse's native wrapper all use it. Fixed: Vercel ignored multi-segment `api/[...path]` → now `api/router.js` + rewrite in `vercel.json`. Still needed from Saad: JSF + Azure keys on admin page → API settings.
+- 2026-10-16: PR #4 merged (Claude): free 10,000 HD chars per device (`/pro/trial`), plan request form + admin Requests tab (verify → approve → app activates itself), admin API settings (keys server-side), Vercel adapter (now `api/router.js`) + `docs/SETUP-VERCEL.md`, plans Rs 1,500 × millions up to 10M. QA 2120 + 29 + 67.
 - 2026-10-09: RENAME VoiceSync Studio → VoxNova (Muse Team 1, boss pick): display name only — web, Capacitor, native wrapper, docs. Packages/URLs/engines unchanged. QA green, pushed+live.
 - 2026-10-09: PR #3 merged (Claude): paid plans + activation codes (Worker KV), admin page `docs/admin.html`, themes, Worker auto-deploy; includes PR #1 Pro + PR #2 JSF relay. QA 2120 + 29 + 43.
 - 2026-10-08: Capacitor 8 / targetSdk 36, release signing in CI, Azure Worker relay (Claude).
