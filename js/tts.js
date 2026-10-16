@@ -1060,7 +1060,9 @@
   function _jsfPlanPrompt(code) {
     try {
       if (typeof window === 'undefined' || !window.Pro || typeof window.Pro.showPlans !== 'function') return;
-      var reason = code === 'PLAN_BALANCE' ? 'noBalance' : code === 'EXPIRED' ? 'expired' : 'needPlan';
+      var st = typeof window.Pro.status === 'function' ? window.Pro.status() : null;
+      var reason = code === 'PLAN_BALANCE' ? ((st && st.plan === 'Free') ? 'freeUsed' : 'noBalance')
+        : code === 'EXPIRED' ? 'expired' : 'needPlan';
       if (code === 'BAD_CODE' && typeof window.Pro.clearCode === 'function') window.Pro.clearCode();
       window.Pro.showPlans(reason);
     } catch (e) {}

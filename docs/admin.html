@@ -4,108 +4,173 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>VoiceSync Admin</title>
+  <title>VoxNova Admin</title>
   <link rel="stylesheet" href="../css/style.css">
+  <script src="../js/theme.js"></script>
   <script src="../js/config.js"></script>
   <style>
     body { display: block; }
-    main { max-width: 900px; margin: 0 auto; padding: 16px; }
+    main { max-width: 980px; margin: 0 auto; padding: 16px 16px 48px; }
     h1 { font-size: 22px; margin: 8px 0 4px; }
+    h2 { font-size: 18px; margin: 0 0 8px; }
     .muted { color: var(--ink-dim); }
     .box { background: var(--card); border: 1px solid var(--card-edge); border-radius: 16px; padding: 16px; margin: 12px 0; }
     label { display: block; font-weight: 700; margin: 10px 0 4px; }
-    input, select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--bg-soft); color: var(--ink); font: inherit; }
-    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    input, select, textarea { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--bg-soft); color: var(--ink); font: inherit; box-sizing: border-box; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
     .btn { cursor: pointer; }
-    .code { font: 800 22px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 1px; background: var(--tint); padding: 10px 12px; border-radius: 12px; display: inline-block; }
+    .btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 800; }
+    .btn-ok { background: #1f9d55; color: #fff; border-color: #1f9d55; font-weight: 800; }
+    .btn-no { background: transparent; color: var(--danger); border-color: var(--danger); font-weight: 800; }
+    .code { font: 800 20px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 1px; background: var(--tint); padding: 8px 12px; border-radius: 12px; display: inline-block; }
     .msg { min-height: 1.2em; margin: 8px 0 0; }
     .err { color: var(--danger); }
+    .ok { color: var(--accent); font-weight: 700; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--card-edge); vertical-align: top; }
     td.mono { font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
     .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
-    .tag.ok { background: var(--tint); color: var(--accent); }
-    .tag.bad { background: #f5e0c8; color: #8a4b00; }
+    .tag.ok, .tag.approved { background: var(--tint); color: var(--accent); }
+    .tag.bad, .tag.rejected { background: #f5e0c8; color: #8a4b00; }
+    .tag.pending { background: #fff1c2; color: #6b4a00; }
     .table-wrap { overflow-x: auto; }
     .wa { background: #25d366; color: #fff; border: 0; text-decoration: none; display: inline-flex; padding: 10px 14px; border-radius: 999px; font-weight: 800; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 0; }
+    .tab-btn { border: 1px solid var(--card-edge); background: var(--bg-soft); color: var(--ink); padding: 8px 14px; border-radius: 999px; font: inherit; font-weight: 800; cursor: pointer; }
+    .tab-btn[aria-selected="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: #ff3b30; color: #fff; font-size: 12px; margin-inline-start: 4px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .stat { background: var(--bg-soft); border-radius: 14px; padding: 12px; }
+    .stat b { display: block; font-size: 24px; }
+    .req { border: 1px solid var(--card-edge); border-radius: 14px; padding: 12px; margin: 10px 0; background: var(--bg); }
+    .req.pending { border-color: #e0b34c; box-shadow: 0 0 0 2px rgba(224,179,76,.25); }
+    .req-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 8px 0; font-size: 14px; }
+    .kv dt { color: var(--ink-dim); }
+    .kv dd { margin: 0; font-weight: 700; word-break: break-word; }
+    .shot { max-width: 100%; max-height: 420px; border-radius: 12px; border: 1px solid var(--card-edge); margin-top: 6px; display: block; }
+    .check { display: flex; gap: 8px; align-items: center; font-weight: 600; margin: 4px 0; }
+    .check input { width: auto; }
+    .hint { font-size: 13px; color: var(--ink-dim); margin: 4px 0 0; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
 <main>
-  <h1>⭐ VoiceSync — Plan codes (admin)</h1>
-  <p class="muted">Payment mil jaye to yahan code banayein aur customer ko WhatsApp par bhejein. Ye page sirf aap ke liye hai — admin key kisi ko na dein.</p>
+  <h1>⭐ VoxNova — Admin</h1>
+  <p class="muted">Customer ki subscription request yahan aati hai. Details aur payment check karein → <b>Approve</b> → uska Pro khud chalu ho jata hai. Ye page sirf aap ke liye hai — admin key kisi ko na dein.</p>
 
   <section class="box" id="loginBox">
     <label for="adminKey">Admin key</label>
-    <input id="adminKey" type="password" autocomplete="current-password" placeholder="GitHub secret VS_ADMIN_KEY wali value">
-    <label for="worker">Worker address</label>
-    <input id="worker" type="url" placeholder="https://voicesync-tts.xxxx.workers.dev">
+    <input id="adminKey" type="password" autocomplete="current-password" placeholder="VS_ADMIN_KEY wali value">
+    <label for="worker">API address</label>
+    <input id="worker" type="url" placeholder="https://voxnova.vercel.app/api  ya  https://voicesync-tts.xxxx.workers.dev">
     <div class="actions">
       <button class="btn btn-primary" id="btnLogin" type="button">Open</button>
     </div>
     <p class="msg" id="loginMsg"></p>
   </section>
 
-  <section class="box" id="createBox" hidden>
-    <h2 style="margin:0">New code</h2>
-    <div class="row">
-      <div>
-        <label for="plan">Plan</label>
-        <select id="plan"></select>
-      </div>
-      <div>
-        <label for="chars">Characters</label>
-        <input id="chars" type="number" min="1" step="1000">
-      </div>
-      <div>
-        <label for="days">Valid for (days)</label>
-        <input id="days" type="number" min="0" value="30">
-      </div>
-    </div>
-    <div class="row">
-      <div>
-        <label for="note">Customer name / note</label>
-        <input id="note" type="text" maxlength="120" placeholder="e.g. Ali — paid Rs 1,200 JazzCash">
-      </div>
-      <div>
-        <label for="phone">Customer WhatsApp (optional)</label>
-        <input id="phone" type="tel" placeholder="03xx xxxxxxx">
-      </div>
-    </div>
-    <div class="actions">
-      <button class="btn btn-primary" id="btnCreate" type="button">Create code</button>
-    </div>
-    <p class="msg" id="createMsg"></p>
-    <div id="result" hidden>
-      <p><span class="code" id="newCode"></span></p>
-      <div class="actions">
-        <button class="btn btn-secondary" id="btnCopy" type="button">Copy message</button>
-        <a class="wa" id="btnWa" target="_blank" rel="noopener">💬 Send on WhatsApp</a>
-      </div>
-    </div>
-  </section>
+  <div id="app" hidden>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn" role="tab" data-tab="requests" aria-selected="true">📥 Requests <span class="count" id="pendingCount" hidden>0</span></button>
+      <button class="tab-btn" role="tab" data-tab="codes" aria-selected="false">🎟️ Codes</button>
+      <button class="tab-btn" role="tab" data-tab="settings" aria-selected="false">🔑 API settings</button>
+      <button class="tab-btn" role="tab" data-tab="summary" aria-selected="false">📊 Summary</button>
+    </nav>
 
-  <section class="box" id="listBox" hidden>
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <h2 style="margin:0">Codes</h2>
-      <button class="btn btn-secondary btn-small" id="btnReload" type="button">Refresh</button>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Code</th><th>Plan</th><th>Left</th><th>Valid until</th><th>Note</th><th></th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-    <p class="msg" id="listMsg"></p>
-  </section>
+    <!-- REQUESTS -->
+    <section class="box" data-panel="requests">
+      <div class="actions" style="margin-top:0;justify-content:space-between">
+        <h2 style="margin:0">Subscription requests</h2>
+        <div class="actions" style="margin-top:0">
+          <select id="reqFilter" style="width:auto">
+            <option value="pending">Pending</option>
+            <option value="all">All</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <button class="btn btn-secondary btn-small" id="btnReqReload" type="button">Refresh</button>
+        </div>
+      </div>
+      <p class="hint">Har request mein check karein: ① naam aur WhatsApp number sahi hai ② TID / screenshot aap ke account mein aayi payment se milta hai ③ raqam plan ke mutabiq hai.</p>
+      <div id="reqList"></div>
+      <p class="msg" id="reqMsg"></p>
+    </section>
+
+    <!-- CODES -->
+    <section data-panel="codes" hidden>
+      <div class="box">
+        <h2>New code (manual)</h2>
+        <div class="row">
+          <div><label for="plan">Plan</label><select id="plan"></select></div>
+          <div><label for="chars">Characters</label><input id="chars" type="number" min="1" step="1000"></div>
+          <div><label for="days">Valid for (days)</label><input id="days" type="number" min="0" value="30"></div>
+        </div>
+        <div class="row">
+          <div><label for="note">Customer name / note</label><input id="note" type="text" maxlength="120" placeholder="e.g. Ali — paid Rs 1,200 JazzCash"></div>
+          <div><label for="phone">Customer WhatsApp (optional)</label><input id="phone" type="tel" placeholder="03xx xxxxxxx"></div>
+        </div>
+        <div class="actions"><button class="btn btn-primary" id="btnCreate" type="button">Create code</button></div>
+        <p class="msg" id="createMsg"></p>
+        <div id="result" hidden>
+          <p><span class="code" id="newCode"></span></p>
+          <div class="actions">
+            <button class="btn btn-secondary" id="btnCopy" type="button">Copy message</button>
+            <a class="wa" id="btnWa" target="_blank" rel="noopener">💬 Send on WhatsApp</a>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="actions" style="margin-top:0;justify-content:space-between">
+          <h2 style="margin:0">Codes</h2>
+          <button class="btn btn-secondary btn-small" id="btnReload" type="button">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Plan</th><th>Left</th><th>Valid until</th><th>Note</th><th></th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <p class="msg" id="listMsg"></p>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="box" data-panel="settings" hidden>
+      <h2>API settings — yahan apni API keys lagayein</h2>
+      <p class="hint">Keys server par mehfooz rehti hain aur app ya website mein kabhi nahi jaatin. Khali chhorne se purani key wahi rehti hai.</p>
+      <label for="jsfKey">JSF Labs API key (HD voices + cloning)</label>
+      <input id="jsfKey" type="password" autocomplete="off" placeholder="jsf_…">
+      <p class="hint" id="jsfState"></p>
+      <label for="azureKey">Azure Speech key (Studio voices)</label>
+      <input id="azureKey" type="password" autocomplete="off" placeholder="Azure → Speech → Keys and Endpoint → KEY 1">
+      <p class="hint" id="azureState"></p>
+      <label for="azureRegion">Azure region</label>
+      <input id="azureRegion" type="text" placeholder="centralindia">
+      <div class="actions">
+        <button class="btn btn-primary" id="btnSaveSettings" type="button">Save keys</button>
+        <button class="btn btn-no btn-small" id="btnClearJsf" type="button">Remove JSF key</button>
+        <button class="btn btn-no btn-small" id="btnClearAzure" type="button">Remove Azure key</button>
+      </div>
+      <p class="msg" id="setMsg"></p>
+    </section>
+
+    <!-- SUMMARY -->
+    <section class="box" data-panel="summary" hidden>
+      <h2>Summary</h2>
+      <div class="stats" id="stats"></div>
+      <p class="hint">Revenue sirf approved requests ki raqam ka jor hai (aap ke record ke liye).</p>
+    </section>
+  </div>
 </main>
 <script>
 (function () {
   'use strict';
   var C = (window.VS_CONFIG && window.VS_CONFIG.pro) || {};
-  var plans = (C.plans || []).slice();
-  plans.push({ id: 'trial', name: 'Free trial', chars: 10000, price: 0 });
+  var plans = (C.plans || []).filter(function (p) { return p && p.price > 0; }).slice();
+  plans.push({ id: 'trial', name: 'Free trial', chars: Number(C.freeTrialChars) || 10000, price: 0 });
   plans.push({ id: 'custom', name: 'Custom', chars: 100000, price: 0 });
   var $ = function (id) { return document.getElementById(id); };
   var key = '', base = '';
@@ -117,16 +182,31 @@
   $('adminKey').value = key; $('worker').value = base;
 
   function nameOf(p) { return typeof p.name === 'object' ? (p.name.en || '') : p.name; }
+  function fmt(n) { return Number(n || 0).toLocaleString('en-US'); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function waNumber(p) {
+    var d = String(p || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.indexOf('0') === 0) d = '92' + d.slice(1);
+    return d;
+  }
+  function codeMessage(c) {
+    return 'Assalam o Alaikum! Your VoxNova ' + c.plan + ' plan is active.\n\n' +
+      'Activation code: ' + c.code + '\n' + fmt(c.remaining) + ' HD characters' +
+      (c.expires ? ', valid until ' + new Date(c.expires).toLocaleDateString() : '') + '.\n\n' +
+      'If the app did not switch on by itself: open the app → ⭐ Pro → "Have an activation code?" → paste the code → Activate. Shukriya!';
+  }
+
   plans.forEach(function (p, i) {
     var o = document.createElement('option');
     o.value = String(i);
-    o.textContent = nameOf(p) + (p.chars ? ' — ' + Number(p.chars).toLocaleString('en-US') + ' chars' : '') + (p.price ? ' — Rs ' + p.price : '');
+    o.textContent = nameOf(p) + ' — ' + fmt(p.chars) + ' chars' + (p.price ? ' — Rs ' + fmt(p.price) : '');
     $('plan').appendChild(o);
   });
   function syncPlan() {
     var p = plans[Number($('plan').value) || 0];
     $('chars').value = p.chars || '';
-    $('days').value = p.id === 'trial' ? 7 : 30;
+    $('days').value = p.id === 'trial' ? 0 : 30;
   }
   $('plan').addEventListener('change', syncPlan); syncPlan();
 
@@ -143,62 +223,137 @@
       });
     });
   }
-  function fmt(n) { return Number(n || 0).toLocaleString('en-US'); }
-  function waNumber(p) {
-    var d = String(p || '').replace(/\D/g, '');
-    if (!d) return '';
-    if (d.indexOf('0') === 0) d = '92' + d.slice(1);
-    return d;
-  }
-  function codeMessage(c) {
-    return 'Assalam o Alaikum! Your VoxNova ' + c.plan + ' plan is active.\n\n' +
-      'Activation code: ' + c.code + '\n' + fmt(c.remaining) + ' HD characters' +
-      (c.expires ? ', valid until ' + new Date(c.expires).toLocaleDateString() : '') + '.\n\n' +
-      'Open the app → ⭐ Pro → "Have an activation code?" → paste the code → Activate. Shukriya!';
-  }
 
-  function load() {
+  // ---------- tabs ----------
+  document.querySelectorAll('.tab-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = b.getAttribute('data-tab');
+      document.querySelectorAll('.tab-btn').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+      document.querySelectorAll('[data-panel]').forEach(function (p) { p.hidden = p.getAttribute('data-panel') !== t; });
+      if (t === 'settings') loadSettings();
+      if (t === 'summary') renderStats();
+      if (t === 'codes') loadCodes();
+    });
+  });
+
+  // ---------- requests ----------
+  var allReqs = [], allCodes = [];
+  function loadRequests() {
+    $('reqMsg').textContent = 'Loading…'; $('reqMsg').className = 'msg';
+    return api('/admin/requests').then(function (j) {
+      allReqs = j.requests || [];
+      var pending = allReqs.filter(function (r) { return r.status === 'pending'; }).length;
+      $('pendingCount').textContent = String(pending); $('pendingCount').hidden = !pending;
+      renderRequests();
+      $('reqMsg').textContent = '';
+    }, function (e) { $('reqMsg').textContent = e.message; $('reqMsg').className = 'msg err'; throw e; });
+  }
+  function renderRequests() {
+    var f = $('reqFilter').value, list = $('reqList');
+    list.innerHTML = '';
+    var rows = allReqs.filter(function (r) { return f === 'all' || r.status === f; });
+    if (!rows.length) { list.appendChild(el('p', 'muted', f === 'pending' ? 'Koi nayi request nahi. ✅' : 'Kuch nahi mila.')); return; }
+    rows.forEach(function (r) { list.appendChild(reqCard(r)); });
+  }
+  function reqCard(r) {
+    var box = el('div', 'req ' + r.status);
+    var head = el('div', 'req-head');
+    var left = el('div');
+    left.appendChild(el('b', '', r.name + ' — ' + r.plan));
+    left.appendChild(el('div', 'muted', r.id + ' • ' + new Date(r.created).toLocaleString()));
+    head.appendChild(left);
+    head.appendChild(el('span', 'tag ' + r.status, r.status));
+    box.appendChild(head);
+    var dl = el('dl', 'kv');
+    [['WhatsApp', r.phone], ['Plan', r.plan + ' (' + fmt(r.chars) + ' chars)'], ['Amount', 'Rs ' + fmt(r.price)],
+     ['Paid with', r.method || '—'], ['Transaction ID', r.tid || '—']].forEach(function (kv) {
+      dl.appendChild(el('dt', '', kv[0])); dl.appendChild(el('dd', '', kv[1]));
+    });
+    if (r.code) { dl.appendChild(el('dt', '', 'Code')); dl.appendChild(el('dd', '', r.code)); }
+    if (r.reason) { dl.appendChild(el('dt', '', 'Reason')); dl.appendChild(el('dd', '', r.reason)); }
+    box.appendChild(dl);
+    var acts = el('div', 'actions');
+    var chat = el('a', 'wa', '💬 Chat');
+    chat.href = 'https://wa.me/' + waNumber(r.phone) + '?text=' + encodeURIComponent('Assalam o Alaikum ' + r.name + '! About your VoxNova request ' + r.id + ' (' + r.plan + ').');
+    chat.target = '_blank'; chat.rel = 'noopener';
+    if (r.hasShot) {
+      var sb = el('button', 'btn btn-secondary btn-small', '🖼️ Screenshot'); sb.type = 'button';
+      sb.addEventListener('click', function () {
+        sb.disabled = true;
+        api('/admin/requests/image?id=' + encodeURIComponent(r.id)).then(function (j) {
+          if (j.image && /^data:image\//.test(j.image)) { var img = el('img', 'shot'); img.src = j.image; img.alt = 'Payment screenshot ' + r.id; box.appendChild(img); sb.remove(); }
+          else { sb.textContent = 'No image'; }
+        }, function (e) { sb.textContent = e.message; });
+      });
+      acts.appendChild(sb);
+    }
+    if (r.status === 'pending') {
+      var checks = el('div');
+      ['Naam / number check kiya', 'Payment mere account mein aa gayi (TID mila)', 'Raqam plan ke mutabiq hai'].forEach(function (t) {
+        var lb = el('label', 'check'); var cb = el('input'); cb.type = 'checkbox'; lb.appendChild(cb); lb.appendChild(document.createTextNode(t)); checks.appendChild(lb);
+      });
+      box.appendChild(checks);
+      var ok = el('button', 'btn btn-ok', '✅ Approve & activate Pro'); ok.type = 'button';
+      var no = el('button', 'btn btn-no', '✖ Reject'); no.type = 'button';
+      var m = el('p', 'msg');
+      ok.addEventListener('click', function () {
+        var allTicked = [].every.call(checks.querySelectorAll('input'), function (c) { return c.checked; });
+        if (!allTicked && !confirm('Sab checks tick nahi hain. Phir bhi approve karein?')) return;
+        ok.disabled = true; m.textContent = 'Approving…'; m.className = 'msg';
+        api('/admin/requests/approve', { method: 'POST', body: { id: r.id } }).then(function (j) {
+          m.textContent = '✅ Approved — code ' + j.code + '. Customer ki app khud activate ho jayegi.'; m.className = 'msg ok';
+          var wa = el('a', 'wa', '💬 Send code on WhatsApp');
+          wa.href = 'https://wa.me/' + waNumber(r.phone) + '?text=' + encodeURIComponent(codeMessage(j));
+          wa.target = '_blank'; wa.rel = 'noopener';
+          acts.appendChild(wa);
+          setTimeout(loadRequests, 1500);
+        }, function (e) { ok.disabled = false; m.textContent = e.message; m.className = 'msg err'; });
+      });
+      no.addEventListener('click', function () {
+        var reason = prompt('Reject ki wajah (customer ko dikhegi):', 'Payment nahi mili');
+        if (reason === null) return;
+        no.disabled = true;
+        api('/admin/requests/reject', { method: 'POST', body: { id: r.id, reason: reason } }).then(loadRequests, function (e) { no.disabled = false; m.textContent = e.message; m.className = 'msg err'; });
+      });
+      acts.insertBefore(no, acts.firstChild);
+      acts.insertBefore(ok, acts.firstChild);
+      box.appendChild(acts); box.appendChild(m);
+    } else {
+      box.appendChild(acts);
+    }
+    acts.appendChild(chat);
+    return box;
+  }
+  $('reqFilter').addEventListener('change', renderRequests);
+  $('btnReqReload').addEventListener('click', loadRequests);
+
+  // ---------- codes ----------
+  function loadCodes() {
     $('listMsg').textContent = 'Loading…'; $('listMsg').className = 'msg';
     return api('/admin/codes').then(function (j) {
+      allCodes = j.codes || [];
       var tb = $('rows'); tb.innerHTML = '';
-      (j.codes || []).forEach(function (c) {
+      allCodes.forEach(function (c) {
         var tr = document.createElement('tr');
         function td(t, cls) { var d = document.createElement('td'); if (cls) d.className = cls; d.textContent = t; tr.appendChild(d); return d; }
-        td(c.code, 'mono');
-        td(c.plan);
-        var left = td(''); var tag = document.createElement('span');
-        tag.className = 'tag ' + (c.valid ? 'ok' : 'bad'); tag.textContent = fmt(c.remaining) + ' / ' + fmt(c.chars);
-        left.appendChild(tag);
+        td(c.code, 'mono'); td(c.plan);
+        var left = td(''); var tag = el('span', 'tag ' + (c.valid ? 'ok' : 'bad'), fmt(c.remaining) + ' / ' + fmt(c.chars)); left.appendChild(tag);
         td(c.expires ? new Date(c.expires).toLocaleDateString() + (c.expired ? ' (expired)' : '') : '—');
         td(c.note || '');
         var act = td('');
-        var b = document.createElement('button');
-        b.className = 'btn btn-secondary btn-small'; b.type = 'button'; b.textContent = 'Top up';
+        var b = el('button', 'btn btn-secondary btn-small', 'Top up'); b.type = 'button';
         b.addEventListener('click', function () {
-          var more = prompt('Add how many characters to ' + c.code + '?', '1000000');
-          if (more === null) return;
-          var days = prompt('Add how many days? (0 = keep date)', '30');
-          if (days === null) return;
+          var more = prompt('Add how many characters to ' + c.code + '?', '1000000'); if (more === null) return;
+          var days = prompt('Add how many days? (0 = keep date)', '30'); if (days === null) return;
           api('/admin/topup', { method: 'POST', body: { code: c.code, chars: Number(more) || 0, days: Number(days) || 0 } })
-            .then(load, function (e) { $('listMsg').textContent = e.message; $('listMsg').className = 'msg err'; });
+            .then(loadCodes, function (e) { $('listMsg').textContent = e.message; $('listMsg').className = 'msg err'; });
         });
         act.appendChild(b);
         tb.appendChild(tr);
       });
-      $('listMsg').textContent = (j.codes || []).length ? '' : 'No codes yet.';
-    }, function (e) { $('listMsg').textContent = e.message; $('listMsg').className = 'msg err'; throw e; });
+      $('listMsg').textContent = allCodes.length ? '' : 'No codes yet.';
+    }, function (e) { $('listMsg').textContent = e.message; $('listMsg').className = 'msg err'; });
   }
-
-  $('btnLogin').addEventListener('click', function () {
-    key = $('adminKey').value.trim(); base = $('worker').value.trim();
-    try { sessionStorage.setItem('vsAdminKey', key); localStorage.setItem('vsAdminWorker', base); } catch (e) {}
-    $('loginMsg').textContent = 'Checking…'; $('loginMsg').className = 'msg';
-    load().then(function () {
-      $('loginMsg').textContent = '✅ Connected';
-      $('createBox').hidden = false; $('listBox').hidden = false;
-    }, function (e) { $('loginMsg').textContent = e.message; $('loginMsg').className = 'msg err'; });
-  });
-
   var last = null;
   $('btnCreate').addEventListener('click', function () {
     var p = plans[Number($('plan').value) || 0];
@@ -207,20 +362,73 @@
       plan: nameOf(p), chars: Number($('chars').value) || 0, days: Number($('days').value) || 0, note: $('note').value.trim()
     } }).then(function (c) {
       last = c;
-      $('createMsg').textContent = '✅ Code created';
+      $('createMsg').textContent = '✅ Code created'; $('createMsg').className = 'msg ok';
       $('newCode').textContent = c.code;
-      var num = waNumber($('phone').value);
-      var wa = $('btnWa');
-      wa.href = 'https://wa.me/' + num + '?text=' + encodeURIComponent(codeMessage(c));
+      $('btnWa').href = 'https://wa.me/' + waNumber($('phone').value) + '?text=' + encodeURIComponent(codeMessage(c));
       $('result').hidden = false;
-      load();
+      loadCodes();
     }, function (e) { $('createMsg').textContent = e.message; $('createMsg').className = 'msg err'; });
   });
   $('btnCopy').addEventListener('click', function () {
     if (!last) return;
     try { navigator.clipboard.writeText(codeMessage(last)); $('btnCopy').textContent = 'Copied ✓'; } catch (e) {}
   });
-  $('btnReload').addEventListener('click', load);
+  $('btnReload').addEventListener('click', loadCodes);
+
+  // ---------- settings ----------
+  function loadSettings() {
+    $('setMsg').textContent = '';
+    return api('/admin/settings').then(function (s) {
+      $('jsfState').textContent = s.jsfKeySet ? ('✅ JSF key set' + (s.jsfFromSecret ? ' (server secret)' : (s.jsfHint ? ' — ' + s.jsfHint : ''))) : '⚠️ JSF key not set — HD voices and cloning are off.';
+      $('azureState').textContent = s.azureKeySet ? ('✅ Azure key set' + (s.azureFromSecret ? ' (server secret)' : (s.azureHint ? ' — ' + s.azureHint : ''))) : '⚠️ Azure key not set — Studio voices use the free fallback.';
+      $('azureRegion').value = s.azureRegion || '';
+    }, function (e) { $('setMsg').textContent = e.message; $('setMsg').className = 'msg err'; });
+  }
+  function saveSettings(body) {
+    $('setMsg').textContent = 'Saving…'; $('setMsg').className = 'msg';
+    return api('/admin/settings', { method: 'POST', body: body }).then(function () {
+      $('jsfKey').value = ''; $('azureKey').value = '';
+      $('setMsg').textContent = '✅ Saved'; $('setMsg').className = 'msg ok';
+      loadSettings();
+    }, function (e) { $('setMsg').textContent = e.message; $('setMsg').className = 'msg err'; });
+  }
+  $('btnSaveSettings').addEventListener('click', function () {
+    saveSettings({ jsfKey: $('jsfKey').value.trim(), azureKey: $('azureKey').value.trim(), azureRegion: $('azureRegion').value.trim() });
+  });
+  $('btnClearJsf').addEventListener('click', function () { if (confirm('JSF key hatani hai?')) saveSettings({ clear: ['jsfKey'] }); });
+  $('btnClearAzure').addEventListener('click', function () { if (confirm('Azure key hatani hai?')) saveSettings({ clear: ['azureKey'] }); });
+
+  // ---------- summary ----------
+  function renderStats() {
+    Promise.all([loadRequests().catch(function () {}), loadCodes()]).then(function () {
+      var approved = allReqs.filter(function (r) { return r.status === 'approved'; });
+      var revenue = approved.reduce(function (s, r) { return s + (Number(r.price) || 0); }, 0);
+      var paidCodes = allCodes.filter(function (c) { return c.plan !== 'Free'; });
+      var used = allCodes.reduce(function (s, c) { return s + (c.used || 0); }, 0);
+      var data = [
+        ['Pending requests', allReqs.filter(function (r) { return r.status === 'pending'; }).length],
+        ['Approved', approved.length],
+        ['Revenue (approved)', 'Rs ' + fmt(revenue)],
+        ['Active paid plans', paidCodes.filter(function (c) { return c.valid; }).length],
+        ['Free trials', allCodes.length - paidCodes.length],
+        ['HD characters used', fmt(used)]
+      ];
+      var box = $('stats'); box.innerHTML = '';
+      data.forEach(function (d) { var s = el('div', 'stat'); s.appendChild(el('span', 'muted', d[0])); s.appendChild(el('b', '', String(d[1]))); box.appendChild(s); });
+    });
+  }
+
+  // ---------- login ----------
+  $('btnLogin').addEventListener('click', function () {
+    key = $('adminKey').value.trim(); base = $('worker').value.trim();
+    try { sessionStorage.setItem('vsAdminKey', key); localStorage.setItem('vsAdminWorker', base); } catch (e) {}
+    $('loginMsg').textContent = 'Checking…'; $('loginMsg').className = 'msg';
+    loadRequests().then(function () {
+      $('loginMsg').textContent = '✅ Connected'; $('loginMsg').className = 'msg ok';
+      $('app').hidden = false;
+      setInterval(function () { if (!document.hidden) loadRequests().catch(function () {}); }, 60000);
+    }, function (e) { $('loginMsg').textContent = e.message; $('loginMsg').className = 'msg err'; });
+  });
   if (key && base) $('btnLogin').click();
 })();
 </script>

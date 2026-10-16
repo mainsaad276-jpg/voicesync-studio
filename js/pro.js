@@ -57,6 +57,7 @@
     proFeatures: ['hd', 'clone'],
     upgradeUrl: '',
     currency: 'Rs',
+    freeTrialChars: 10000,
     plans: DEFAULT_PLANS,
     offers: [],
     payment: { whatsapp: '', methods: [] }
@@ -68,7 +69,7 @@
       chipFree: 'Pro feature, free for now',
       chipPaid: 'Needs a plan',
       plansBtn: 'Pro',
-      title: 'VoiceSync Pro',
+      title: 'VoxNova Pro',
       sub: 'HD voices and your own voice clone. Everything else stays free.',
       freeNow: 'Right now every Pro feature is FREE. Enjoy!',
       locked: 'This is a Pro feature.',
@@ -107,14 +108,42 @@
       badCode: 'Code not found. Check it and try again.',
       offline: 'Plans server is not connected yet. Try again later.',
       remove: 'Remove code',
-      mostPopular: 'Most popular'
+      mostPopular: 'Most popular',
+      freeName: 'Free',
+      freeChars: '{n} HD characters FREE',
+      freeStart: 'Start free',
+      freeActive: 'Free plan active',
+      freeUsed: 'Your free characters are used up. Pick a plan to continue.',
+      freeLimit: 'Free trial already used on this network today. Try tomorrow or pick a plan.',
+      freePerks: ['No payment needed', 'Try HD voices + cloning', 'Then subscribe on WhatsApp'],
+      reqTitle: 'Request this plan',
+      reqName: 'Your name',
+      reqPhone: 'WhatsApp number',
+      reqMethod: 'Paid with',
+      reqTid: 'Transaction ID (TID)',
+      reqShot: 'Payment screenshot (optional)',
+      reqSend: 'Send request',
+      reqSending: 'Sending\u2026',
+      reqSent: 'Request {id} sent! We check your payment and your plan turns on by itself.',
+      reqPending: 'Request {id} ({plan}) is waiting for approval.',
+      reqApproved: 'Approved! Your {plan} plan is now active.',
+      reqRejected: 'Request {id} was not approved: {reason}',
+      reqNeed: 'Please fill: {f}',
+      reqWa: 'Send request ID on WhatsApp',
+      reqWaMsg: 'Assalam o Alaikum! I sent VoxNova subscription request {id} ({plan}, {currency} {price}). TID: {tid}',
+      payStep1: 'Pay the amount (JazzCash / Easypaisa / bank).',
+      payStep2: 'Fill the form below and send the request.',
+      payStep3: 'We verify it \u2014 your plan turns on by itself.',
+      methods: ['JazzCash', 'Easypaisa', 'Bank transfer', 'Other'],
+      askDetails: 'Need payment details? Ask on WhatsApp',
+      _end: ''
     },
     ur: {
       chip: 'PRO',
       chipFree: 'پرو فیچر، فی الحال مفت',
       chipPaid: 'پلان چاہیے',
       plansBtn: 'پلان',
-      title: 'وائس سنک پرو',
+      title: 'ووکس نووا پرو',
       sub: 'ایچ ڈی آوازیں اور آپ کی اپنی آواز کا کلون۔ باقی سب مفت ہے۔',
       freeNow: 'فی الحال تمام پرو فیچرز مفت ہیں۔',
       locked: 'یہ پرو فیچر ہے۔',
@@ -153,7 +182,35 @@
       badCode: 'کوڈ نہیں ملا۔ چیک کر کے دوبارہ کوشش کریں۔',
       offline: 'پلان سرور ابھی منسلک نہیں۔ بعد میں کوشش کریں۔',
       remove: 'کوڈ ہٹائیں',
-      mostPopular: 'سب سے مقبول'
+      mostPopular: 'سب سے مقبول',
+      freeName: 'مفت',
+      freeChars: '{n} ایچ ڈی حروف مفت',
+      freeStart: 'مفت شروع کریں',
+      freeActive: 'مفت پلان فعال',
+      freeUsed: 'آپ کے مفت حروف ختم ہو گئے۔ جاری رکھنے کے لیے پلان چنیں۔',
+      freeLimit: 'اس نیٹ ورک پر آج مفت ٹرائل استعمال ہو چکا۔ کل کوشش کریں یا پلان چنیں۔',
+      freePerks: ['کوئی ادائیگی نہیں', 'ایچ ڈی آوازیں اور کلوننگ آزمائیں', 'پھر واٹس ایپ پر سبسکرائب کریں'],
+      reqTitle: 'یہ پلان منگوائیں',
+      reqName: 'آپ کا نام',
+      reqPhone: 'واٹس ایپ نمبر',
+      reqMethod: 'ادائیگی کا ذریعہ',
+      reqTid: 'ٹرانزیکشن آئی ڈی (TID)',
+      reqShot: 'ادائیگی کا اسکرین شاٹ (اختیاری)',
+      reqSend: 'درخواست بھیجیں',
+      reqSending: 'بھیجی جا رہی ہے\u2026',
+      reqSent: 'درخواست {id} بھیج دی گئی! ہم ادائیگی چیک کریں گے اور آپ کا پلان خود فعال ہو جائے گا۔',
+      reqPending: 'درخواست {id} ({plan}) منظوری کے انتظار میں ہے۔',
+      reqApproved: 'منظور! آپ کا {plan} پلان فعال ہو گیا۔',
+      reqRejected: 'درخواست {id} منظور نہیں ہوئی: {reason}',
+      reqNeed: 'براہ کرم بھریں: {f}',
+      reqWa: 'درخواست آئی ڈی واٹس ایپ پر بھیجیں',
+      reqWaMsg: 'Assalam o Alaikum! I sent VoxNova subscription request {id} ({plan}, {currency} {price}). TID: {tid}',
+      payStep1: 'رقم ادا کریں (جاز کیش / ایزی پیسہ / بینک)۔',
+      payStep2: 'نیچے فارم بھر کر درخواست بھیجیں۔',
+      payStep3: 'ہم تصدیق کریں گے — آپ کا پلان خود فعال ہو جائے گا۔',
+      methods: ['جاز کیش', 'ایزی پیسہ', 'بینک ٹرانسفر', 'دیگر'],
+      askDetails: 'ادائیگی کی تفصیل چاہیے؟ واٹس ایپ پر پوچھیں',
+      _end: ''
     }
   };
 
@@ -161,6 +218,8 @@
   var USAGE_KEY = 'voicesync.usage';
   var CODE_KEY = 'voicesync.proCode';
   var STATUS_KEY = 'voicesync.proStatus';
+  var DEVICE_KEY = 'voicesync.device';
+  var REQ_KEY = 'voicesync.proRequest';
   var memStore = {};
 
   function store() {
@@ -201,6 +260,10 @@
     var s = (TXT[lang()] && TXT[lang()][key]) || TXT.en[key] || key;
     if (vars) for (var k in vars) s = s.split('{' + k + '}').join(String(vars[k]));
     return s;
+  }
+  function txa(key) {
+    var v = (TXT[lang()] && TXT[lang()][key]) || TXT.en[key];
+    return Array.isArray(v) ? v : [];
   }
   function pick(v) { // {en, ur} or plain string
     if (v && typeof v === 'object' && !Array.isArray(v)) return v[lang()] || v.en || '';
@@ -273,6 +336,128 @@
       return status();
     });
   }
+  function deviceId() {
+    var d = sGet(DEVICE_KEY);
+    if (d && /^[A-Za-z0-9_-]{16,64}$/.test(d)) return d;
+    var a = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', out = '';
+    try {
+      var b = new Uint8Array(24); root.crypto.getRandomValues(b);
+      for (var i = 0; i < 24; i++) out += a[b[i] % a.length];
+    } catch (e) {
+      for (var k = 0; k < 24; k++) out += a[Math.floor(Math.random() * a.length)];
+    }
+    sSet(DEVICE_KEY, out);
+    return out;
+  }
+  function post(path, body) {
+    var base = proxyUrl();
+    if (!base || typeof fetch !== 'function') { var e0 = new Error('offline'); e0.kind = 'offline'; return Promise.reject(e0); }
+    return fetch(base + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        if (!res.ok) { var e = new Error(j.error || ('HTTP ' + res.status)); e.status = res.status; e.code = j.code; e.field = j.field; e.kind = res.status === 404 ? 'badCode' : 'server'; throw e; }
+        return j;
+      });
+    }, function () { var e2 = new Error('offline'); e2.kind = 'offline'; throw e2; });
+  }
+  // Free trial: the API gives each device freeTrialChars HD characters once.
+  function startTrial() {
+    return post('/pro/trial', { device: deviceId() }).then(function (st) {
+      if (st && st.code) { sSet(CODE_KEY, st.code); st.checkedAt = Date.now(); saveStatus(st); refreshBadges(); }
+      return st;
+    });
+  }
+  // Make sure HD voices can be used: existing code, else the free trial.
+  function ensureAccess() {
+    if (code() && planActive()) return Promise.resolve(status());
+    if (code()) return refresh().then(function (st) {
+      if (st && st.valid) return st;
+      var e = new Error('noBalance'); e.kind = (st && st.expired) ? 'expired' : (st && st.plan === 'Free' ? 'freeUsed' : 'noBalance'); throw e;
+    });
+    return startTrial().then(function (st) {
+      if (st && st.valid) return st;
+      var e = new Error('freeUsed'); e.kind = 'freeUsed'; throw e;
+    });
+  }
+
+  // Subscription request (customer -> admin approves -> code arrives here).
+  function pendingRequest() { try { return JSON.parse(sGet(REQ_KEY) || 'null'); } catch (e) { return null; } }
+  function sendRequest(data) {
+    var body = {
+      name: data.name, phone: data.phone, plan: data.plan, chars: data.chars, price: data.price,
+      method: data.method, tid: data.tid, screenshot: data.screenshot || '', device: deviceId()
+    };
+    return post('/pro/request', body).then(function (r) {
+      var rec = { id: r.id, secret: r.secret, plan: data.plan, price: data.price, tid: data.tid, status: 'pending', at: Date.now() };
+      sSet(REQ_KEY, JSON.stringify(rec));
+      refreshBadges(); schedulePoll();
+      return rec;
+    });
+  }
+  var _pollTimer = null;
+  function checkRequest() {
+    var r = pendingRequest();
+    if (!r || r.status !== 'pending') return Promise.resolve(r);
+    return post('/pro/request/status', { id: r.id, secret: r.secret }).then(function (st) {
+      r.status = st.status; r.reason = st.reason || '';
+      sSet(REQ_KEY, JSON.stringify(r));
+      if (st.status === 'approved' && st.code) {
+        return activate(st.code).then(function () {
+          r.activated = true; sSet(REQ_KEY, JSON.stringify(r));
+          notify(tx('reqApproved', { plan: r.plan })); return r;
+        }, function () { return r; });
+      }
+      if (st.status === 'rejected') notify(tx('reqRejected', { id: r.id, reason: r.reason || '\u2014' }));
+      refreshBadges();
+      return r;
+    }, function (e) { if (e && e.kind === 'badCode') { sDel(REQ_KEY); refreshBadges(); } return r; });
+  }
+  function schedulePoll() {
+    if (_pollTimer || typeof setInterval !== 'function') return;
+    _pollTimer = setInterval(function () {
+      var r = pendingRequest();
+      if (!r || r.status !== 'pending') { clearInterval(_pollTimer); _pollTimer = null; return; }
+      checkRequest();
+    }, 30000);
+  }
+  function notify(msg) {
+    try {
+      var d = root.document; if (!d || !d.body) return;
+      var t = el('div', 'pro-toast', msg);
+      t.setAttribute('role', 'status');
+      d.body.appendChild(t);
+      setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 6000);
+    } catch (e) {}
+  }
+  // Shrink a payment screenshot to a small JPEG data URL (fits the API limit).
+  function shrinkImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file) { resolve(''); return; }
+      var fr = new FileReader();
+      fr.onerror = function () { reject(new Error('read')); };
+      fr.onload = function () {
+        var img = new Image();
+        img.onerror = function () { reject(new Error('image')); };
+        img.onload = function () {
+          var max = 1280, q = 0.72, out = '';
+          for (var round = 0; round < 6; round++) {
+            var sc = Math.min(1, max / Math.max(img.width, img.height));
+            var cv = root.document.createElement('canvas');
+            cv.width = Math.max(1, Math.round(img.width * sc)); cv.height = Math.max(1, Math.round(img.height * sc));
+            cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+            out = cv.toDataURL('image/jpeg', q);
+            if (out.length <= 440 * 1024) break;
+            max = Math.round(max * 0.75); q = Math.max(0.45, q - 0.08);
+          }
+          resolve(out.length <= 440 * 1024 ? out : '');
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+
   function noteRemaining(n) {
     var st = status();
     if (!st || n === '' || n == null || isNaN(Number(n))) return;
@@ -411,7 +596,7 @@
     back.appendChild(el('p', 'plan-pay-amt', tx('payAmount', { currency: cur, n: fmtMoney(pay) })));
     var methods = (c.payment.methods || []).filter(function (m) { return m && m.value; });
     var steps = el('ol', 'plan-steps');
-    [methods.length ? 'step1' : 'step1Wa', 'step2', 'step3'].forEach(function (k) { steps.appendChild(el('li', '', tx(k))); });
+    ['payStep1', 'payStep2', 'payStep3'].forEach(function (k) { steps.appendChild(el('li', '', tx(k))); });
     back.appendChild(steps);
     if (methods.length) {
       var box = el('div', 'pay-methods');
@@ -430,12 +615,15 @@
       });
       back.appendChild(box);
     }
-    var wa = waLink(tx('waMsg', { plan: pick(plan.name), chars: fmtNum(plan.chars), currency: cur, price: fmtMoney(pay) }));
-    if (wa) {
-      var a = el('a', 'btn plan-wa', '💬 ' + tx('whatsapp'));
-      a.href = wa; a.target = '_blank'; a.rel = 'noopener';
-      back.appendChild(a);
+    if (!methods.length) {
+      var waAsk = waLink(tx('waMsg', { plan: pick(plan.name), chars: fmtNum(plan.chars), currency: cur, price: fmtMoney(pay) }));
+      if (waAsk) {
+        var a = el('a', 'btn plan-wa', '\uD83D\uDCAC ' + tx('askDetails'));
+        a.href = waAsk; a.target = '_blank'; a.rel = 'noopener';
+        back.appendChild(a);
+      }
     }
+    back.appendChild(requestForm(plan, pay));
     var bk = el('button', 'btn btn-secondary plan-back-btn', tx('back'));
     bk.type = 'button';
     back.appendChild(bk);
@@ -446,6 +634,98 @@
     inner.appendChild(front);
     inner.appendChild(back);
     card.appendChild(inner);
+    return card;
+  }
+
+  function field(labelText, input) {
+    var w = el('label', 'req-field');
+    w.appendChild(el('span', 'req-label', labelText));
+    w.appendChild(input);
+    return w;
+  }
+  function requestForm(plan, pay) {
+    var c = cfg(), cur = c.currency || 'Rs';
+    var f = el('form', 'req-form');
+    f.setAttribute('novalidate', '');
+    f.appendChild(el('h4', 'req-title', tx('reqTitle')));
+    var nm = el('input', 'char-search'); nm.type = 'text'; nm.maxLength = 60; nm.autocomplete = 'name';
+    var ph = el('input', 'char-search'); ph.type = 'tel'; ph.inputMode = 'tel'; ph.placeholder = '03xx xxxxxxx'; ph.autocomplete = 'tel';
+    var me = el('select', 'select');
+    txa('methods').forEach(function (m) { var o = el('option', '', m); o.value = m; me.appendChild(o); });
+    var ti = el('input', 'char-search'); ti.type = 'text'; ti.maxLength = 60;
+    var sh = el('input', 'req-file'); sh.type = 'file'; sh.accept = 'image/*';
+    f.appendChild(field(tx('reqName'), nm));
+    f.appendChild(field(tx('reqPhone'), ph));
+    f.appendChild(field(tx('reqMethod'), me));
+    f.appendChild(field(tx('reqTid'), ti));
+    f.appendChild(field(tx('reqShot'), sh));
+    var send = el('button', 'btn btn-primary req-send', tx('reqSend')); send.type = 'submit';
+    var msg = el('p', 'req-msg');
+    var after = el('div', 'req-after');
+    f.appendChild(send); f.appendChild(msg); f.appendChild(after);
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var miss = [];
+      if (nm.value.trim().length < 2) miss.push(tx('reqName'));
+      if (ph.value.replace(/\D/g, '').length < 10) miss.push(tx('reqPhone'));
+      if (!ti.value.trim() && !(sh.files && sh.files[0])) miss.push(tx('reqTid'));
+      if (miss.length) { msg.textContent = tx('reqNeed', { f: miss.join(', ') }); msg.className = 'req-msg err'; return; }
+      send.disabled = true; msg.textContent = tx('reqSending'); msg.className = 'req-msg';
+      shrinkImage(sh.files && sh.files[0]).catch(function () { return ''; }).then(function (img) {
+        return sendRequest({
+          name: nm.value.trim(), phone: ph.value.trim(), plan: pick(plan.name), chars: plan.chars,
+          price: pay, method: me.value, tid: ti.value.trim(), screenshot: img
+        });
+      }).then(function (r) {
+        msg.textContent = tx('reqSent', { id: r.id }); msg.className = 'req-msg ok';
+        after.innerHTML = '';
+        var wa = waLink(tx('reqWaMsg', { id: r.id, plan: r.plan, currency: cur, price: fmtMoney(r.price), tid: r.tid || '\u2014' }));
+        if (wa) { var a = el('a', 'btn plan-wa', '\uD83D\uDCAC ' + tx('reqWa')); a.href = wa; a.target = '_blank'; a.rel = 'noopener'; after.appendChild(a); }
+      }, function (err) {
+        msg.textContent = err && err.kind === 'offline' ? tx('offline') : ((err && err.message) || tx('offline'));
+        msg.className = 'req-msg err';
+      }).then(function () { send.disabled = false; });
+    });
+    return f;
+  }
+
+  function freeCard() {
+    var c = cfg(), n = Number(c.freeTrialChars) || 10000;
+    var card = el('div', 'plan-card plan-free');
+    card.setAttribute('data-plan', 'free');
+    var inner = el('div', 'plan-inner');
+    var front = el('div', 'plan-face plan-front');
+    front.appendChild(el('span', 'plan-badge free', tx('freeName')));
+    front.appendChild(el('h3', 'plan-name', tx('freeChars', { n: fmtMoney(n) })));
+    var priceRow = el('p', 'plan-price');
+    priceRow.appendChild(el('span', 'plan-cur', (c.currency || 'Rs') + ' '));
+    priceRow.appendChild(el('span', 'plan-amt', '0'));
+    front.appendChild(priceRow);
+    var ul = el('ul', 'plan-perks');
+    txa('freePerks').forEach(function (p) { ul.appendChild(el('li', '', p)); });
+    front.appendChild(ul);
+    var msg = el('p', 'req-msg');
+    var st = status();
+    var btn = el('button', 'btn btn-primary plan-buy', tx('freeStart')); btn.type = 'button';
+    if (code() && st) {
+      btn.disabled = true;
+      btn.textContent = st.plan === 'Free' ? (planActive() ? tx('freeActive') : tx('freeUsed')) : tx('active', { plan: st.plan || '' });
+    }
+    btn.addEventListener('click', function () {
+      btn.disabled = true; msg.textContent = tx('checking'); msg.className = 'req-msg';
+      startTrial().then(function (s2) {
+        msg.textContent = ''; btn.textContent = tx('freeActive');
+        var box = root.document.querySelector('#proSheet .pro-code');
+        if (box && box.parentNode) box.parentNode.replaceChild(codeBox(), box);
+        notify(tx('freeActive') + ' \u2022 ' + tx('left', { n: fmtNum(s2.remaining | 0) }));
+      }, function (e) {
+        btn.disabled = false;
+        msg.textContent = e && e.code === 'TRIAL_LIMIT' ? tx('freeLimit') : (e && e.kind === 'offline' ? tx('offline') : ((e && e.message) || tx('offline')));
+        msg.className = 'req-msg err';
+      });
+    });
+    front.appendChild(btn); front.appendChild(msg);
+    inner.appendChild(front); card.appendChild(inner);
     return card;
   }
 
@@ -463,6 +743,12 @@
         line.appendChild(el('span', '', ' • ' + tx('until', { d: d.toLocaleDateString() })));
       }
       target.appendChild(line);
+    }
+    var pr = pendingRequest();
+    if (pr && !pr.activated) {
+      var line = pr.status === 'rejected' ? tx('reqRejected', { id: pr.id, reason: pr.reason || '\u2014' })
+        : pr.status === 'approved' ? tx('reqApproved', { plan: pr.plan }) : tx('reqPending', { id: pr.id, plan: pr.plan });
+      box.appendChild(el('p', 'pro-status ' + (pr.status === 'rejected' ? 'warn' : 'ok'), line));
     }
     box.appendChild(el('h3', 'pro-code-h', tx('haveCode')));
     var row = el('div', 'pro-code-row');
@@ -526,6 +812,7 @@
     var msg = '';
     if (reason === 'needPlan' || reason === 'hd' || reason === 'clone') msg = tx('needPlan');
     else if (reason === 'noBalance') msg = tx('noBalance');
+    else if (reason === 'freeUsed') msg = tx('freeUsed');
     else if (reason === 'expired') msg = tx('expired');
     else if (enforced() && !isPro()) {
       if (reason === 'longText') msg = tx('tooLong', { n: c.freeMaxChars, m: chars || '' });
@@ -535,7 +822,8 @@
     if (msg) card.appendChild(el('p', 'pro-msg', msg));
 
     var grid = el('div', 'plan-grid');
-    c.plans.forEach(function (p) { grid.appendChild(planCard(p)); });
+    if (Number(c.freeTrialChars) > 0) grid.appendChild(freeCard());
+    c.plans.forEach(function (p) { if (p && p.price > 0) grid.appendChild(planCard(p)); });
     card.appendChild(grid);
 
     var offers = c.offers.map(pick).filter(Boolean);
@@ -586,6 +874,8 @@
       }
       pb.textContent = '⭐ ' + tx('plansBtn');
       pb.classList.toggle('active', planActive());
+      var prq = pendingRequest();
+      pb.classList.toggle('pending', !!(prq && prq.status === 'pending'));
     }
     if (!cfg().showBadges || isPro()) return;
     CHIP_TARGETS.forEach(function (t) {
@@ -635,6 +925,8 @@
         .observe(root.document.documentElement, { attributes: true, attributeFilter: ['lang'] });
     } catch (e) {}
     if (code()) refresh();
+    var pr = pendingRequest();
+    if (pr && pr.status === 'pending') { checkRequest(); schedulePoll(); }
   }
 
   var Pro = {
@@ -653,6 +945,12 @@
     activate: activate,
     refresh: refresh,
     noteRemaining: noteRemaining,
+    deviceId: deviceId,
+    startTrial: startTrial,
+    ensureAccess: ensureAccess,
+    sendRequest: sendRequest,
+    pendingRequest: pendingRequest,
+    checkRequest: checkRequest,
     clearCode: clearCode,
     showPlans: showPlans,
     showUpsell: showUpsell,

@@ -2462,9 +2462,11 @@
     if (!window.TTS || typeof window.TTS.jsfClone !== 'function' || !window.TTS.jsfAvailable()) {
       setMsg(t('clone_locked_msg'), true); return;
     }
-    // HD cloning spends real JSF characters: it needs an activation code.
-    if (window.Pro && typeof window.Pro.code === 'function' && !window.Pro.code()) {
-      window.Pro.showPlans('needPlan'); return;
+    // HD cloning spends real JSF characters: it needs an active code. New
+    // users get the free trial automatically; after that, a subscription.
+    if (window.Pro && typeof window.Pro.ensureAccess === 'function') {
+      try { await window.Pro.ensureAccess(); }
+      catch (e) { window.Pro.showPlans((e && e.kind) || 'needPlan'); return; }
     }
     var file = cf && cf.files && cf.files[0];
     var nameEl = $('cloneName');
