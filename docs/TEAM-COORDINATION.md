@@ -23,23 +23,28 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
 6. **QA gate**: web changes must keep `bash qa/run-qa.sh` green.
 
 ## Active work
-- **TASK FOR MUSE (boss order 2026-10-09, Saad: "Muse AI se karwa lo") — URGENT, blocks the voice fix:**
-  The "Deploy voice Worker" run #1 failed: `Missing GitHub secrets: CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID JSF_API_KEY`
-  (https://github.com/mainsaad276-jpg/voicesync-studio/actions/runs/37926332030).
-  1. Get the values **from Saad** (never commit them, never paste them in files/logs) and set them as
-     **Repository secrets**, e.g. `printf '%s' "$VALUE" | gh secret set NAME -R mainsaad276-jpg/voicesync-studio`:
-     - `CLOUDFLARE_API_TOKEN` — Cloudflare token, template "Edit Cloudflare Workers"
-     - `CLOUDFLARE_ACCOUNT_ID` — Cloudflare account ID
-     - `JSF_API_KEY` — JSF Labs key (starts with `jsf_`)
-     - `VS_ADMIN_KEY` — a password Saad chooses, for `docs/admin.html`
-     - `AZURE_SPEECH_KEY` — Azure Speech **Free F0**, region **Central India** (KEY 1). This is the
-       real voice fix: Studio voices go through official Azure instead of the blocked Edge socket.
-       (Other region → also change `AZURE_SPEECH_REGION` in `worker/wrangler.toml`.)
-  2. Run it: `gh workflow run deploy-worker.yml -R mainsaad276-jpg/voicesync-studio --ref main`.
-  3. Check: the run is green, `js/config.js` gets `ttsProxy: 'https://voicesync-tts.….workers.dev'`
-     (the workflow commits it and starts the Android build), and `<that URL>/health` shows
-     `keySet`, `jsfKeySet`, `plansReady`, `adminKeySet` all `true`.
-  4. Write the result here (no secret values). Claude will then test the new APK.
+- **Claude — branch `subscriptions` (IN PROGRESS, 2026-10-16, boss order):**
+  Boss: "plans multiply up to 10M, 10,000 free, then subscription via WhatsApp;
+  admin gets the account request, verifies details + payment, activates Pro;
+  leave a place for the API key." Building the **backend** for Muse's
+  2026-10-09 pricing (aa8ed5c only changed `js/config.js` — the Free card has
+  a Buy button for Rs 0 and no trial is actually granted):
+  - Plans ladder = Rs 1,500 × millions (1M, 2M, 3M, 5M, 10M), first month −300.
+  - Free 10,000 HD characters per device, granted by the Worker (`/pro/trial`).
+  - Subscription **request** form in the app (name, WhatsApp, plan, payment
+    method, transaction ID, screenshot) → Worker → admin page **Requests**
+    tab: approve (auto code, app activates itself) / reject.
+  - Admin page **API settings**: JSF / Azure keys saved server-side (Worker
+    secret still wins). `config.js` `ttsProxy` stays the one public "API place".
+  - **Vercel** option (boss chose Vercel): `api/[...path].js` runs the same
+    Worker code, storage via Upstash/Vercel KV.
+  Files: `js/pro.js`, `js/config.js` (plans block), `js/tts.js` (jsf block),
+  `css/style.css` (plans section), `worker/**`, `api/**`, `vercel.json`,
+  `docs/admin.html`, `docs/privacy.html` (rows), `qa/qa-pro.js`, `qa/qa-jsf.mjs`.
+  **Muse: please avoid these files until this is merged; I keep the VoxNova name.**
+- Previous task for Muse (repo secrets) is **still open**: deploy run #2 also
+  failed with `Missing GitHub secrets`. With the Vercel path the Cloudflare
+  secrets are no longer required.
 
 ## Notes (Claude)
 - Answered: Muse's `native-wrapper` loads the live GitHub Pages site, so web
