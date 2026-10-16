@@ -95,6 +95,58 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
 const CODE_RE = /^VS-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
 const MAX_CLONES_PER_CODE = 20;
 
+// Server-side plan table (mirrors js/config.js). Approvals take characters
+// from here, never from what the app sent. PLANS_JSON env can override.
+const DEFAULT_PLAN_TABLE = [
+  { id: 'starter', name: 'Starter', chars: 1000000, price: 1500, firstMonth: 1200 },
+  { id: 'plus', name: 'Plus', chars: 2000000, price: 3000, firstMonth: 2700 },
+  { id: 'creator', name: 'Creator', chars: 3000000, price: 4500, firstMonth: 4200 },
+  { id: 'pro', name: 'Pro', chars: 5000000, price: 7500, firstMonth: 7200 },
+  { id: 'studio', name: 'Studio', chars: 10000000, price: 15000, firstMonth: 14700 },
+];
+function planTable(env) {
+  try { const t = JSON.parse(env.PLANS_JSON || 'null'); if (Array.isArray(t) && t.length) return t; } catch {}
+  return DEFAULT_PLAN_TABLE;
+}
+function findPlan(env, name) {
+  const n = String(name || '').trim().toLowerCase();
+  return planTable(env).find((p) => p.id === n || String(p.name).toLowerCase() === n) || null;
+}
+
+// Read many keys at once (Upstash MGET on Vercel; parallel gets on Cloudflare).
+async function getMany(env, keys) {
+  if (!keys.length) return [];
+  if (typeof env.PRO.getMany === 'function') return env.PRO.getMany(keys);
+  const out = [];
+  for (let i = 0; i < keys.length; i += 50) {
+    const part = await Promise.all(keys.slice(i, i + 50).map((k) => env.PRO.get(k)));
+    out.push(...part);
+  }
+  return out;
+}
+async function listAll(env, prefix, limit = 5000) {
+  const list = await env.PRO.list({ prefix, limit });
+  return list.keys.map((k) => k.name);
+}
+function parseJson(raw) { try { return JSON.parse(raw); } catch { return null; } }
+
+// Daily counters for the dashboard: stat:<name>:<YYYY-MM-DD>
+async function bumpStat(env, name, n = 1) {
+  if (!env.PRO || !n) return;
+  const k = 'stat:' + name + ':' + new Date().toISOString().slice(0, 10);
+  try {
+    const cur = Number((await env.PRO.get(k)) || 0);
+    await env.PRO.put(k, String(cur + n), { expirationTtl: 400 * 86400 });
+  } catch {}
+}
+function dayKeys(days) {
+  const out = [];
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  for (let i = days - 1; i >= 0; i--) out.push(new Date(d.getTime() - i * 86400000).toISOString().slice(0, 10));
+  return out;
+}
+
 function normCode(c) { return String(c || '').trim().toUpperCase().replace(/\s+/g, ''); }
 function remainingOf(rec) { return Math.max(0, (rec.chars | 0) - (rec.used | 0)); }
 
@@ -144,6 +196,7 @@ async function requireCode(request, env, cors) {
   if (new URL(request.url).pathname === '/jsf/clone' && (rec.clones | 0) >= MAX_CLONES_PER_CODE) {
     return { error: json(402, { error: 'clone limit reached for this plan', code: 'CLONE_LIMIT' }, cors) };
   }
+  rec.lastSeen = Date.now();
   return { code, rec };
 }
 
@@ -154,6 +207,7 @@ async function proStatus(request, env, cors) {
   const code = normCode(body.code);
   const rec = await loadCode(env, code);
   if (!rec) return json(404, { valid: false, error: 'activation code not found' }, cors);
+  if (!rec.lastSeen || Date.now() - rec.lastSeen > 10 * 60000) { rec.lastSeen = Date.now(); await saveCode(env, code, rec); }
   return json(200, publicStatus(code, rec), cors);
 }
 
@@ -210,7 +264,7 @@ async function bumpDaily(env, key, max) {
   return true;
 }
 
-async function createCode(env, { plan, chars, days, note }) {
+async function createCode(env, { plan, chars, days, note, source, device, name, phone, paid, reqId }) {
   let code = newCode();
   for (let i = 0; i < 3 && (await env.PRO.get('code:' + code)); i++) code = newCode();
   const now = Date.now();
@@ -219,6 +273,10 @@ async function createCode(env, { plan, chars, days, note }) {
     chars, used: 0, clones: 0, created: now,
     expires: days ? now + days * 86400000 : null,
     note: String(note || '').slice(0, 120),
+    source: source || 'manual',
+    device: device || '', name: name || '', phone: phone || '',
+    paid: Math.max(0, Math.floor(Number(paid) || 0)), reqId: reqId || '',
+    lastSeen: null,
   };
   await saveCode(env, code, rec);
   return { code, rec };
@@ -241,8 +299,10 @@ async function proTrial(request, env, cors) {
     return json(429, { error: 'free trial limit reached on this network today', code: 'TRIAL_LIMIT' }, cors);
   }
   const chars = Math.max(0, Math.floor(Number(env.FREE_TRIAL_CHARS) || 10000));
-  const { code, rec } = await createCode(env, { plan: 'Free', chars, days: 0, note: 'free trial ' + device.slice(0, 8) });
+  const { code, rec } = await createCode(env, { plan: 'Free', chars, days: 0, note: 'free trial', source: 'trial', device });
+  rec.lastSeen = Date.now(); await saveCode(env, code, rec);
   await env.PRO.put('trial:' + device, code);
+  await bumpStat(env, 'new');
   return json(200, publicStatus(code, rec), cors);
 }
 
@@ -273,9 +333,15 @@ async function proRequest(request, env, cors) {
   }
   const id = 'R' + randomId(8);
   const secret = randomId(24);
+  const known = findPlan(env, plan);
+  const expectChars = known ? known.chars : chars;
+  const okPrices = known ? [known.price, known.firstMonth].filter(Boolean) : [price];
   const rec = {
     id, secret, status: 'pending', created: Date.now(),
-    name, phone, plan, chars, price, method, tid,
+    name, phone, plan: known ? known.name : plan, method, tid,
+    chars: expectChars, price, claimedChars: chars,
+    knownPlan: !!known, expectedPrices: okPrices,
+    mismatch: !known || chars !== expectChars || !okPrices.includes(price),
     device: DEVICE_RE.test(String(body.device || '')) ? String(body.device) : '',
     hasShot: !!shot,
   };
@@ -299,30 +365,102 @@ async function proRequestStatus(request, env, cors) {
   return json(200, out, cors);
 }
 
+const ADMIN_MAX_FAILS = 5;
+function userRow(code, rec) {
+  return {
+    ...publicStatus(code, rec), note: rec.note || '', created: rec.created || null, clones: rec.clones | 0,
+    source: rec.source || (rec.plan === 'Free' ? 'trial' : 'manual'), lastSeen: rec.lastSeen || null,
+    device: rec.device ? rec.device.slice(0, 8) : '', name: rec.name || '', phone: rec.phone || '', paid: rec.paid | 0,
+  };
+}
+async function allCodes(env) {
+  const keys = await listAll(env, 'code:');
+  const raws = await getMany(env, keys);
+  const out = [];
+  keys.forEach((k, i) => { const rec = parseJson(raws[i]); if (rec) out.push(userRow(k.slice(5), rec)); });
+  return out;
+}
+async function allRequests(env) {
+  const keys = await listAll(env, 'req:', 2000);
+  const raws = await getMany(env, keys);
+  const out = [];
+  keys.forEach((k, i) => { const rec = parseJson(raws[i]); if (rec) { const { secret, ...pub } = rec; out.push(pub); } });
+  return out;
+}
+async function overview(env) {
+  const [users, reqs] = await Promise.all([allCodes(env), allRequests(env)]);
+  const now = Date.now(), H = 3600000, D = 24 * H;
+  const seen = (u) => u.lastSeen || u.created || 0;
+  const paid = users.filter((u) => u.plan !== 'Free');
+  const approved = reqs.filter((r) => r.status === 'approved');
+  const month = new Date().toISOString().slice(0, 7);
+  const plans = {};
+  for (const p of planTable(env)) plans[p.name] = { plan: p.name, chars: p.chars, price: p.price, users: 0, active: 0, revenue: 0 };
+  plans.Free = { plan: 'Free', chars: Number(env.FREE_TRIAL_CHARS) || 10000, price: 0, users: 0, active: 0, revenue: 0 };
+  for (const u of users) {
+    const b = plans[u.plan] || (plans[u.plan] = { plan: u.plan, chars: 0, price: 0, users: 0, active: 0, revenue: 0 });
+    b.users++; if (u.valid) b.active++;
+  }
+  for (const r of approved) { const b = plans[r.plan] || (plans[r.plan] = { plan: r.plan, chars: 0, price: 0, users: 0, active: 0, revenue: 0 }); b.revenue += r.price | 0; }
+  const days = dayKeys(30);
+  const statNames = ['new', 'chars', 'tts', 'paid', 'revenue'];
+  const statKeys = [];
+  for (const n of statNames) for (const d of days) statKeys.push('stat:' + n + ':' + d);
+  const vals = await getMany(env, statKeys);
+  const series = {};
+  statNames.forEach((n, i) => { series[n] = days.map((d, j) => Number(vals[i * days.length + j] || 0)); });
+  return {
+    generated: now,
+    users: {
+      total: users.length, free: users.length - paid.length, paid: paid.length,
+      paidActive: paid.filter((u) => u.valid).length,
+      active24h: users.filter((u) => now - seen(u) < D).length,
+      active7d: users.filter((u) => now - seen(u) < 7 * D).length,
+      active30d: users.filter((u) => now - seen(u) < 30 * D).length,
+      expiringSoon: paid.filter((u) => u.expires && u.expires > now && u.expires - now < 5 * D).length,
+    },
+    chars: { used: users.reduce((s, u) => s + u.used, 0), usedPaid: paid.reduce((s, u) => s + u.used, 0), remaining: users.reduce((s, u) => s + u.remaining, 0) },
+    revenue: {
+      total: approved.reduce((s, r) => s + (r.price | 0), 0),
+      thisMonth: approved.filter((r) => new Date(r.decided || r.created).toISOString().slice(0, 7) === month).reduce((s, r) => s + (r.price | 0), 0),
+      payments: approved.length,
+    },
+    requests: { pending: reqs.filter((r) => r.status === 'pending').length, approved: approved.length, rejected: reqs.filter((r) => r.status === 'rejected').length },
+    plans: Object.values(plans).sort((a, b) => (a.price || 0) - (b.price || 0)),
+    series: { days, ...series },
+  };
+}
+
 async function admin(request, env, cors, url) {
   if (!env.ADMIN_KEY) return json(503, { error: 'admin key not set on the Worker' }, cors);
-  if (!sameKey(request.headers.get('X-Admin-Key'), env.ADMIN_KEY)) return json(401, { error: 'wrong admin key' }, cors);
+  const failKey = 'adminfail:' + clientIp(request);
+  if (env.PRO) {
+    const fails = Number((await env.PRO.get(failKey)) || 0);
+    if (fails >= ADMIN_MAX_FAILS) return json(429, { error: 'too many wrong admin keys — wait 15 minutes', code: 'ADMIN_LOCKED' }, cors);
+  }
+  if (!sameKey(request.headers.get('X-Admin-Key'), env.ADMIN_KEY)) {
+    if (env.PRO) {
+      const fails = Number((await env.PRO.get(failKey)) || 0) + 1;
+      await env.PRO.put(failKey, String(fails), { expirationTtl: 900 });
+    }
+    return json(401, { error: 'wrong admin key' }, cors);
+  }
   if (!env.PRO) return json(503, { error: 'plans storage (KV) not set up' }, cors);
 
-  if (url.pathname === '/admin/codes' && request.method === 'GET') {
-    const list = await env.PRO.list({ prefix: 'code:', limit: 200 });
-    const out = [];
-    for (const k of list.keys) {
-      const code = k.name.slice(5);
-      const rec = await loadCode(env, code);
-      if (rec) out.push({ ...publicStatus(code, rec), note: rec.note || '', created: rec.created || null, clones: rec.clones | 0 });
-    }
-    out.sort((a, b) => (b.created || 0) - (a.created || 0));
-    return json(200, { codes: out }, cors);
+  if (url.pathname === '/admin/overview' && request.method === 'GET') {
+    return json(200, await overview(env), cors);
+  }
+  if ((url.pathname === '/admin/codes' || url.pathname === '/admin/users') && request.method === 'GET') {
+    const out = await allCodes(env);
+    out.sort((a, b) => (b.lastSeen || b.created || 0) - (a.lastSeen || a.created || 0));
+    return json(200, { codes: out, users: out }, cors);
+  }
+  if (url.pathname === '/admin/plans' && request.method === 'GET') {
+    return json(200, { plans: planTable(env), freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000 }, cors);
   }
 
   if (url.pathname === '/admin/requests' && request.method === 'GET') {
-    const list = await env.PRO.list({ prefix: 'req:', limit: 500 });
-    const out = [];
-    for (const k of list.keys) {
-      const rec = await loadReq(env, k.name.slice(4));
-      if (rec) { const { secret, ...pub } = rec; out.push(pub); }
-    }
+    const out = await allRequests(env);
     out.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.created - a.created);
     return json(200, { requests: out }, cors);
   }
@@ -369,12 +507,16 @@ async function admin(request, env, cors, url) {
     const rec = await loadReq(env, body.id);
     if (!rec) return json(404, { error: 'request not found' }, cors);
     if (rec.status === 'approved') return json(409, { error: 'already approved', code: rec.code }, cors);
+    const known = findPlan(env, body.plan || rec.plan);
+    const grant = chars || (known ? known.chars : rec.chars);
     const c = await createCode(env, {
-      plan: body.plan || rec.plan, chars: chars || rec.chars, days: days || 30,
-      note: rec.name + ' ' + rec.phone + (rec.tid ? ' TID ' + rec.tid : ''),
+      plan: known ? known.name : (body.plan || rec.plan), chars: grant, days: days || 30,
+      note: (rec.method || '') + (rec.tid ? ' TID ' + rec.tid : ''),
+      source: 'request', name: rec.name, phone: rec.phone, device: rec.device, paid: rec.price, reqId: rec.id,
     });
-    rec.status = 'approved'; rec.code = c.code; rec.decided = Date.now();
+    rec.status = 'approved'; rec.code = c.code; rec.decided = Date.now(); rec.grantedChars = grant;
     await env.PRO.put('req:' + rec.id, JSON.stringify(rec));
+    await bumpStat(env, 'paid'); await bumpStat(env, 'revenue', rec.price | 0);
     const { secret, ...pub } = rec;
     return json(200, { request: pub, ...publicStatus(c.code, c.rec) }, cors);
   }
@@ -389,7 +531,11 @@ async function admin(request, env, cors, url) {
 
   if (url.pathname === '/admin/codes' && request.method === 'POST') {
     if (chars < 1) return json(400, { error: 'chars required' }, cors);
-    const { code, rec } = await createCode(env, { plan: body.plan, chars, days, note: body.note });
+    const { code, rec } = await createCode(env, {
+      plan: body.plan, chars, days, note: body.note, source: 'manual',
+      name: cleanStr(body.name, 60), phone: String(body.phone || '').replace(/[^0-9+]/g, '').slice(0, 16), paid: body.paid,
+    });
+    if (rec.paid) { await bumpStat(env, 'paid'); await bumpStat(env, 'revenue', rec.paid); }
     return json(200, { ...publicStatus(code, rec), note: rec.note }, cors);
   }
 
@@ -489,6 +635,7 @@ async function jsfTts(request, env, cors, acct) {
     await saveCode(env, acct.code, acct.rec);
     remaining = remainingOf(acct.rec);
   }
+  await bumpStat(env, 'chars', text.length); await bumpStat(env, 'tts');
   const { _ok, ...h } = cors;
   return new Response(audio.body, {
     status: 200,
@@ -516,7 +663,6 @@ export default {
       return json(200, {
         ok: true, region: env.AZURE_SPEECH_REGION || null, keySet: !!env.AZURE_SPEECH_KEY,
         jsfKeySet: !!env.JSF_API_KEY, plansReady: !!env.PRO, adminKeySet: !!env.ADMIN_KEY,
-        origin: origin || null, originAllowed: !!_ok,
       }, cors);
     }
     // Admin (code management) — protected by ADMIN_KEY, any allowed origin.

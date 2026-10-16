@@ -34,6 +34,14 @@ function kvFromEnv(e) {
   // Same shape as a Cloudflare KV binding (only what the Worker uses).
   return {
     async get(k) { const v = await call(['GET', k]); return v == null ? null : String(v); },
+    async getMany(keys) {
+      const out = [];
+      for (let i = 0; i < keys.length; i += 100) {
+        const part = await call(['MGET', ...keys.slice(i, i + 100)]);
+        for (const v of part) out.push(v == null ? null : String(v));
+      }
+      return out;
+    },
     async put(k, v, opts) {
       const cmd = ['SET', k, String(v)];
       if (opts && opts.expirationTtl) cmd.push('EX', String(opts.expirationTtl));
@@ -65,6 +73,7 @@ export default async function handler(request) {
       request.headers.get('x-forwarded-host') ? 'https://' + request.headers.get('x-forwarded-host') : '',
       request.headers.get('host') ? 'https://' + request.headers.get('host') : ''].filter(Boolean).join(','),
     FREE_TRIAL_CHARS: e.FREE_TRIAL_CHARS || '',
+    PLANS_JSON: e.PLANS_JSON || '',
     PRO: kvFromEnv(e),
   };
   // vercel.json rewrites /api/<anything> to /api/router?__path=<anything>.

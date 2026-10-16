@@ -924,7 +924,10 @@
       new root.MutationObserver(refreshBadges)
         .observe(root.document.documentElement, { attributes: true, attributeFilter: ['lang'] });
     } catch (e) {}
+    // Every user gets the free characters on first open (one per device), so
+    // they also show up as a user in the admin dashboard. Silent on failure.
     if (code()) refresh();
+    else if (proxyUrl()) startTrial().catch(function () {});
     var pr = pendingRequest();
     if (pr && pr.status === 'pending') { checkRequest(); schedulePoll(); }
   }
