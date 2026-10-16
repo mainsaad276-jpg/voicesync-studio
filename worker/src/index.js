@@ -45,7 +45,9 @@ const JSF_AUDIO_HOST = /^https:\/\/([a-z0-9-]+\.)*jsflabs\.io\//;
 
 const DEFAULT_ORIGINS = 'https://mainsaad276-jpg.github.io,https://localhost,http://localhost,capacitor://localhost,http://localhost:8000';
 function corsHeaders(origin, env, selfOrigin) {
-  const allowed = String(env.ALLOWED_ORIGINS || DEFAULT_ORIGINS)
+  // The app's own homes (website, Android app, local test) are always
+  // allowed; ALLOWED_ORIGINS can only add more.
+  const allowed = (DEFAULT_ORIGINS + ',' + String(env.ALLOWED_ORIGINS || ''))
     .split(',').map((s) => s.trim()).filter(Boolean);
   const ok = !!origin && (allowed.includes(origin) || origin === selfOrigin);
   return {
