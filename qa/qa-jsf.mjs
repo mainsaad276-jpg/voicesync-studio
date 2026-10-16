@@ -250,6 +250,7 @@ t('same_origin_allowed', r.status === 200);
     let result = null;
     if (op === 'GET') result = store.has(a[0]) ? store.get(a[0]) : null;
     else if (op === 'SET') { store.set(a[0], a[1]); result = 'OK'; }
+    else if (op === 'MGET') result = a.map((k) => (store.has(k) ? store.get(k) : null));
     else if (op === 'SCAN') { const pre = a[2].replace(/\*$/, ''); result = ['0', [...store.keys()].filter((k) => k.startsWith(pre))]; }
     return new Response(JSON.stringify({ result }), { status: 200 });
   };
@@ -282,6 +283,53 @@ t('same_origin_allowed', r.status === 200);
   vr = await vercel(new Request('https://internal-host.example/api/router?__path=admin/codes', { headers: { host: 'voicesync-studio-psi.vercel.app', 'X-Admin-Key': 'vercel-admin' } }));
   t('vercel_same_site_get_no_origin', vr.status === 200);
   globalThis.fetch = prevFetch;
+}
+
+// ---- audit fixes + dashboard ----
+{
+  const envD = { ...env, PRO: new MemKV() };
+  const ipReq = (path, body, key, ip) => new Request('https://w.example.workers.dev' + path, {
+    method: body ? 'POST' : 'GET',
+    headers: { Origin: ORIGIN, 'X-Admin-Key': key, 'CF-Connecting-IP': ip, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  // S1: 5 wrong keys -> locked, even the right key, for that IP
+  for (let i = 0; i < 5; i++) await worker.fetch(ipReq('/admin/codes', null, 'bad', '7.7.7.7'), envD);
+  r = await worker.fetch(ipReq('/admin/codes', null, ADMIN, '7.7.7.7'), envD);
+  t('admin_lockout_after_5', r.status === 429 && (await r.json()).code === 'ADMIN_LOCKED');
+  r = await worker.fetch(ipReq('/admin/codes', null, ADMIN, '6.6.6.6'), envD);
+  t('admin_other_ip_ok', r.status === 200);
+  // S2: request claims 10M chars for Starter -> server stores 1M + mismatch, approve grants 1M
+  r = await worker.fetch(new Request('https://w.example.workers.dev/pro/request', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', 'CF-Connecting-IP': '5.5.5.5' }, body: JSON.stringify({ name: 'Cheater', phone: '03001231234', plan: 'Starter', chars: 10000000, price: 1200, method: 'JazzCash', tid: 'T9' }) }), envD);
+  const RQ = await r.json();
+  r = await worker.fetch(ipReq('/admin/requests', null, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  const row = j.requests.find((x) => x.id === RQ.id);
+  t('request_server_chars', row.chars === 1000000 && row.claimedChars === 10000000 && row.mismatch === true);
+  r = await worker.fetch(ipReq('/admin/requests/approve', { id: RQ.id }, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  t('approve_grants_plan_chars', j.chars === 1000000 && j.plan === 'Starter');
+  // honest request -> no mismatch
+  r = await worker.fetch(new Request('https://w.example.workers.dev/pro/request', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', 'CF-Connecting-IP': '5.5.5.6' }, body: JSON.stringify({ name: 'Honest', phone: '03001231235', plan: 'Creator', chars: 3000000, price: 4200, method: 'Easypaisa', tid: 'T10' }) }), envD);
+  const RQ2 = await r.json();
+  r = await worker.fetch(ipReq('/admin/requests', null, ADMIN, '6.6.6.6'), envD);
+  t('honest_request_no_mismatch', (await r.json()).requests.find((x) => x.id === RQ2.id).mismatch === false);
+  // trials + overview
+  await worker.fetch(new Request('https://w.example.workers.dev/pro/trial', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', 'CF-Connecting-IP': '4.4.4.4' }, body: JSON.stringify({ device: 'dev_OVERVIEW_AAAAAAAAAA' }) }), envD);
+  r = await worker.fetch(ipReq('/admin/overview', null, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  t('overview_users', j.users.total === 2 && j.users.paid === 1 && j.users.free === 1 && j.users.active24h === 2);
+  t('overview_revenue', j.revenue.total === 1200 && j.revenue.payments === 1 && j.requests.pending === 1);
+  t('overview_plans', j.plans.find((p) => p.plan === 'Starter').users === 1 && j.plans.find((p) => p.plan === 'Starter').revenue === 1200);
+  t('overview_series', j.series.days.length === 30 && j.series.new[29] === 1 && j.series.revenue[29] === 1200);
+  r = await worker.fetch(ipReq('/admin/users', null, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  const paidU = j.users.find((u) => u.plan === 'Starter');
+  t('users_rows', paidU.source === 'request' && paidU.name === 'Cheater' && paidU.paid === 1200 && j.users.find((u) => u.plan === 'Free').source === 'trial');
+  r = await worker.fetch(ipReq('/admin/plans', null, ADMIN, '6.6.6.6'), envD);
+  t('plans_table', (await r.json()).plans.length === 5);
+  r = await worker.fetch(req('/health'), envD);
+  t('health_no_debug_origin', !('origin' in (await r.json())));
 }
 
 // tts.js public API

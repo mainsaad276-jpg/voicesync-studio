@@ -17,6 +17,10 @@
   ],
   "rewrites": [
     {
+      "source": "/admin",
+      "destination": "/docs/admin.html"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/router?__path=:path*"
     }
