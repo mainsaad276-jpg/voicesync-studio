@@ -23,25 +23,11 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
 6. **QA gate**: web changes must keep `bash qa/run-qa.sh` green.
 
 ## Active work
-- **Claude — branch `subscriptions` (IN PROGRESS, 2026-10-16, boss order):**
-  Boss: "plans multiply up to 10M, 10,000 free, then subscription via WhatsApp;
-  admin gets the account request, verifies details + payment, activates Pro;
-  leave a place for the API key." Building the **backend** for Muse's
-  2026-10-09 pricing (aa8ed5c only changed `js/config.js` — the Free card has
-  a Buy button for Rs 0 and no trial is actually granted):
-  - Plans ladder = Rs 1,500 × millions (1M, 2M, 3M, 5M, 10M), first month −300.
-  - Free 10,000 HD characters per device, granted by the Worker (`/pro/trial`).
-  - Subscription **request** form in the app (name, WhatsApp, plan, payment
-    method, transaction ID, screenshot) → Worker → admin page **Requests**
-    tab: approve (auto code, app activates itself) / reject.
-  - Admin page **API settings**: JSF / Azure keys saved server-side (Worker
-    secret still wins). `config.js` `ttsProxy` stays the one public "API place".
-  - **Vercel** option (boss chose Vercel): `api/[...path].js` runs the same
-    Worker code, storage via Upstash/Vercel KV.
-  Files: `js/pro.js`, `js/config.js` (plans block), `js/tts.js` (jsf block),
-  `css/style.css` (plans section), `worker/**`, `api/**`, `vercel.json`,
-  `docs/admin.html`, `docs/privacy.html` (rows), `qa/qa-pro.js`, `qa/qa-jsf.mjs`.
-  **Muse: please avoid these files until this is merged; I keep the VoxNova name.**
+- _(Claude: `subscriptions` merged as PR #4 — see Done recently.)_
+- **For Muse (when you pick up web work):** plans now live in `js/config.js`
+  (`freeTrialChars`, `plans` = Rs 1,500 × millions) and are rendered by
+  `js/pro.js`; please change prices there only. The API address is the single
+  line `var VS_API_ADDRESS = ''` at the top of `js/config.js`.
 - Previous task for Muse (repo secrets) is **still open**: deploy run #2 also
   failed with `Missing GitHub secrets`. With the Vercel path the Cloudflare
   secrets are no longer required.
@@ -56,6 +42,7 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
   one goes to Play Store.
 
 ## Done recently
+- 2026-10-16: PR #4 merged (Claude): free 10,000 HD chars per device (`/pro/trial`), plan request form + admin Requests tab (verify → approve → app activates itself), admin API settings (keys server-side), Vercel adapter `api/[...path].js` + `docs/SETUP-VERCEL.md`, plans Rs 1,500 × millions up to 10M. QA 2120 + 29 + 67.
 - 2026-10-09: RENAME VoiceSync Studio → VoxNova (Muse Team 1, boss pick): display name only — web, Capacitor, native wrapper, docs. Packages/URLs/engines unchanged. QA green, pushed+live.
 - 2026-10-09: PR #3 merged (Claude): paid plans + activation codes (Worker KV), admin page `docs/admin.html`, themes, Worker auto-deploy; includes PR #1 Pro + PR #2 JSF relay. QA 2120 + 29 + 43.
 - 2026-10-08: Capacitor 8 / targetSdk 36, release signing in CI, Azure Worker relay (Claude).
