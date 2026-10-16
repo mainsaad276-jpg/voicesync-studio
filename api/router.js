@@ -1,6 +1,7 @@
 /*
  * VoxNova API on Vercel. Runs the same code as the Cloudflare Worker
  * (worker/src/index.js) under https://<your-site>.vercel.app/api/...
+ * (vercel.json rewrites every /api/* path to this one function)
  *
  * Vercel → Project → Settings → Environment Variables:
  *   VS_ADMIN_KEY        your password for docs/admin.html          (required)
@@ -62,9 +63,16 @@ export default async function handler(request) {
     FREE_TRIAL_CHARS: e.FREE_TRIAL_CHARS || '',
     PRO: kvFromEnv(e),
   };
-  // Strip the /api prefix so the Worker sees /health, /tts, /pro/..., /admin/...
+  // vercel.json rewrites /api/<anything> to /api/router?__path=<anything>.
+  // Give the Worker the real path: /health, /tts, /pro/..., /admin/...
   const url = new URL(request.url);
-  url.pathname = url.pathname.replace(/^\/api(?=\/|$)/, '') || '/';
+  const forced = url.searchParams.get('__path');
+  if (forced !== null) {
+    url.searchParams.delete('__path');
+    url.pathname = '/' + forced.replace(/^\/+/, '');
+  } else {
+    url.pathname = url.pathname.replace(/^\/api(?=\/|$)/, '').replace(/^\/router(?=\/|$)/, '') || '/';
+  }
   // Copy method, every header (incl. Origin) and the body explicitly.
   const init = { method: request.method, headers: new Headers(request.headers) };
   if (request.method !== 'GET' && request.method !== 'HEAD') init.body = await request.arrayBuffer();

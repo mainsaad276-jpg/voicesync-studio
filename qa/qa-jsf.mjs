@@ -259,7 +259,7 @@ t('same_origin_allowed', r.status === 200);
   process.env.KV_REST_API_TOKEN = 'tok';
   process.env.VS_ADMIN_KEY = 'vercel-admin';
   process.env.ALLOWED_ORIGINS = ORIGIN;
-  const vercel = (await import('../api/[...path].js')).default;
+  const vercel = (await import('../api/router.js')).default;
   let vr = await vercel(new Request('https://voxnova.vercel.app/api/health'));
   let vj = await vr.json();
   t('vercel_health', vr.status === 200 && vj.plansReady === true && vj.adminKeySet === true);
@@ -268,6 +268,11 @@ t('same_origin_allowed', r.status === 200);
   t('vercel_admin_create', vr.status === 200 && /^VS-/.test(vj.code));
   vr = await vercel(new Request('https://voxnova.vercel.app/api/admin/codes', { headers: { Origin: ORIGIN, 'X-Admin-Key': 'vercel-admin' } }));
   t('vercel_kv_list', (await vr.json()).codes.length === 1);
+  // As Vercel calls it after the rewrite: /api/router?__path=pro/status
+  vr = await vercel(new Request('https://voxnova.vercel.app/api/router?__path=pro/status', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, body: JSON.stringify({ code: vj.code }) }));
+  t('vercel_rewrite_path', vr.status === 200 && (await vr.json()).remaining === 1000);
+  vr = await vercel(new Request('https://voxnova.vercel.app/api/router?__path=pro/status', { method: 'OPTIONS', headers: { Origin: 'https://mainsaad276-jpg.github.io', 'Access-Control-Request-Method': 'POST' } }));
+  t('vercel_preflight_github_pages', vr.status === 204 && vr.headers.get('access-control-allow-origin') === 'https://mainsaad276-jpg.github.io');
   globalThis.fetch = prevFetch;
 }
 
