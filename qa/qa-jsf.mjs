@@ -278,6 +278,9 @@ t('same_origin_allowed', r.status === 200);
   t('vercel_self_origin_admin', vr.status === 200);
   vr = await vercel(new Request('https://internal-host.example/api/router?__path=admin/codes', { headers: { Origin: 'https://evil.vercel.app', 'X-Admin-Key': 'vercel-admin' } }));
   t('vercel_other_site_blocked', vr.status === 403);
+  // Same-site GET from the admin page: browsers send no Origin header
+  vr = await vercel(new Request('https://internal-host.example/api/router?__path=admin/codes', { headers: { host: 'voicesync-studio-psi.vercel.app', 'X-Admin-Key': 'vercel-admin' } }));
+  t('vercel_same_site_get_no_origin', vr.status === 200);
   globalThis.fetch = prevFetch;
 }
 

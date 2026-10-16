@@ -521,7 +521,7 @@ export default {
     }
     // Admin (code management) — protected by ADMIN_KEY, any allowed origin.
     if (url.pathname.startsWith('/admin/')) {
-      if (!_ok) return json(403, { error: 'origin not allowed' }, cors);
+      if (origin && !_ok) return json(403, { error: 'origin not allowed' }, cors); // no Origin = same-site GET or non-browser
       return admin(request, env, cors, url);
     }
 
@@ -531,7 +531,7 @@ export default {
     if (request.method !== 'POST' || (url.pathname !== '/tts' && !isJsf && !isPro)) {
       return json(404, { error: 'not found' }, cors);
     }
-    if (!_ok) return json(403, { error: 'origin not allowed' }, cors);
+    if (origin && !_ok) return json(403, { error: 'origin not allowed' }, cors); // no Origin = same-site GET or non-browser
 
     if (isJsf || isPro) {
       if (env.RATE_LIMITER) {
