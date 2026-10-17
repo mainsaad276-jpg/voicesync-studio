@@ -466,7 +466,9 @@
     if (!box || !tc) return;
     var txt = box.value;
     var words = txt.trim() ? txt.trim().split(/\s+/).length : 0;
-    var parts = Math.max(1, Math.ceil(txt.length / 400)); // Team 2 Fix: worst-case chunk limit (Edge 400 / Google 200)
+    // Studio voices go through our server in 2,500-character parts; the free fallbacks use 400.
+    var partSize = (window.VS_CONFIG && window.VS_CONFIG.ttsProxy) ? 2500 : 400;
+    var parts = Math.max(1, Math.ceil(txt.length / partSize));
     tc.textContent = txt.length + ' ' + t('counter_chars') + ' \u2022 ' +
       words + ' ' + t('counter_words') + ' \u2022 ' + parts + ' ' + t('counter_parts');
   }
@@ -1943,7 +1945,11 @@
    * No new i18n keys (M39): these bilingual constants are defined ONCE here
    * and reused, so nothing new enters the i18n dictionaries. */
   var MAX_INPUT_CHARS = 5000; // M21/C6: soft cap — ~12 Edge chunks / ~25 Google URLs
-  var TEXT_TOO_LONG_ASK = 'This text is {n} characters (~{m} voice requests, several minutes). Generate anyway? / یہ متن {n} حروف پر مشتمل ہے (~{m} وائس درخواستیں، کئی منٹ لگیں گے)۔ پھر بھی بنائیں؟';
+  // Long scripts: no blocking confirm() (Android WebViews and some browsers
+  // silently return false, so nothing happened). Show a note and go on.
+  var HARD_MAX_CHARS = 60000;
+  var LONG_TEXT_NOTE = 'Long script: {n} characters (about {m} min of audio). Making it in parts — please keep the app open… / لمبی اسکرپٹ: {n} حروف (تقریباً {m} منٹ کی آواز)۔ حصوں میں بن رہی ہے — ایپ کھلی رکھیں…';
+  var TEXT_TOO_LONG_HARD = 'This script is {n} characters. Please split it — at most {max} characters at a time. / یہ اسکرپٹ {n} حروف کی ہے۔ ایک وقت میں زیادہ سے زیادہ {max} حروف۔';
   var TEXT_TOO_LONG_ERR = 'Text too long — please keep it under 5000 characters. / متن بہت لمبا ہے — براہ کرم 5000 حروف سے کم رکھیں۔';
   var ROMAN_APPLIED_NOTE = 'Roman Urdu detected — the voiceover uses Urdu script (your text is unchanged). / رومن اردو پہچانی گئی — آواز اردو اسکرپٹ میں بنے گی (آپ کا متن ویسا ہی ہے)۔';
   var PASTE_EMPTY_NOTE = 'Clipboard is empty — nothing pasted. / کلپ بورڈ خالی ہے — کچھ پیسٹ نہیں ہوا۔';
@@ -2037,15 +2043,14 @@
     }
     // M21: soft input cap — 5000 chars is ~12 Edge chunks / ~25 Google URLs.
     // (Dialogue mode skips the confirm: it has its own hard reject below.)
+    if (!state.dialogueMode && synthText.length > HARD_MAX_CHARS) {
+      setMsg(TEXT_TOO_LONG_HARD.replace(/\{n\}/g, String(synthText.length)).replace(/\{max\}/g, String(HARD_MAX_CHARS)), true);
+      return;
+    }
+    var longNote = '';
     if (!state.dialogueMode && synthText.length > MAX_INPUT_CHARS) {
-      var estChunks = Math.max(1, Math.ceil(synthText.length / 400));
-      var go = false;
-      try {
-        go = window.confirm(
-          TEXT_TOO_LONG_ASK.replace('{n}', String(synthText.length))
-                           .replace('{m}', String(estChunks)));
-      } catch (e) { go = false; }
-      if (!go) return;
+      longNote = LONG_TEXT_NOTE.replace(/\{n\}/g, String(synthText.length))
+                               .replace(/\{m\}/g, String(Math.max(1, Math.round(synthText.length / 900))));
     }
 
     // Pro tier (js/pro.js): free-plan limits. No-op while VS_CONFIG.pro.enforce
@@ -2098,7 +2103,7 @@
       }
     } catch (e) {}
     // Chatterbox is human-like but slow (free shared GPU) — set expectations.
-    setMsg(state.voiceId && state.voiceId.indexOf('chatterbox:') === 0 ? t('chatterboxWorking') : t('generating'));
+    setMsg(state.voiceId && state.voiceId.indexOf('chatterbox:') === 0 ? t('chatterboxWorking') : (longNote || t('generating')));
     // Dialogue mode: synthesize each speaker's lines with their own voice,
     // merge into one buffer, then run the normal pipeline.
     if (state.dialogueMode) {
@@ -2129,7 +2134,11 @@
     } else {
       // C8: the promise carries its run identity.
       try {
-        var genP = window.TTS.synthesize(synthText, state.voiceId);
+        var genP = window.TTS.synthesize(synthText, state.voiceId, longNote ? {
+          onProgress: function (doneN, total) {
+            if (total > 1 && state.generating) setMsg(longNote.split(' / ')[0].replace(/Making it in parts.*$/, '') + ' ' + doneN + '/' + total + ' ✓');
+          }
+        } : undefined);
         state.genRunId = genP && genP.runId;
         result = await genP;
         // Null the run id when THIS run finishes — a newer run's id survives.
