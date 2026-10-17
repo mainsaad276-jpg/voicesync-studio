@@ -15,6 +15,9 @@
  *   GET  /admin/codes         x-admin-key                      -> recent codes
  *   POST /admin/topup         x-admin-key; json {code, chars, days}
  *   POST /admin/user          x-admin-key; json {code, name, phone, note} -> edit a user's label
+ *   GET/POST /admin/plans     x-admin-key; json {plans:[{name,chars,price,firstMonth,buyCost,badge}]} or {reset:true}
+ *   GET/POST /admin/paysettings x-admin-key; json {whatsapp, methods:[{label:{en,ur}, value, name}]}
+ *   GET  /pro/plans           public plans (no buyCost) + payment accounts for the app
  *   POST /pro/trial           json {device}  -> free trial code (FREE_TRIAL_CHARS, default 10,000)
  *   POST /pro/request         json {name, phone, plan, chars, price, method, tid, screenshot?, device}
  *   POST /pro/request/status  json {id, secret} -> {status, code?} (app activates itself when approved)
@@ -96,18 +99,78 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
 const CODE_RE = /^VS-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
 const MAX_CLONES_PER_CODE = 20;
 
-// Server-side plan table (mirrors js/config.js). Approvals take characters
-// from here, never from what the app sent. PLANS_JSON env can override.
+// Server-side plan table. Approvals take characters from here, never from
+// what the app sent. Order: plans saved from the admin page (KV "plans") ->
+// PLANS_JSON env -> this default. buyCost = what the plan costs you to serve
+// (admin only, never sent to the app).
 const DEFAULT_PLAN_TABLE = [
-  { id: 'starter', name: 'Starter', chars: 1000000, price: 1500, firstMonth: 1200 },
-  { id: 'plus', name: 'Plus', chars: 2000000, price: 3000, firstMonth: 2700 },
-  { id: 'creator', name: 'Creator', chars: 3000000, price: 4500, firstMonth: 4200 },
-  { id: 'pro', name: 'Pro', chars: 5000000, price: 7500, firstMonth: 7200 },
-  { id: 'studio', name: 'Studio', chars: 10000000, price: 15000, firstMonth: 14700 },
+  { id: 'starter', name: 'Starter', chars: 1000000, price: 1500, firstMonth: 1200, buyCost: 0 },
+  { id: 'plus', name: 'Plus', chars: 2000000, price: 3000, firstMonth: 2700, buyCost: 0 },
+  { id: 'creator', name: 'Creator', chars: 3000000, price: 4500, firstMonth: 4200, buyCost: 0, badge: 'popular' },
+  { id: 'pro', name: 'Pro', chars: 5000000, price: 7500, firstMonth: 7200, buyCost: 0 },
+  { id: 'studio', name: 'Studio', chars: 10000000, price: 15000, firstMonth: 14700, buyCost: 0 },
 ];
+const MAX_PLANS = 12, MAX_PRICE = 10000000, MAX_PLAN_CHARS = 100000000;
+function slug(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20); }
+// Checks a plan list. Returns {plans} or {error}.
+function validatePlans(list) {
+  if (!Array.isArray(list) || !list.length) return { error: 'at least one plan is needed' };
+  if (list.length > MAX_PLANS) return { error: 'at most ' + MAX_PLANS + ' plans' };
+  const out = [], ids = new Set(), names = new Set();
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i] || {}, at = 'plan ' + (i + 1) + ': ';
+    const name = String(p.name == null ? '' : p.name).replace(/[\u0000-\u001F<>]/g, '').trim().slice(0, 30);
+    if (!name) return { error: at + 'name required' };
+    if (name.toLowerCase() === 'free') return { error: at + '"Free" is reserved for the free trial' };
+    const id = slug(p.id) || slug(name) || ('plan' + (i + 1));
+    const num = (v) => (v === '' || v == null ? 0 : Number(v));
+    const chars = num(p.chars), price = num(p.price), buyCost = num(p.buyCost);
+    let firstMonth = num(p.firstMonth);
+    for (const [k, v, max] of [['characters', chars, MAX_PLAN_CHARS], ['price', price, MAX_PRICE], ['first month price', firstMonth, MAX_PRICE], ['buy cost', buyCost, MAX_PRICE]]) {
+      if (!Number.isFinite(v) || v < 0 || v > max || Math.floor(v) !== v) return { error: at + k + ' must be a whole number 0..' + max };
+    }
+    if (chars < 1000) return { error: at + 'characters must be at least 1,000' };
+    if (price < 1) return { error: at + 'price required' };
+    if (firstMonth > price) return { error: at + 'first month price cannot be more than the price' };
+    if (!firstMonth) firstMonth = price;
+    if (ids.has(id) || names.has(name.toLowerCase())) return { error: at + 'duplicate plan name' };
+    ids.add(id); names.add(name.toLowerCase());
+    out.push({ id, name, chars, price, firstMonth, buyCost, badge: p.badge === 'popular' ? 'popular' : '' });
+  }
+  return { plans: out };
+}
 function planTable(env) {
-  try { const t = JSON.parse(env.PLANS_JSON || 'null'); if (Array.isArray(t) && t.length) return t; } catch {}
+  if (Array.isArray(env._plans) && env._plans.length) return env._plans;
+  try { const t = JSON.parse(env.PLANS_JSON || 'null'); if (Array.isArray(t) && t.length) { const v = validatePlans(t); if (v.plans) return v.plans; } } catch {}
   return DEFAULT_PLAN_TABLE;
+}
+function planSource(env) {
+  if (Array.isArray(env._plans) && env._plans.length) return 'admin';
+  return env.PLANS_JSON ? 'env' : 'default';
+}
+// What the app may see: no buyCost.
+function publicPlans(env) {
+  return planTable(env).map((p) => ({ id: p.id, name: p.name, chars: p.chars, price: p.price, firstMonth: p.firstMonth || p.price, badge: p.badge || '' }));
+}
+
+// Payment accounts shown on the back of the plan cards (KV "paysettings").
+const MAX_METHODS = 8;
+function validatePay(body) {
+  const whatsapp = String(body.whatsapp || '').replace(/\D/g, '');
+  if (whatsapp && (whatsapp.length < 10 || whatsapp.length > 15)) return { error: 'WhatsApp number: 10–15 digits, like 923001234567' };
+  const list = Array.isArray(body.methods) ? body.methods : [];
+  if (list.length > MAX_METHODS) return { error: 'at most ' + MAX_METHODS + ' payment methods' };
+  const clean = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001F<>]/g, ' ').trim().slice(0, n);
+  const methods = [];
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i] || {};
+    const label = m.label && typeof m.label === 'object' ? m.label : { en: m.label };
+    const en = clean(label.en, 40), ur = clean(label.ur, 40), value = clean(m.value, 60), name = clean(m.name, 60);
+    if (!value) continue; // a method without an account number is not shown
+    if (!en && !ur) return { error: 'method ' + (i + 1) + ': name (like JazzCash) required' };
+    methods.push({ label: { en: en || ur, ur: ur || en }, value, name });
+  }
+  return { pay: { whatsapp, methods } };
 }
 function findPlan(env, name) {
   const n = String(name || '').trim().toLowerCase();
@@ -229,10 +292,15 @@ async function loadSettings(env) {
   if (!env.PRO) return {};
   if (_settingsCache && Date.now() - _settingsAt < 30000) return _settingsCache;
   let st = {};
-  try { st = JSON.parse((await env.PRO.get('settings')) || '{}') || {}; } catch { st = {}; }
+  let raws = [];
+  try { raws = await getMany(env, ['settings', 'plans', 'paysettings']); } catch { raws = []; }
+  st = parseJson(raws[0]) || {};
+  Object.defineProperty(st, '_plans', { value: parseJson(raws[1]), enumerable: false });
+  Object.defineProperty(st, '_pay', { value: parseJson(raws[2]), enumerable: false });
   _settingsCache = st; _settingsAt = Date.now();
   return st;
 }
+function dropSettingsCache() { _settingsCache = null; _settingsAt = 0; }
 async function withSettings(env) {
   const st = await loadSettings(env);
   return {
@@ -242,6 +310,8 @@ async function withSettings(env) {
     JSF_API_KEY: env.JSF_API_KEY || st.jsfKey || '',
     AZURE_SPEECH_KEY: env.AZURE_SPEECH_KEY || st.azureKey || '',
     AZURE_SPEECH_REGION: env.AZURE_SPEECH_REGION || st.azureRegion || '',
+    _plans: Array.isArray(st._plans) ? st._plans : null,
+    _pay: st._pay && typeof st._pay === 'object' ? st._pay : null,
   };
 }
 function hint(k) { k = String(k || ''); return k ? k.slice(0, 4) + '\u2026' + k.slice(-4) : ''; }
@@ -417,13 +487,19 @@ async function overview(env) {
   const approved = reqs.filter((r) => r.status === 'approved');
   const month = new Date().toISOString().slice(0, 7);
   const plans = {};
-  for (const p of planTable(env)) plans[p.name] = { plan: p.name, chars: p.chars, price: p.price, users: 0, active: 0, revenue: 0 };
-  plans.Free = { plan: 'Free', chars: Number(env.FREE_TRIAL_CHARS) || 10000, price: 0, users: 0, active: 0, revenue: 0 };
+  const blank = (name) => ({ plan: name, chars: 0, price: 0, firstMonth: 0, buyCost: 0, profit: 0, users: 0, active: 0, sales: 0, revenue: 0, cost: 0, earned: 0 });
+  for (const p of planTable(env)) plans[p.name] = { ...blank(p.name), chars: p.chars, price: p.price, firstMonth: p.firstMonth || p.price, buyCost: p.buyCost | 0, profit: p.price - (p.buyCost | 0) };
+  plans.Free = { ...blank('Free'), chars: Number(env.FREE_TRIAL_CHARS) || 10000 };
   for (const u of users) {
-    const b = plans[u.plan] || (plans[u.plan] = { plan: u.plan, chars: 0, price: 0, users: 0, active: 0, revenue: 0 });
+    const b = plans[u.plan] || (plans[u.plan] = blank(u.plan));
     b.users++; if (u.valid) b.active++;
   }
-  for (const r of approved) { const b = plans[r.plan] || (plans[r.plan] = { plan: r.plan, chars: 0, price: 0, users: 0, active: 0, revenue: 0 }); b.revenue += r.price | 0; }
+  const costOf = (r) => (r.buyCost != null ? r.buyCost | 0 : ((plans[r.plan] && plans[r.plan].buyCost) | 0));
+  for (const r of approved) {
+    const b = plans[r.plan] || (plans[r.plan] = blank(r.plan));
+    b.sales++; b.revenue += r.price | 0; b.cost += costOf(r); b.earned = b.revenue - b.cost;
+  }
+  const inMonth = (r) => new Date(r.decided || r.created).toISOString().slice(0, 7) === month;
   const days = dayKeys(30);
   const statNames = ['new', 'chars', 'tts', 'paid', 'revenue'];
   const statKeys = [];
@@ -444,8 +520,12 @@ async function overview(env) {
     chars: { used: users.reduce((s, u) => s + u.used, 0), usedPaid: paid.reduce((s, u) => s + u.used, 0), remaining: users.reduce((s, u) => s + u.remaining, 0) },
     revenue: {
       total: approved.reduce((s, r) => s + (r.price | 0), 0),
-      thisMonth: approved.filter((r) => new Date(r.decided || r.created).toISOString().slice(0, 7) === month).reduce((s, r) => s + (r.price | 0), 0),
+      thisMonth: approved.filter(inMonth).reduce((s, r) => s + (r.price | 0), 0),
       payments: approved.length,
+      cost: approved.reduce((s, r) => s + costOf(r), 0),
+      costThisMonth: approved.filter(inMonth).reduce((s, r) => s + costOf(r), 0),
+      profit: approved.reduce((s, r) => s + (r.price | 0) - costOf(r), 0),
+      profitThisMonth: approved.filter(inMonth).reduce((s, r) => s + (r.price | 0) - costOf(r), 0),
     },
     requests: { pending: reqs.filter((r) => r.status === 'pending').length, approved: approved.length, rejected: reqs.filter((r) => r.status === 'rejected').length },
     plans: Object.values(plans).sort((a, b) => (a.price || 0) - (b.price || 0)),
@@ -478,7 +558,10 @@ async function admin(request, env, cors, url) {
     return json(200, { codes: out, users: out }, cors);
   }
   if (url.pathname === '/admin/plans' && request.method === 'GET') {
-    return json(200, { plans: planTable(env), freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000 }, cors);
+    return json(200, { plans: planTable(env), source: planSource(env), defaults: DEFAULT_PLAN_TABLE, freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000 }, cors);
+  }
+  if (url.pathname === '/admin/paysettings' && request.method === 'GET') {
+    return json(200, { ...(env._pay || { whatsapp: '', methods: [] }), saved: !!env._pay }, cors);
   }
 
   if (url.pathname === '/admin/requests' && request.method === 'GET') {
@@ -521,8 +604,25 @@ async function admin(request, env, cors, url) {
     }
     for (const k of clear) if (['jsfKey', 'azureKey', 'azureRegion'].includes(k)) delete st[k];
     await env.PRO.put('settings', JSON.stringify(st));
-    _settingsCache = st; _settingsAt = Date.now();
+    dropSettingsCache();
     return json(200, { ok: true, jsfKeySet: !!(env.JSF_API_KEY || st.jsfKey), azureKeySet: !!(env.AZURE_SPEECH_KEY || st.azureKey), azureRegion: env.AZURE_SPEECH_REGION || st.azureRegion || '' }, cors);
+  }
+
+  if (url.pathname === '/admin/plans' && request.method === 'POST') {
+    if (body.reset === true) {
+      await env.PRO.put('plans', 'null'); dropSettingsCache();
+      return json(200, { ok: true, plans: DEFAULT_PLAN_TABLE, source: env.PLANS_JSON ? 'env' : 'default' }, cors);
+    }
+    const v = validatePlans(body.plans);
+    if (v.error) return json(400, { error: v.error }, cors);
+    await env.PRO.put('plans', JSON.stringify(v.plans)); dropSettingsCache();
+    return json(200, { ok: true, plans: v.plans, source: 'admin' }, cors);
+  }
+  if (url.pathname === '/admin/paysettings' && request.method === 'POST') {
+    const v = validatePay(body);
+    if (v.error) return json(400, { error: v.error }, cors);
+    await env.PRO.put('paysettings', JSON.stringify(v.pay)); dropSettingsCache();
+    return json(200, { ok: true, ...v.pay, saved: true }, cors);
   }
 
   if (url.pathname === '/admin/requests/approve' && request.method === 'POST') {
@@ -537,6 +637,7 @@ async function admin(request, env, cors, url) {
       source: 'request', name: rec.name, phone: rec.phone, device: rec.device, paid: rec.price, reqId: rec.id,
     });
     rec.status = 'approved'; rec.code = c.code; rec.decided = Date.now(); rec.grantedChars = grant;
+    rec.buyCost = known ? (known.buyCost | 0) : 0;
     await env.PRO.put('req:' + rec.id, JSON.stringify(rec));
     await bumpStat(env, 'paid'); await bumpStat(env, 'revenue', rec.price | 0);
     const { secret, ...pub } = rec;
@@ -701,6 +802,13 @@ export default {
     if (url.pathname.startsWith('/admin/')) {
       if (origin && !_ok) return json(403, { error: 'origin not allowed' }, cors); // no Origin = same-site GET or non-browser
       return admin(request, env, cors, url);
+    }
+
+    // Public plan list + payment accounts for the app (never buyCost).
+    if (request.method === 'GET' && url.pathname === '/pro/plans') {
+      if (origin && !_ok) return json(403, { error: 'origin not allowed' }, cors);
+      const pay = env._pay && (env._pay.whatsapp || (env._pay.methods || []).length) ? env._pay : null;
+      return json(200, { plans: publicPlans(env), source: planSource(env), freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000, payment: pay }, cors);
     }
 
     const isJsf = url.pathname === '/jsf/clone' || url.pathname === '/jsf/tts';

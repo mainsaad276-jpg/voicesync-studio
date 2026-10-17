@@ -27,6 +27,21 @@
     .btn-no { background: transparent; color: var(--danger); border-color: var(--danger); font-weight: 800; }
     .code { font: 800 18px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 1px; background: var(--tint); padding: 8px 12px; border-radius: 12px; display: inline-block; }
     .msg { min-height: 1.2em; margin: 8px 0 0; }
+    .edit-table input { padding: 7px 8px; border-radius: 9px; min-width: 70px; }
+    .edit-table input[type=checkbox] { width: auto; min-width: 0; }
+    .edit-table td { vertical-align: middle; }
+    @media (max-width: 640px) {
+      .edit-table thead { display: none; }
+      .edit-table, .edit-table tbody { display: block; }
+      .edit-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--card-edge); }
+      .edit-table td { border: 0; padding: 0; text-align: start; }
+      .edit-table td::before { content: attr(data-l); display: block; font-size: 12px; color: var(--ink-dim); margin-bottom: 2px; }
+      .edit-table td:first-child { grid-column: 1 / -1; }
+    }
+    .pos { color: #1f9d55; font-weight: 800; } .neg { color: var(--danger); font-weight: 800; }
+    .pay-row { display: grid; grid-template-columns: 1fr 1fr 1.3fr 1.3fr auto; gap: 8px; align-items: end; padding: 10px 0; border-bottom: 1px solid var(--card-edge); }
+    .pay-row label { margin: 0 0 4px; font-size: 13px; }
+    @media (max-width: 640px) { .pay-row { grid-template-columns: 1fr 1fr; } }
     .err { color: var(--danger); }
     .ok { color: var(--accent); font-weight: 700; }
     .topline { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
@@ -128,6 +143,7 @@
       <button class="tab-btn" role="tab" data-tab="users" aria-selected="false">👥 Users</button>
       <button class="tab-btn" role="tab" data-tab="payments" aria-selected="false">💰 Payments</button>
       <button class="tab-btn" role="tab" data-tab="plans" aria-selected="false">📦 Plans</button>
+      <button class="tab-btn" role="tab" data-tab="pay" aria-selected="false">🏦 Payment accounts</button>
       <button class="tab-btn" role="tab" data-tab="settings" aria-selected="false">🔑 API settings</button>
     </nav>
 
@@ -229,9 +245,34 @@
 
     <!-- PLANS -->
     <section class="box" data-panel="plans" hidden>
-      <h2>Plans</h2>
-      <p class="hint">Prices aur characters `js/config.js` mein badlein; server ki list bhi wahi rakhein (approve par characters server ki list se milte hain).</p>
+      <div class="topline"><h2>Plans — qeemat aur munafa</h2><span class="muted small" id="planSource"></span></div>
+      <p class="hint">Yahan badlein aur <b>Save plans</b> dabayein — website aur app par foran lag jata hai (app update ki zaroorat nahi). <b>Buy cost</b> = ye plan aap ko kitne ka padta hai (JSF wagaira); ye sirf aap dekhte hain. First month khali = poori qeemat.</p>
+      <div class="table-wrap"><table class="edit-table" id="planEdit">
+        <thead><tr><th>Plan name</th><th class="num">Characters</th><th class="num">Price / month (Rs)</th><th class="num">First month (Rs)</th><th class="num">Buy cost (Rs)</th><th class="num">Profit</th><th class="num">Margin</th><th>Popular</th><th></th></tr></thead>
+        <tbody id="planEditRows"></tbody>
+      </table></div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnAddPlan" type="button">＋ Add plan</button>
+        <button class="btn btn-primary" id="btnSavePlans" type="button">Save plans</button>
+        <button class="btn btn-no btn-small" id="btnResetPlans" type="button">Reset to default</button>
+      </div>
+      <p class="msg" id="planMsg"></p>
+      <h3 style="margin-top:18px">Sales by plan</h3>
       <div class="table-wrap"><table id="planTable"></table></div>
+    </section>
+
+    <!-- PAYMENT ACCOUNTS -->
+    <section class="box" data-panel="pay" hidden>
+      <h2>Payment accounts</h2>
+      <p class="hint">Ye details har plan card ke peeche customers ko dikhti hain. Save karte hi website aur app par lag jati hain.</p>
+      <label for="payWa">WhatsApp number (international, bina + ya 0 ke)</label>
+      <input id="payWa" type="tel" inputmode="numeric" placeholder="923107100275">
+      <div id="payList"></div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnAddPay" type="button">＋ Add method</button>
+        <button class="btn btn-primary" id="btnSavePay" type="button">Save accounts</button>
+      </div>
+      <p class="msg" id="payMsg"></p>
     </section>
 
     <!-- SETTINGS -->
@@ -307,6 +348,8 @@
     document.querySelectorAll('.tab-btn').forEach(function (x) { x.setAttribute('aria-selected', x.getAttribute('data-tab') === t ? 'true' : 'false'); });
     document.querySelectorAll('[data-panel]').forEach(function (p) { p.hidden = p.getAttribute('data-panel') !== t; });
     if (t === 'settings') loadSettings();
+    if (t === 'pay') loadPay();
+    if (t === 'plans' && !planDirty) renderPlanEditor();
     try { localStorage.setItem('vsAdminTab', t); } catch (e) {}
   }
   document.querySelectorAll('.tab-btn').forEach(function (b) { b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); }); });
@@ -314,8 +357,9 @@
   // ---------- load everything ----------
   function loadAll() {
     $('liveAt').textContent = 'Loading…';
-    return Promise.all([api('/admin/overview'), api('/admin/users'), api('/admin/requests')]).then(function (res) {
+    return Promise.all([api('/admin/overview'), api('/admin/users'), api('/admin/requests'), api('/admin/plans')]).then(function (res) {
       data.overview = res[0]; data.users = res[1].users || []; data.requests = res[2].requests || [];
+      data.plansCfg = res[3]; fillPlanSelect();
       var pending = data.overview.requests.pending;
       $('pendingCount').textContent = String(pending); $('pendingCount').hidden = !pending;
       renderDash(); renderRequests(); renderUsers(); renderPayments(); renderPlans();
@@ -338,6 +382,7 @@
     kpi(box, 'Active today', fmt(o.users.active24h), fmt(o.users.active7d) + ' in 7 days · ' + fmt(o.users.active30d) + ' in 30', { go: 'users' });
     kpi(box, 'Paid plans active', fmt(o.users.paidActive), o.users.expiringSoon ? fmt(o.users.expiringSoon) + ' expiring in 5 days' : 'none expiring soon', { go: 'users' });
     kpi(box, 'Revenue this month', rs(o.revenue.thisMonth), rs(o.revenue.total) + ' all time · ' + fmt(o.revenue.payments) + ' payments', { go: 'payments' });
+    kpi(box, 'Profit this month', rs(o.revenue.profitThisMonth || 0), 'cost ' + rs(o.revenue.costThisMonth || 0) + ' · ' + rs(o.revenue.profit || 0) + ' all time', { go: 'plans', alert: (o.revenue.profitThisMonth || 0) < 0 });
     kpi(box, 'Pending requests', fmt(o.requests.pending), o.requests.pending ? 'Tap to review' : 'All clear', { go: 'requests', alert: o.requests.pending > 0 });
     kpi(box, 'HD characters used', short(o.chars.used), short(o.chars.usedPaid) + ' by paid users');
     var days = o.series.days;
@@ -346,13 +391,15 @@
     barChart($('chartChars'), 'HD characters / day', days, o.series.chars, function (v) { return fmt(v) + ' chars'; }, short(sum(o.series.chars)) + ' in 30 days');
     var t = $('dashPlans'); t.innerHTML = '';
     var thead = el('thead'); var hr = el('tr');
-    ['Plan', 'Price', 'Users', 'Active', 'Revenue'].forEach(function (h, i) { hr.appendChild(el('th', i > 1 ? 'num' : '', h)); });
+    ['Plan', 'Price', 'Buy cost', 'Profit', 'Users', 'Active', 'Revenue'].forEach(function (h, i) { hr.appendChild(el('th', i > 0 ? 'num' : '', h)); });
     thead.appendChild(hr); t.appendChild(thead);
     var tb = el('tbody');
     o.plans.forEach(function (p) {
       var tr = el('tr');
       tr.appendChild(el('td', '', p.plan + (p.chars ? ' · ' + short(p.chars) : '')));
-      tr.appendChild(el('td', '', p.price ? rs(p.price) : 'Free'));
+      tr.appendChild(el('td', 'num', p.price ? rs(p.price) : 'Free'));
+      tr.appendChild(el('td', 'num', p.price ? (p.buyCost ? rs(p.buyCost) : '—') : '—'));
+      tr.appendChild(el('td', 'num ' + (p.price && p.buyCost ? (p.profit < 0 ? 'neg' : 'pos') : 'muted'), p.price ? (p.buyCost ? rs(p.profit) : 'set cost') : '—'));
       tr.appendChild(el('td', 'num', fmt(p.users))); tr.appendChild(el('td', 'num', fmt(p.active))); tr.appendChild(el('td', 'num', p.revenue ? rs(p.revenue) : '—'));
       tb.appendChild(tr);
     });
@@ -560,12 +607,27 @@
   });
 
   // manual code
-  var plans = (C.plans || []).filter(function (p) { return p && p.price > 0; }).slice();
-  plans.push({ id: 'trial', name: 'Free trial', chars: Number(C.freeTrialChars) || 10000, price: 0 });
-  plans.push({ id: 'custom', name: 'Custom', chars: 100000, price: 0 });
-  plans.forEach(function (p, i) { var o = el('option', '', nameOf(p) + ' — ' + fmt(p.chars) + ' chars' + (p.price ? ' — ' + rs(p.price) : '')); o.value = String(i); $('plan').appendChild(o); });
-  function syncPlan() { var p = plans[Number($('plan').value) || 0]; $('chars').value = p.chars || ''; $('days').value = p.id === 'trial' ? 0 : 30; $('paid').value = p.firstMonth || p.price || 0; }
-  $('plan').addEventListener('change', syncPlan); syncPlan();
+  // The plan list comes from the server (same list the app shows), so it
+  // follows edits made on the Plans tab. config.js is only the fallback.
+  var plans = [], planSig = '';
+  function fillPlanSelect() {
+    var src = (data.plansCfg && data.plansCfg.plans) || C.plans || [];
+    var trialChars = (data.plansCfg && data.plansCfg.freeTrialChars) || Number(C.freeTrialChars) || 10000;
+    var sig = JSON.stringify(src) + trialChars;
+    if (sig === planSig) return;
+    planSig = sig;
+    var keep = plans[Number($('plan').value) || 0];
+    plans = src.filter(function (p) { return p && p.price > 0; }).slice();
+    plans.push({ id: 'trial', name: 'Free trial', chars: trialChars, price: 0 });
+    plans.push({ id: 'custom', name: 'Custom', chars: 100000, price: 0 });
+    $('plan').innerHTML = '';
+    plans.forEach(function (p, i) { var o = el('option', '', nameOf(p) + ' — ' + fmt(p.chars) + ' chars' + (p.price ? ' — ' + rs(p.price) : '')); o.value = String(i); $('plan').appendChild(o); });
+    var idx = keep ? plans.findIndex(function (p) { return p.id === keep.id; }) : -1;
+    $('plan').value = String(idx >= 0 ? idx : 0);
+    syncPlan();
+  }
+  function syncPlan() { var p = plans[Number($('plan').value) || 0]; if (!p) return; $('chars').value = p.chars || ''; $('days').value = p.id === 'trial' ? 0 : 30; $('paid').value = p.firstMonth || p.price || 0; }
+  $('plan').addEventListener('change', syncPlan); fillPlanSelect();
   $('btnNewCode').addEventListener('click', function () { $('newCodeBox').hidden = !$('newCodeBox').hidden; if (!$('newCodeBox').hidden) $('newCodeBox').scrollIntoView({ behavior: 'smooth' }); });
   var last = null;
   $('btnCreate').addEventListener('click', function () {
@@ -632,21 +694,117 @@
   // ---------- plans ----------
   function renderPlans() {
     var o = data.overview, t = $('planTable'); t.innerHTML = '';
-    var cfg = {}; (C.plans || []).forEach(function (p) { cfg[nameOf(p)] = p; });
     var h = el('thead'); var hr = el('tr');
-    ['Plan', 'Characters', 'Price / month', 'First month', 'Users', 'Active', 'Revenue'].forEach(function (x, i) { hr.appendChild(el('th', i > 0 ? 'num' : '', x)); });
+    ['Plan', 'Users', 'Active', 'Sales', 'Revenue', 'Cost', 'Earned'].forEach(function (x, i) { hr.appendChild(el('th', i > 0 ? 'num' : '', x)); });
     h.appendChild(hr); t.appendChild(h);
     var tb = el('tbody');
     o.plans.forEach(function (p) {
-      var c = cfg[p.plan] || {};
       var tr = el('tr');
-      tr.appendChild(el('td', '', p.plan)); tr.appendChild(el('td', 'num', p.chars ? fmt(p.chars) : '—'));
-      tr.appendChild(el('td', 'num', p.price ? rs(p.price) : 'Free')); tr.appendChild(el('td', 'num', c.firstMonth ? rs(c.firstMonth) : '—'));
-      tr.appendChild(el('td', 'num', fmt(p.users))); tr.appendChild(el('td', 'num', fmt(p.active))); tr.appendChild(el('td', 'num', p.revenue ? rs(p.revenue) : '—'));
+      tr.appendChild(el('td', '', p.plan + (p.chars ? ' · ' + short(p.chars) : '')));
+      tr.appendChild(el('td', 'num', fmt(p.users))); tr.appendChild(el('td', 'num', fmt(p.active))); tr.appendChild(el('td', 'num', fmt(p.sales || 0)));
+      tr.appendChild(el('td', 'num', p.revenue ? rs(p.revenue) : '—')); tr.appendChild(el('td', 'num', p.cost ? rs(p.cost) : '—'));
+      tr.appendChild(el('td', 'num ' + ((p.earned || 0) < 0 ? 'neg' : (p.earned ? 'pos' : '')), p.revenue ? rs(p.earned || 0) : '—'));
       tb.appendChild(tr);
     });
     t.appendChild(tb);
+    if (!planDirty && !$('app').hidden) renderPlanEditor();
   }
+
+  // ---------- plan editor ----------
+  var planDirty = false;
+  function numIn(v, ph) { var i = el('input'); i.type = 'number'; i.min = '0'; i.step = '1'; i.inputMode = 'numeric'; i.value = v == null || v === 0 && ph ? '' : String(v); if (ph) i.placeholder = ph; return i; }
+  function planRow(p) {
+    var tr = el('tr');
+    var nm = el('input'); nm.type = 'text'; nm.maxLength = 30; nm.value = p.name || ''; nm.placeholder = 'Starter';
+    var ch = numIn(p.chars || ''); ch.placeholder = '1000000';
+    var pr = numIn(p.price || ''); pr.placeholder = '1500';
+    var fm = numIn(p.firstMonth && p.firstMonth !== p.price ? p.firstMonth : '', '—');
+    var bc = numIn(p.buyCost || '', '0');
+    var pop = el('input'); pop.type = 'checkbox'; pop.checked = p.badge === 'popular'; pop.title = 'Popular badge';
+    var profit = el('td', 'num'), margin = el('td', 'num');
+    var del = el('button', 'btn btn-no btn-small', '🗑'); del.type = 'button'; del.title = 'Delete plan';
+    function td(x, l) { var c = el('td'); c.setAttribute('data-l', l); c.appendChild(x); return c; }
+    profit.setAttribute('data-l', 'Profit'); margin.setAttribute('data-l', 'Margin');
+    tr.appendChild(td(nm, 'Plan name')); tr.appendChild(td(ch, 'Characters')); tr.appendChild(td(pr, 'Price / month (Rs)')); tr.appendChild(td(fm, 'First month (Rs)')); tr.appendChild(td(bc, 'Buy cost (Rs)'));
+    tr.appendChild(profit); tr.appendChild(margin); tr.appendChild(td(pop, 'Popular')); tr.appendChild(td(del, ''));
+    function calc() {
+      var price = Number(pr.value) || 0, cost = Number(bc.value) || 0, first = Number(fm.value) || price;
+      var pf = price - cost;
+      profit.innerHTML = '';
+      profit.appendChild(el('div', pf < 0 ? 'neg' : 'pos', price ? rs(pf) : '—'));
+      if (price && first !== price) profit.appendChild(el('div', 'small ' + (first - cost < 0 ? 'neg' : 'muted'), '1st: ' + rs(first - cost)));
+      margin.textContent = price ? Math.round(pf / price * 100) + '%' : '—';
+      margin.className = 'num ' + (pf < 0 ? 'neg' : '');
+      var per = Number(ch.value) ? Math.round(cost / Number(ch.value) * 1000000) : 0;
+      bc.title = per ? 'Rs ' + fmt(per) + ' per 1M characters' : '';
+    }
+    [nm, ch, pr, fm, bc].forEach(function (i) { i.addEventListener('input', function () { planDirty = true; calc(); }); });
+    pop.addEventListener('change', function () { planDirty = true; });
+    del.addEventListener('click', function () { if (confirm('"' + (nm.value || 'plan') + '" delete karna hai? (Save dabane par lagega)')) { tr.remove(); planDirty = true; } });
+    tr._read = function () { return { name: nm.value.trim(), chars: Number(ch.value) || 0, price: Number(pr.value) || 0, firstMonth: Number(fm.value) || 0, buyCost: Number(bc.value) || 0, badge: pop.checked ? 'popular' : '' }; };
+    calc();
+    return tr;
+  }
+  function renderPlanEditor() {
+    var pc = data.plansCfg; if (!pc) return;
+    var tb = $('planEditRows'); tb.innerHTML = '';
+    pc.plans.forEach(function (p) { tb.appendChild(planRow(p)); });
+    $('planSource').textContent = pc.source === 'admin' ? 'Saved from this page' : (pc.source === 'env' ? 'From PLANS_JSON' : 'Default list');
+    planDirty = false;
+  }
+  $('btnAddPlan').addEventListener('click', function () { var r = planRow({ name: '', chars: 1000000, price: 1500, buyCost: 0 }); $('planEditRows').appendChild(r); r.querySelector('input').focus(); planDirty = true; });
+  $('btnSavePlans').addEventListener('click', function () {
+    var list = [].map.call($('planEditRows').children, function (tr) { return tr._read(); });
+    var loss = list.filter(function (p) { return p.price && p.buyCost > p.price; }).map(function (p) { return p.name; });
+    if (loss.length && !confirm('Ye plan ghate mein hain: ' + loss.join(', ') + '. Phir bhi save karein?')) return;
+    $('planMsg').textContent = 'Saving…'; $('planMsg').className = 'msg';
+    api('/admin/plans', { method: 'POST', body: { plans: list } }).then(function () {
+      planDirty = false; $('planMsg').textContent = '✅ Saved — website aur app par lag gaya'; $('planMsg').className = 'msg ok';
+      return loadAll().then(renderPlanEditor);
+    }, function (e) { $('planMsg').textContent = e.message; $('planMsg').className = 'msg err'; });
+  });
+  $('btnResetPlans').addEventListener('click', function () {
+    if (!confirm('Saari plans default list (Starter … Studio, buy cost 0) par wapas? Aap ki tabdeeliyan mit jayengi.')) return;
+    api('/admin/plans', { method: 'POST', body: { reset: true } }).then(function () {
+      planDirty = false; $('planMsg').textContent = '✅ Default plans wapas'; $('planMsg').className = 'msg ok';
+      return loadAll().then(renderPlanEditor);
+    }, function (e) { $('planMsg').textContent = e.message; $('planMsg').className = 'msg err'; });
+  });
+
+  // ---------- payment accounts ----------
+  function payRow(m) {
+    m = m || { label: {} };
+    var row = el('div', 'pay-row');
+    function f(lab, val, ph, max) { var w = el('div'); w.appendChild(el('label', '', lab)); var i = el('input'); i.type = 'text'; i.maxLength = max; i.value = val || ''; i.placeholder = ph; w.appendChild(i); row.appendChild(w); return i; }
+    var en = f('Name (English)', m.label && m.label.en, 'JazzCash', 40);
+    var ur = f('نام (اردو)', m.label && m.label.ur, 'جاز کیش', 40); ur.dir = 'rtl';
+    var val = f('Account / IBAN number', m.value, '03xx xxxxxxx', 60);
+    var nm = f('Account title', m.name, 'Muhammad Saad Ashraf', 60);
+    var del = el('button', 'btn btn-no btn-small', '🗑'); del.type = 'button'; del.title = 'Remove';
+    del.addEventListener('click', function () { row.remove(); });
+    row.appendChild(del);
+    row._read = function () { return { label: { en: en.value.trim(), ur: ur.value.trim() }, value: val.value.trim(), name: nm.value.trim() }; };
+    return row;
+  }
+  function loadPay() {
+    $('payMsg').textContent = 'Loading…'; $('payMsg').className = 'msg';
+    return api('/admin/paysettings').then(function (p) {
+      var cp = C.payment || {};
+      var methods = p.saved ? p.methods : (cp.methods || []);
+      $('payWa').value = p.saved ? (p.whatsapp || '') : (cp.whatsapp || '');
+      var list = $('payList'); list.innerHTML = '';
+      (methods.length ? methods : [{ label: { en: 'JazzCash', ur: 'جاز کیش' } }]).forEach(function (m) { list.appendChild(payRow(m)); });
+      $('payMsg').textContent = p.saved ? '' : 'Abhi save nahi hui — default (config.js) dikh rahi hai. Number bhar kar Save karein.';
+    }, function (e) { $('payMsg').textContent = e.message; $('payMsg').className = 'msg err'; });
+  }
+  $('btnAddPay').addEventListener('click', function () { $('payList').appendChild(payRow()); });
+  $('btnSavePay').addEventListener('click', function () {
+    var methods = [].map.call($('payList').children, function (r) { return r._read(); });
+    $('payMsg').textContent = 'Saving…'; $('payMsg').className = 'msg';
+    api('/admin/paysettings', { method: 'POST', body: { whatsapp: $('payWa').value.trim(), methods: methods } }).then(function () {
+      $('payMsg').textContent = '✅ Saved — plan cards ke peeche lag gaya'; $('payMsg').className = 'msg ok'; loadPay().then(function () { $('payMsg').textContent = '✅ Saved — plan cards ke peeche lag gaya'; $('payMsg').className = 'msg ok'; });
+    }, function (e) { $('payMsg').textContent = e.message; $('payMsg').className = 'msg err'; });
+  });
 
   // ---------- settings ----------
   function loadSettings() {
