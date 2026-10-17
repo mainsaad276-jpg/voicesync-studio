@@ -13,6 +13,7 @@ class MemKV {
   constructor() { this.m = new Map(); }
   async get(k) { return this.m.has(k) ? this.m.get(k) : null; }
   async put(k, v) { this.m.set(k, String(v)); }
+  async delete(k) { this.m.delete(k); }
   async list({ prefix = '' } = {}) { return { keys: [...this.m.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })) }; }
 }
 const ADMIN = 'admin-secret-123';
@@ -250,6 +251,7 @@ t('same_origin_allowed', r.status === 200);
     let result = null;
     if (op === 'GET') result = store.has(a[0]) ? store.get(a[0]) : null;
     else if (op === 'SET') { store.set(a[0], a[1]); result = 'OK'; }
+    else if (op === 'DEL') { store.delete(a[0]); result = 1; }
     else if (op === 'MGET') result = a.map((k) => (store.has(k) ? store.get(k) : null));
     else if (op === 'SCAN') { const pre = a[2].replace(/\*$/, ''); result = ['0', [...store.keys()].filter((k) => k.startsWith(pre))]; }
     return new Response(JSON.stringify({ result }), { status: 200 });
@@ -391,6 +393,62 @@ t('same_origin_allowed', r.status === 200);
   r = await worker.fetch(new Request('https://w.example.workers.dev/pro/plans', { headers: { Origin: ORIGIN } }), envD);
   j = await r.json();
   t('ticker_public', j.ticker && j.ticker.items[0].ur === 'مزید کے لیے سبسکرائب');
+  // accounts: email + password
+  const authReq = (path, body, extra = {}) => new Request('https://w.example.workers.dev' + path, { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', 'CF-Connecting-IP': '8.8.8.8', 'User-Agent': 'Mozilla/5.0 (Linux; Android 14)', ...extra }, body: JSON.stringify(body || {}) });
+  r = await worker.fetch(authReq('/auth/signup', { email: 'bad', password: 'longpassword', name: 'Ali' }), envD);
+  t('signup_bad_email', r.status === 400);
+  r = await worker.fetch(authReq('/auth/signup', { email: 'ali@example.com', password: 'short', name: 'Ali' }), envD);
+  t('signup_short_password', r.status === 400);
+  r = await worker.fetch(authReq('/auth/signup', { email: 'Ali@Example.com', password: 'secret-pass-1', name: 'Ali Khan', phone: '0300 1234567', device: 'dev_ACCT_AAAAAAAAAAAAAA' }), envD);
+  j = await r.json();
+  const TOK = j.token;
+  t('signup_ok', r.status === 200 && /^[A-Z2-9]{40}$/.test(TOK) && j.user.email === 'ali@example.com' && j.plan.chars === 10000 && j.plan.plan === 'Free');
+  r = await worker.fetch(authReq('/auth/signup', { email: 'ali@example.com', password: 'another-pass', name: 'Ali' }), envD);
+  t('signup_duplicate', r.status === 409);
+  r = await worker.fetch(authReq('/auth/signup', { email: 'second@example.com', password: 'secret-pass-2', name: 'Second', device: 'dev_ACCT_AAAAAAAAAAAAAA' }), envD);
+  j = await r.json();
+  t('second_account_same_device_no_trial', r.status === 200 && j.plan.chars === 0);
+  r = await worker.fetch(authReq('/auth/login', { email: 'ali@example.com', password: 'wrong-password' }), envD);
+  t('login_wrong', r.status === 401);
+  r = await worker.fetch(authReq('/auth/login', { email: 'ALI@example.com', password: 'secret-pass-1', device: 'dev_OTHER_AAAAAAAAAAAAA' }), envD);
+  j = await r.json();
+  const TOK2 = j.token;
+  t('login_ok_same_plan', r.status === 200 && j.plan.chars === 10000 && TOK2 !== TOK);
+  r = await worker.fetch(authReq('/auth/me', {}, { 'X-VS-Session': TOK }), envD);
+  j = await r.json();
+  t('me_ok', r.status === 200 && j.user.name === 'Ali Khan' && j.plan.remaining === 10000);
+  r = await worker.fetch(authReq('/auth/me', {}, { 'X-VS-Session': 'X'.repeat(40) }), envD);
+  t('me_bad_session', r.status === 401);
+  r = await worker.fetch(ipReq('/admin/accounts', null, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  t('admin_accounts', j.accounts.length === 2 && !JSON.stringify(j).includes('hash') && !JSON.stringify(j).includes('salt'));
+  r = await worker.fetch(ipReq('/admin/users', null, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  t('users_have_email', j.users.some((u) => u.email === 'ali@example.com'));
+  // request from a logged-in user -> approve -> account gets the paid plan
+  r = await worker.fetch(authReq('/pro/request', { name: 'Ali Khan', phone: '03001234567', plan: 'Starter', chars: 1000000, price: 1200, method: 'JazzCash', tid: 'TX9' }, { 'X-VS-Session': TOK }), envD);
+  const RQA = await r.json();
+  r = await worker.fetch(ipReq('/admin/requests/approve', { id: RQA.id }, ADMIN, '6.6.6.6'), envD);
+  r = await worker.fetch(authReq('/auth/me', {}, { 'X-VS-Session': TOK2 }), envD);
+  j = await r.json();
+  t('approve_updates_account', j.plan && j.plan.plan === 'Starter' && j.plan.chars === 1000000);
+  // admin password reset logs everyone out; new password works
+  r = await worker.fetch(ipReq('/admin/account', { email: 'ali@example.com', password: 'brand-new-pass' }, ADMIN, '6.6.6.6'), envD);
+  t('admin_reset', r.status === 200);
+  r = await worker.fetch(authReq('/auth/me', {}, { 'X-VS-Session': TOK }), envD);
+  t('reset_logs_out', r.status === 401);
+  r = await worker.fetch(authReq('/auth/login', { email: 'ali@example.com', password: 'brand-new-pass' }), envD);
+  j = await r.json();
+  t('login_new_password', r.status === 200 && j.plan.plan === 'Starter');
+  r = await worker.fetch(authReq('/auth/logout', {}, { 'X-VS-Session': j.token }), envD);
+  r = await worker.fetch(authReq('/auth/me', {}, { 'X-VS-Session': j.token }), envD);
+  t('logout_ends_session', r.status === 401);
+  r = await worker.fetch(ipReq('/admin/account', { email: 'second@example.com', blocked: true }, ADMIN, '6.6.6.6'), envD);
+  r = await worker.fetch(authReq('/auth/login', { email: 'second@example.com', password: 'secret-pass-2' }), envD);
+  t('blocked_cannot_login', r.status === 403);
+  for (let i = 0; i < 8; i++) await worker.fetch(authReq('/auth/login', { email: 'ali@example.com', password: 'nope-nope-nope' }), envD);
+  r = await worker.fetch(authReq('/auth/login', { email: 'ali@example.com', password: 'brand-new-pass' }), envD);
+  t('login_lockout', r.status === 429);
   r = await worker.fetch(req('/health'), envD);
   t('health_no_debug_origin', !('origin' in (await r.json())));
 }

@@ -184,7 +184,7 @@
     <section data-panel="users" hidden>
       <div class="box">
         <div class="filters">
-          <input type="search" id="userSearch" placeholder="Search: naam, number, code, plan…" aria-label="Search users">
+          <input type="search" id="userSearch" placeholder="Search: naam, email, number, code, plan…" aria-label="Search users">
           <button class="chip" data-uf="all" aria-pressed="true">All</button>
           <button class="chip" data-uf="active" aria-pressed="false">Active (7 din)</button>
           <button class="chip" data-uf="paid" aria-pressed="false">Paid</button>
@@ -382,7 +382,8 @@
   // ---------- load everything ----------
   function loadAll() {
     $('liveAt').textContent = 'Loading…';
-    return Promise.all([api('/admin/overview'), api('/admin/users'), api('/admin/requests'), api('/admin/plans')]).then(function (res) {
+    return Promise.all([api('/admin/overview'), api('/admin/users'), api('/admin/requests'), api('/admin/plans'), api('/admin/accounts').catch(function () { return { accounts: [] }; })]).then(function (res) {
+      data.accounts = {}; (res[4].accounts || []).forEach(function (a) { data.accounts[a.email] = a; });
       data.overview = res[0]; data.users = res[1].users || []; data.requests = res[2].requests || [];
       data.plansCfg = res[3]; fillPlanSelect();
       var pending = data.overview.requests.pending;
@@ -421,7 +422,7 @@
   }
   function renderDash() {
     var o = data.overview, box = $('kpis'); box.innerHTML = '';
-    kpi(box, 'Total users', fmt(o.users.total), fmt(o.users.free) + ' free · ' + fmt(o.users.paid) + ' paid', { go: 'users', icon: '👥', color: 'blue' });
+    kpi(box, 'Total users', fmt(o.users.total), fmt(Object.keys(data.accounts || {}).length) + ' accounts · ' + fmt(o.users.paid) + ' paid', { go: 'users', icon: '👥', color: 'blue' });
     kpi(box, 'Active today', fmt(o.users.active24h), fmt(o.users.active7d) + ' in 7 days · ' + fmt(o.users.active30d) + ' in 30', { go: 'users', icon: '⚡', color: 'green' });
     kpi(box, 'Paid plans active', fmt(o.users.paidActive), o.users.expiringSoon ? fmt(o.users.expiringSoon) + ' expiring in 5 days' : 'none expiring soon', { go: 'users', icon: '⭐', color: 'gold' });
     kpi(box, 'Revenue this month', rs(o.revenue.thisMonth), rs(o.revenue.total) + ' all time · ' + fmt(o.revenue.payments) + ' payments', { go: 'payments', icon: '💰', color: 'gold' });
@@ -587,7 +588,7 @@
       if (state.uf === 'expiring' && !(u.plan !== 'Free' && u.expires && u.expires > now && u.expires - now < 5 * D)) return false;
       if (state.uf === 'expired' && u.valid) return false;
       if (state.q) {
-        var hay = [u.name, u.phone, u.code, u.plan, u.note, u.device, deviceLabel(u), placeLabel(u)].join(' ').toLowerCase();
+        var hay = [u.name, u.phone, u.email, u.code, u.plan, u.note, u.device, deviceLabel(u), placeLabel(u)].join(' ').toLowerCase();
         if (hay.indexOf(state.q) === -1) return false;
       }
       return true;
@@ -612,6 +613,7 @@
       var nm = el('div'); nm.appendChild(el('span', 'dot ' + (online ? 'on' : 'off'))); nm.appendChild(document.createTextNode(u.name || ((u.source === 'trial' ? 'Free user' : 'Customer') + ' ' + (u.device || u.code.slice(-4)))));
       who.appendChild(nm);
       var where = [deviceLabel(u), placeLabel(u)].filter(Boolean).join(' · ');
+      if (u.email) { var acc = data.accounts[u.email] || {}; who.appendChild(el('div', 'small', '✉️ ' + u.email + (acc.blocked ? ' · ⛔ blocked' : ''))); }
       who.appendChild(el('div', 'muted small', [u.phone, where || (u.device ? 'device ' + u.device : '')].filter(Boolean).join(' · ')));
       who.appendChild(el('div', 'muted small', (u.lastSeen ? 'active ' + ago(u.lastSeen) : 'not seen yet') + (u.created ? ' · joined ' + date(u.created) : '') + (u.note && u.note !== 'free trial' ? ' · ' + u.note : '')));
       tr.appendChild(who);
@@ -641,14 +643,29 @@
         api('/admin/user', { method: 'POST', body: { code: u.code, name: n, phone: ph, note: nt } }).then(loadAll, function (e) { alert(e.message); });
       });
       act.appendChild(ed);
+      if (u.email) {
+        var acct = data.accounts[u.email] || {};
+        var rp = el('button', 'btn btn-secondary btn-small', '🔑'); rp.type = 'button'; rp.title = 'Naya password (user ke saare devices logout)';
+        rp.addEventListener('click', function () {
+          var np = prompt('Naya password for ' + u.email + ' (kam az kam 8 harf). Ye user ko WhatsApp par bhej dein.', ''); if (!np) return;
+          api('/admin/account', { method: 'POST', body: { email: u.email, password: np } }).then(function () { alert('✅ Password badal gaya. User ab naye password se login kare.'); }, function (e) { alert(e.message); });
+        });
+        act.appendChild(rp);
+        var bl = el('button', 'btn btn-no btn-small', acct.blocked ? '✅' : '⛔'); bl.type = 'button'; bl.title = acct.blocked ? 'Unblock' : 'Block account';
+        bl.addEventListener('click', function () {
+          if (!confirm((acct.blocked ? 'Unblock ' : 'Block ') + u.email + '?')) return;
+          api('/admin/account', { method: 'POST', body: { email: u.email, blocked: !acct.blocked } }).then(loadAll, function (e) { alert(e.message); });
+        });
+        act.appendChild(bl);
+      }
       if (u.phone) { var w = el('a', 'btn btn-secondary btn-small', '💬'); w.href = 'https://wa.me/' + waNumber(u.phone); w.target = '_blank'; w.rel = 'noopener'; w.title = 'WhatsApp'; act.appendChild(w); }
       tr.appendChild(act);
       tb.appendChild(tr);
     });
   }
   $('btnUsersCsv').addEventListener('click', function () {
-    var rows = [['Name', 'WhatsApp', 'Plan', 'Paid (Rs)', 'Used', 'Total', 'Remaining', 'Last active', 'Created', 'Valid until', 'Code', 'Source', 'Device', 'Location']];
-    filteredUsers().forEach(function (u) { rows.push([u.name, u.phone, u.plan, u.paid, u.used, u.chars, u.remaining, u.lastSeen ? new Date(u.lastSeen).toISOString() : '', u.created ? new Date(u.created).toISOString() : '', u.expires ? new Date(u.expires).toISOString() : '', u.code, u.source, deviceLabel(u).replace(/[^\x20-\x7E]/g, '').trim(), placeLabel(u)]); });
+    var rows = [['Name', 'WhatsApp', 'Plan', 'Paid (Rs)', 'Used', 'Total', 'Remaining', 'Last active', 'Created', 'Valid until', 'Code', 'Source', 'Device', 'Location', 'Email']];
+    filteredUsers().forEach(function (u) { rows.push([u.name, u.phone, u.plan, u.paid, u.used, u.chars, u.remaining, u.lastSeen ? new Date(u.lastSeen).toISOString() : '', u.created ? new Date(u.created).toISOString() : '', u.expires ? new Date(u.expires).toISOString() : '', u.code, u.source, deviceLabel(u).replace(/[^\x20-\x7E]/g, '').trim(), placeLabel(u), u.email || '']); });
     csv(rows, 'voxnova-users-' + new Date().toISOString().slice(0, 10) + '.csv');
   });
 

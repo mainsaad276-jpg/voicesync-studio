@@ -252,3 +252,76 @@ body.has-ticker .pro-toast { bottom: 140px; }
   .vn-ticker-item.on { display: inline-flex; }
   .vn-ticker-item::after { display: none; }
 }
+
+/* ---------- 6. Login / sign-up screen + account chip (js/auth.js) ---------- */
+html.auth-open, html.auth-open body { overflow: hidden; }
+.vn-auth {
+  position: fixed; inset: 0; z-index: 10050; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 16px 32px;
+  background:
+    radial-gradient(700px 420px at 85% -5%, rgba(212, 175, 55, .28), transparent 60%),
+    radial-gradient(600px 400px at -10% 100%, rgba(181, 140, 255, .14), transparent 60%),
+    #07060a;
+  color: #f6efdc; font-family: var(--font);
+}
+.vn-auth-card {
+  width: 100%; max-width: 420px; margin: auto; padding: 22px 20px 18px; border-radius: 26px;
+  background: rgba(22, 19, 13, .82); border: 1px solid rgba(212, 175, 55, .28);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .05);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+.vn-auth-top { display: flex; justify-content: space-between; align-items: center; }
+.vn-auth-logo {
+  width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; font-size: 26px;
+  background: var(--gold-grad); background-size: 200% 100%; box-shadow: 0 10px 30px rgba(212, 175, 55, .45);
+}
+.vn-auth-lang { background: transparent; border: 1px solid rgba(212, 175, 55, .4); color: #f5d77a; border-radius: 999px; padding: 6px 12px; font: inherit; font-weight: 700; cursor: pointer; }
+.vn-auth-title {
+  margin: 16px 0 4px; font-size: 26px; font-weight: 900; line-height: 1.2;
+  background: linear-gradient(90deg, #f6efdc, #f5d77a 45%, #f6efdc 80%); background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+}
+.vn-auth-sub { margin: 0 0 16px; color: #b8ad90; font-size: 14px; }
+.vn-auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(0, 0, 0, .35); border: 1px solid rgba(212, 175, 55, .18); }
+.vn-auth-tab { border: 0; border-radius: 11px; padding: 10px; background: transparent; color: #b8ad90; font: inherit; font-weight: 800; cursor: pointer; }
+.vn-auth-tab[aria-selected="true"] { background: var(--gold-grad); background-size: 200% 100%; color: #1b1405; box-shadow: 0 6px 18px rgba(212, 175, 55, .35); }
+.vn-auth-gift { margin: 12px 0 0; padding: 9px 12px; border-radius: 12px; background: rgba(212, 175, 55, .12); border: 1px dashed rgba(212, 175, 55, .55); color: #f5d77a; font-weight: 800; font-size: 14px; text-align: center; }
+.vn-auth-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.vn-auth-field { display: flex; flex-direction: column; gap: 4px; position: relative; font-size: 13px; font-weight: 700; color: #c7b98f; }
+.vn-auth-field input {
+  width: 100%; box-sizing: border-box; padding: 13px 14px; border-radius: 13px; font: inherit; font-size: 16px; font-weight: 500;
+  background: rgba(0, 0, 0, .4); color: #f6efdc; border: 1px solid rgba(212, 175, 55, .22); transition: border-color .2s, box-shadow .2s;
+}
+.vn-auth-field input:focus { outline: none; border-color: #d4af37; box-shadow: 0 0 0 3px rgba(212, 175, 55, .22); }
+.vn-auth-field input[aria-invalid="true"] { border-color: #ff6b5e; box-shadow: 0 0 0 3px rgba(255, 107, 94, .18); }
+.vn-auth-eye { position: absolute; inset-inline-end: 8px; bottom: 8px; border: 0; background: rgba(212, 175, 55, .14); color: #f5d77a; border-radius: 9px; padding: 6px 10px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.vn-auth-go {
+  margin-top: 6px; padding: 14px; border: 0; border-radius: 14px; font: inherit; font-size: 16px; font-weight: 900; cursor: pointer;
+  background: var(--gold-grad); background-size: 200% 100%; color: #1b1405; box-shadow: 0 12px 30px rgba(212, 175, 55, .4);
+  position: relative; overflow: hidden;
+}
+.vn-auth-go:disabled { opacity: .7; cursor: wait; }
+.vn-auth-msg { margin: 0; min-height: 1.2em; font-size: 14px; color: #c7b98f; }
+.vn-auth-msg.err { color: #ff8a7e; font-weight: 700; }
+.vn-auth-extra { display: flex; gap: 8px; flex-wrap: wrap; }
+.vn-auth-skip { border: 1px solid rgba(212, 175, 55, .45); background: transparent; color: #f6efdc; border-radius: 12px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+.vn-auth-link { background: none; border: 0; padding: 0; color: #f5d77a; font: inherit; font-weight: 800; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.vn-auth-foot { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; font-size: 14px; color: #b8ad90; }
+.vn-auth-switch { margin: 0; }
+.vn-auth-legal { margin: 4px 0 0; font-size: 12px; color: #8f856c; }
+.vn-auth-legal a { color: #c7b98f; }
+@media (prefers-reduced-motion: no-preference) {
+  .vn-auth-card { animation: vn-pop .5s cubic-bezier(.2, .8, .2, 1) both; }
+  .vn-auth-logo { animation: vn-float 4s ease-in-out infinite, vn-shimmer 6s linear infinite; }
+  .vn-auth-title, .vn-auth-go { animation: vn-shimmer 6s linear infinite; }
+}
+
+.account-btn { width: 38px; min-width: 38px; height: 38px; padding: 0 !important; border-radius: 50% !important; font-weight: 900; background: var(--gold-soft) !important; border-color: var(--gold) !important; color: var(--gold-ink) !important; }
+.account-pop {
+  position: absolute; z-index: 10040; min-width: 230px; max-width: 86vw; padding: 14px; border-radius: 16px;
+  background: var(--card); color: var(--ink); border: 1px solid var(--gold); box-shadow: 0 18px 44px rgba(0, 0, 0, .35);
+}
+.account-name { font-weight: 900; font-size: 16px; }
+.account-email { color: var(--ink-dim); font-size: 13px; word-break: break-all; }
+.account-plan { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--gold-ink); }
+.account-actions { display: flex; gap: 8px; margin-top: 12px; }
