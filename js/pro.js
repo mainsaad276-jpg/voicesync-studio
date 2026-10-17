@@ -283,9 +283,10 @@
     if (!base || typeof root.fetch !== 'function') return Promise.resolve(null);
     return root.fetch(base + '/pro/plans', { method: 'GET' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
       if (!j || !Array.isArray(j.plans)) return null;
-      var keep = { plans: j.plans, payment: j.payment || null, freeTrialChars: j.freeTrialChars, at: Date.now() };
+      var keep = { plans: j.plans, payment: j.payment || null, ticker: j.ticker || null, freeTrialChars: j.freeTrialChars, at: Date.now() };
       var changed = JSON.stringify(keep.plans) + JSON.stringify(keep.payment) !== JSON.stringify((liveCache || {}).plans) + JSON.stringify((liveCache || {}).payment || null);
       liveCache = keep; sSet(LIVE_KEY, JSON.stringify(keep));
+      try { root.dispatchEvent(new root.CustomEvent('vs:live', { detail: keep })); } catch (e) {}
       // Re-draw an open plans sheet so new prices show at once.
       if (changed && root.document && root.document.getElementById('proSheet') && !root.document.querySelector('#proSheet form.req-form')) showPlans();
       return keep;
@@ -1010,6 +1011,7 @@
     setPro: setPro,
     refreshBadges: refreshBadges,
     loadLivePlans: loadLivePlans,
+    liveData: livePlans,
     _config: cfg
   };
 
