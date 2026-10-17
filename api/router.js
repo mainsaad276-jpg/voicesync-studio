@@ -47,6 +47,7 @@ function kvFromEnv(e) {
       if (opts && opts.expirationTtl) cmd.push('EX', String(opts.expirationTtl));
       await call(cmd);
     },
+    async delete(k) { await call(['DEL', k]); },
     async list({ prefix = '', limit = 1000 } = {}) {
       const keys = [];
       let cursor = '0';

@@ -19,6 +19,10 @@
  *   GET/POST /admin/paysettings x-admin-key; json {whatsapp, methods:[{label:{en,ur}, value, name}]}
  *   GET/POST /admin/ticker    x-admin-key; json {enabled, speed, items:[{icon,en,ur,action,url}]} or {reset:true}
  *   GET  /pro/plans           public plans (no buyCost) + payment accounts + ticker for the app
+ *   POST /auth/signup         json {email, password, name, phone?, device} -> {token, user, plan}
+ *   POST /auth/login          json {email, password, device} -> {token, user, plan}
+ *   POST /auth/me | /auth/logout | /auth/attach {code}   header X-VS-Session
+ *   GET  /admin/accounts, POST /admin/account {email, password?, blocked?}
  *   POST /pro/trial           json {device}  -> free trial code (FREE_TRIAL_CHARS, default 10,000)
  *   POST /pro/request         json {name, phone, plan, chars, price, method, tid, screenshot?, device}
  *   POST /pro/request/status  json {id, secret} -> {status, code?} (app activates itself when approved)
@@ -60,7 +64,7 @@ function corsHeaders(origin, env, selfOrigin) {
   return {
     'Access-Control-Allow-Origin': ok ? origin : 'null',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-VS-Code, X-Admin-Key',
+    'Access-Control-Allow-Headers': 'Content-Type, X-VS-Code, X-Admin-Key, X-VS-Session',
     'Access-Control-Expose-Headers': 'X-Chars-Remaining',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
@@ -425,6 +429,124 @@ async function proTrial(request, env, cors) {
   return json(200, publicStatus(code, rec), cors);
 }
 
+// ---------------- Accounts (email + password) ----------------
+// KV user:<email> -> {email, name, phone, salt, hash, iter, code, created, lastLogin, ver, blocked}
+// KV sess:<token> -> {email, ver}   (expires after SESSION_DAYS)
+const EMAIL_RE = /^[^\s@<>()",;:]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$/;
+const PBKDF2_ITER = 100000, SESSION_DAYS = 60;
+function normEmail(e) { return String(e || '').trim().toLowerCase().slice(0, 254); }
+function b64(buf) { let s = ''; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); }
+function unb64(str) { const s = atob(str); const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+async function hashPassword(pw, saltB64, iter) {
+  const salt = saltB64 ? unb64(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter || PBKDF2_ITER }, key, 256);
+  return { salt: b64(salt), hash: b64(bits), iter: iter || PBKDF2_ITER };
+}
+async function loadUser(env, email) { return parseJson(await env.PRO.get('user:' + normEmail(email))); }
+async function saveUser(env, u) { await env.PRO.put('user:' + u.email, JSON.stringify(u)); }
+async function newSession(env, u) {
+  const token = randomId(40);
+  await env.PRO.put('sess:' + token, JSON.stringify({ email: u.email, ver: u.ver | 0 }), { expirationTtl: SESSION_DAYS * 86400 });
+  return token;
+}
+async function sessionUser(request, env) {
+  const token = String(request.headers.get('X-VS-Session') || '');
+  if (!/^[A-Z2-9]{40}$/.test(token)) return null;
+  const s = parseJson(await env.PRO.get('sess:' + token));
+  if (!s) return null;
+  const u = await loadUser(env, s.email);
+  if (!u || u.blocked || (u.ver | 0) !== (s.ver | 0)) return null;
+  return { token, user: u };
+}
+async function accountOut(env, u) {
+  const rec = u.code ? await loadCode(env, u.code) : null;
+  return { user: { email: u.email, name: u.name || '', phone: u.phone || '', created: u.created }, plan: rec ? publicStatus(u.code, rec) : null };
+}
+// Gives a new account its free characters: one trial per device, so a second
+// account on the same phone starts with an empty Free plan.
+async function accountCode(env, u, device) {
+  let code = '';
+  if (DEVICE_RE.test(device)) {
+    const existing = await env.PRO.get('trial:' + device);
+    const rec = existing ? await loadCode(env, existing) : null;
+    if (rec && !rec.email) { rec.email = u.email; rec.name = rec.name || u.name; rec.phone = rec.phone || u.phone; await saveCode(env, existing, rec); return existing; }
+    if (!existing) {
+      const chars = Math.max(0, Math.floor(Number(env.FREE_TRIAL_CHARS) || 10000));
+      const c = await createCode(env, { plan: 'Free', chars, days: 0, note: 'free trial', source: 'trial', device, name: u.name, phone: u.phone });
+      c.rec.email = u.email; c.rec.lastSeen = Date.now(); await saveCode(env, c.code, c.rec);
+      await env.PRO.put('trial:' + device, c.code); await bumpStat(env, 'new');
+      return c.code;
+    }
+  }
+  const c = await createCode(env, { plan: 'Free', chars: 0, days: 0, note: 'account (trial already used on this device)', source: 'trial', device, name: u.name, phone: u.phone });
+  c.rec.email = u.email; c.rec.lastSeen = Date.now(); await saveCode(env, c.code, c.rec);
+  await bumpStat(env, 'new');
+  code = c.code;
+  return code;
+}
+async function auth(request, env, cors, url) {
+  if (!env.PRO) return json(503, { error: 'accounts are not set up yet', code: 'PLANS_OFF' }, cors);
+  if (url.pathname === '/auth/me' || url.pathname === '/auth/logout' || url.pathname === '/auth/attach') {
+    const s = await sessionUser(request, env);
+    if (!s) return json(401, { error: 'please log in again', code: 'NO_SESSION' }, cors);
+    if (url.pathname === '/auth/logout') { await env.PRO.delete('sess:' + s.token); return json(200, { ok: true }, cors); }
+    if (url.pathname === '/auth/attach') {
+      let body; try { body = await request.json(); } catch { return json(400, { error: 'bad json' }, cors); }
+      const code = normCode(body.code);
+      const rec = await loadCode(env, code);
+      if (!rec) return json(404, { error: 'activation code not found' }, cors);
+      if (rec.email && rec.email !== s.user.email) return json(409, { error: 'this code belongs to another account' }, cors);
+      rec.email = s.user.email; rec.name = rec.name || s.user.name; rec.phone = rec.phone || s.user.phone;
+      await saveCode(env, code, rec);
+      s.user.code = code; await saveUser(env, s.user);
+      return json(200, await accountOut(env, s.user), cors);
+    }
+    const rec = s.user.code ? await loadCode(env, s.user.code) : null;
+    if (rec) { rec.lastSeen = Date.now(); noteClient(rec, request); await saveCode(env, s.user.code, rec); }
+    return json(200, await accountOut(env, s.user), cors);
+  }
+  let body; try { body = await request.json(); } catch { return json(400, { error: 'bad json' }, cors); }
+  const email = normEmail(body.email), password = String(body.password || ''), device = String(body.device || '');
+  if (!EMAIL_RE.test(email)) return json(400, { error: 'enter a valid email', field: 'email' }, cors);
+  if (password.length < 8 || password.length > 200) return json(400, { error: 'password must be at least 8 characters', field: 'password' }, cors);
+  if (url.pathname === '/auth/signup') {
+    const name = cleanStr(body.name, 60);
+    const phone = String(body.phone || '').replace(/[^0-9+]/g, '').slice(0, 16);
+    if (name.length < 2) return json(400, { error: 'name required', field: 'name' }, cors);
+    if (phone && phone.replace(/\D/g, '').length < 10) return json(400, { error: 'WhatsApp number looks short', field: 'phone' }, cors);
+    if (BOT_RE.test(request.headers.get('User-Agent') || '')) return json(403, { error: 'sign-up not available', code: 'BOT' }, cors);
+    if (await loadUser(env, email)) return json(409, { error: 'an account with this email already exists — log in', field: 'email', code: 'EXISTS' }, cors);
+    if (!(await bumpDaily(env, 'signupip:' + clientIp(request), Number(env.SIGNUPS_PER_IP_PER_DAY) || 5))) {
+      return json(429, { error: 'too many sign-ups from this network today' }, cors);
+    }
+    const h = await hashPassword(password);
+    const u = { email, name, phone, ...h, code: '', created: Date.now(), lastLogin: Date.now(), ver: 0, blocked: false };
+    u.code = await accountCode(env, u, device);
+    await saveUser(env, u);
+    const token = await newSession(env, u);
+    return json(200, { token, ...(await accountOut(env, u)) }, cors);
+  }
+  if (url.pathname === '/auth/login') {
+    const failKey = 'loginfail:' + email;
+    const fails = Number((await env.PRO.get(failKey)) || 0);
+    if (fails >= 8) return json(429, { error: 'too many wrong passwords — wait 15 minutes', code: 'LOGIN_LOCKED' }, cors);
+    const u = await loadUser(env, email);
+    const h = u ? await hashPassword(password, u.salt, u.iter) : await hashPassword(password);
+    if (!u || !sameKey(h.hash, u.hash)) {
+      await env.PRO.put(failKey, String(fails + 1), { expirationTtl: 900 });
+      return json(401, { error: 'wrong email or password', code: 'BAD_LOGIN' }, cors);
+    }
+    if (u.blocked) return json(403, { error: 'this account is blocked — contact us on WhatsApp', code: 'BLOCKED' }, cors);
+    if (fails) await env.PRO.delete(failKey);
+    if (!u.code) u.code = await accountCode(env, u, device);
+    u.lastLogin = Date.now(); await saveUser(env, u);
+    const token = await newSession(env, u);
+    return json(200, { token, ...(await accountOut(env, u)) }, cors);
+  }
+  return json(404, { error: 'not found' }, cors);
+}
+
 // Subscription requests (customer -> admin -> approve -> code).
 const MAX_SHOT = 450 * 1024; // data URL size cap for the payment screenshot
 function cleanStr(v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001F]/g, ' ').trim().slice(0, n); }
@@ -463,7 +585,10 @@ async function proRequest(request, env, cors) {
     mismatch: !known || chars !== expectChars || !okPrices.includes(price),
     device: DEVICE_RE.test(String(body.device || '')) ? String(body.device) : '',
     hasShot: !!shot,
+    email: '',
   };
+  const sess = await sessionUser(request, env);
+  if (sess) rec.email = sess.user.email;
   await env.PRO.put('req:' + id, JSON.stringify(rec));
   if (shot) await env.PRO.put('reqimg:' + id, shot);
   return json(200, { id, secret, status: 'pending' }, cors);
@@ -491,6 +616,7 @@ function userRow(code, rec) {
     source: rec.source || (rec.plan === 'Free' ? 'trial' : 'manual'), lastSeen: rec.lastSeen || null,
     device: rec.device ? rec.device.slice(0, 8) : '', name: rec.name || '', phone: rec.phone || '', paid: rec.paid | 0,
     via: rec.via || '', os: rec.os || '', country: rec.country || '', city: rec.city || '',
+    email: rec.email || '',
   };
 }
 async function allCodes(env) {
@@ -588,6 +714,14 @@ async function admin(request, env, cors, url) {
   if (url.pathname === '/admin/plans' && request.method === 'GET') {
     return json(200, { plans: planTable(env), source: planSource(env), defaults: DEFAULT_PLAN_TABLE, freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000 }, cors);
   }
+  if (url.pathname === '/admin/accounts' && request.method === 'GET') {
+    const keys = await listAll(env, 'user:');
+    const raws = await getMany(env, keys);
+    const out = [];
+    raws.forEach((r) => { const u = parseJson(r); if (u) out.push({ email: u.email, name: u.name || '', phone: u.phone || '', code: u.code || '', created: u.created, lastLogin: u.lastLogin || null, blocked: !!u.blocked }); });
+    out.sort((a, b) => (b.lastLogin || b.created || 0) - (a.lastLogin || a.created || 0));
+    return json(200, { accounts: out }, cors);
+  }
   if (url.pathname === '/admin/ticker' && request.method === 'GET') {
     return json(200, { ...(env._ticker || { enabled: true, speed: 'normal', items: [] }), saved: !!env._ticker }, cors);
   }
@@ -676,6 +810,10 @@ async function admin(request, env, cors, url) {
     });
     rec.status = 'approved'; rec.code = c.code; rec.decided = Date.now(); rec.grantedChars = grant;
     rec.buyCost = known ? (known.buyCost | 0) : 0;
+    if (rec.email) {
+      const u = await loadUser(env, rec.email);
+      if (u) { c.rec.email = u.email; await saveCode(env, c.code, c.rec); u.code = c.code; await saveUser(env, u); }
+    }
     await env.PRO.put('req:' + rec.id, JSON.stringify(rec));
     await bumpStat(env, 'paid'); await bumpStat(env, 'revenue', rec.price | 0);
     const { secret, ...pub } = rec;
@@ -700,6 +838,19 @@ async function admin(request, env, cors, url) {
     return json(200, { ...publicStatus(code, rec), note: rec.note }, cors);
   }
 
+  if (url.pathname === '/admin/account' && request.method === 'POST') {
+    const u = await loadUser(env, body.email);
+    if (!u) return json(404, { error: 'no account with this email' }, cors);
+    if (typeof body.password === 'string' && body.password) {
+      if (body.password.length < 8) return json(400, { error: 'new password must be at least 8 characters' }, cors);
+      Object.assign(u, await hashPassword(body.password));
+      u.ver = (u.ver | 0) + 1; // logs out every device
+      await env.PRO.delete('loginfail:' + u.email);
+    }
+    if (typeof body.blocked === 'boolean') { u.blocked = body.blocked; if (body.blocked) u.ver = (u.ver | 0) + 1; }
+    await saveUser(env, u);
+    return json(200, { ok: true, email: u.email, blocked: !!u.blocked }, cors);
+  }
   if (url.pathname === '/admin/user' && request.method === 'POST') {
     const code = normCode(body.code);
     const rec = await loadCode(env, code);
@@ -847,6 +998,12 @@ export default {
       if (origin && !_ok) return json(403, { error: 'origin not allowed' }, cors);
       const pay = env._pay && (env._pay.whatsapp || (env._pay.methods || []).length) ? env._pay : null;
       return json(200, { plans: publicPlans(env), source: planSource(env), freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000, payment: pay, ticker: env._ticker || null }, cors);
+    }
+
+    if (url.pathname.startsWith('/auth/')) {
+      if (request.method !== 'POST') return json(404, { error: 'not found' }, cors);
+      if (origin && !_ok) return json(403, { error: 'origin not allowed' }, cors);
+      return auth(request, env, cors, url);
     }
 
     const isJsf = url.pathname === '/jsf/clone' || url.pathname === '/jsf/tts';

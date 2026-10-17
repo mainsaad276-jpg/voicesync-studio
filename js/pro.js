@@ -58,6 +58,7 @@
     upgradeUrl: '',
     currency: 'Rs',
     freeTrialChars: 10000,
+    requireLogin: true,
     plans: DEFAULT_PLANS,
     offers: [],
     payment: { whatsapp: '', methods: [] }
@@ -401,14 +402,28 @@
   function post(path, body) {
     var base = proxyUrl();
     if (!base || typeof fetch !== 'function') { var e0 = new Error('offline'); e0.kind = 'offline'; return Promise.reject(e0); }
+    var hd = { 'Content-Type': 'application/json' };
+    var sess = sGet('voicesync.session');
+    if (sess) hd['X-VS-Session'] = sess;
     return fetch(base + path, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      method: 'POST', headers: hd, body: JSON.stringify(body)
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (j) {
         if (!res.ok) { var e = new Error(j.error || ('HTTP ' + res.status)); e.status = res.status; e.code = j.code; e.field = j.field; e.kind = res.status === 404 ? 'badCode' : 'server'; throw e; }
         return j;
       });
     }, function () { var e2 = new Error('offline'); e2.kind = 'offline'; throw e2; });
+  }
+  // Accounts (js/auth.js): the plan comes with the login.
+  function loginRequired() { return !!proxyUrl() && cfg().requireLogin !== false; }
+  function loggedIn() { return !!sGet('voicesync.session'); }
+  function setPlan(st) {
+    if (!st || !st.code) return;
+    sSet(CODE_KEY, st.code); st.checkedAt = Date.now(); saveStatus(st); refreshBadges();
+  }
+  function needLogin() {
+    if (root.VSAuth && root.VSAuth.open) root.VSAuth.open('signup');
+    var e = new Error('login'); e.kind = 'login'; return Promise.reject(e);
   }
   // Free trial: the API gives each device freeTrialChars HD characters once.
   function startTrial() {
@@ -424,6 +439,7 @@
       if (st && st.valid) return st;
       var e = new Error('noBalance'); e.kind = (st && st.expired) ? 'expired' : (st && st.plan === 'Free' ? 'freeUsed' : 'noBalance'); throw e;
     });
+    if (loginRequired() && !loggedIn()) return needLogin();
     return startTrial().then(function (st) {
       if (st && st.valid) return st;
       var e = new Error('freeUsed'); e.kind = 'freeUsed'; throw e;
@@ -703,6 +719,7 @@
     var payNames = ((c.payment && c.payment.methods) || []).filter(function (m) { return m && m.value; }).map(function (m) { return pick(m.label); }).filter(Boolean);
     (payNames.length ? payNames.concat([txa('methods').slice(-1)[0]]) : txa('methods')).forEach(function (m) { var o = el('option', '', m); o.value = m; me.appendChild(o); });
     var ti = el('input', 'char-search'); ti.type = 'text'; ti.maxLength = 60;
+    try { var acc = root.VSAuth && root.VSAuth.user && root.VSAuth.user(); if (acc) { nm.value = acc.name || ''; ph.value = acc.phone || ''; } } catch (e) {}
     var sh = el('input', 'req-file'); sh.type = 'file'; sh.accept = 'image/*';
     f.appendChild(field(tx('reqName'), nm));
     f.appendChild(field(tx('reqPhone'), ph));
@@ -826,6 +843,7 @@
       msg.textContent = tx('checking'); msg.className = 'pro-code-msg';
       btn.disabled = true;
       activate(input.value).then(function (s) {
+        if (loggedIn() && root.VSAuth && root.VSAuth._call) root.VSAuth._call('/auth/attach', { code: code() }).catch(function () {});
         msg.textContent = '';
         renderStatus(stBox, s);
         input.value = code();
@@ -977,7 +995,7 @@
     // Every user gets the free characters on first open (one per device), so
     // they also show up as a user in the admin dashboard. Silent on failure.
     if (code()) refresh();
-    else if (proxyUrl()) startTrial().catch(function () {});
+    else if (proxyUrl() && !loginRequired()) startTrial().catch(function () {});
     loadLivePlans();
     var pr = pendingRequest();
     if (pr && pr.status === 'pending') { checkRequest(); schedulePoll(); }
@@ -1011,6 +1029,9 @@
     setPro: setPro,
     refreshBadges: refreshBadges,
     loadLivePlans: loadLivePlans,
+    setPlan: setPlan,
+    loggedIn: loggedIn,
+    _notify: notify,
     liveData: livePlans,
     _config: cfg
   };
