@@ -241,7 +241,55 @@
     if (!Array.isArray(out.plans) || !out.plans.length) out.plans = DEFAULT_PLANS;
     if (!Array.isArray(out.offers)) out.offers = [];
     out.payment = out.payment || {};
+    // Prices and payment accounts set on the admin page win over config.js.
+    var lv = livePlans();
+    if (lv) {
+      if (Array.isArray(lv.plans) && lv.plans.length) out.plans = mergePlans(lv.plans, out.plans);
+      if (lv.payment && typeof lv.payment === 'object') out.payment = lv.payment;
+      if (Number(lv.freeTrialChars) > 0) out.freeTrialChars = Number(lv.freeTrialChars);
+    }
     return out;
+  }
+
+  // ---- live plans from the server (GET /pro/plans) ----
+  var LIVE_KEY = 'voicesync.livePlans';
+  var liveCache = null;
+  function livePlans() {
+    if (liveCache) return liveCache;
+    var raw = sGet(LIVE_KEY);
+    if (!raw) return null;
+    try { liveCache = JSON.parse(raw); } catch (e) { liveCache = null; }
+    return liveCache;
+  }
+  function autoPerks(chars) {
+    var n = fmtNum(chars), clones = chars >= 10000000 ? 50 : 20;
+    return {
+      en: [n + ' HD characters / month', 'Clone up to ' + clones + ' voices', 'Urdu + 60 languages', 'WhatsApp support'],
+      ur: [n + ' ایچ ڈی حروف / ماہ', clones + ' تک آوازیں کلون کریں', 'اردو + 60 زبانیں', 'واٹس ایپ سپورٹ']
+    };
+  }
+  function mergePlans(server, local) {
+    var byId = {};
+    (local || []).forEach(function (p) { if (p && p.id) byId[p.id] = p; });
+    return server.filter(function (p) { return p && Number(p.price) > 0 && Number(p.chars) > 0; }).map(function (p) {
+      var l = byId[p.id] || {};
+      // Keep hand-written perks only while the characters are unchanged.
+      var perks = l.perks && Number(l.chars) === Number(p.chars) ? l.perks : autoPerks(Number(p.chars));
+      return { id: p.id, name: p.name, chars: Number(p.chars), price: Number(p.price), firstMonth: Number(p.firstMonth) || Number(p.price), badge: p.badge || '', perks: perks };
+    });
+  }
+  function loadLivePlans() {
+    var base = proxyUrl();
+    if (!base || typeof root.fetch !== 'function') return Promise.resolve(null);
+    return root.fetch(base + '/pro/plans', { method: 'GET' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !Array.isArray(j.plans)) return null;
+      var keep = { plans: j.plans, payment: j.payment || null, freeTrialChars: j.freeTrialChars, at: Date.now() };
+      var changed = JSON.stringify(keep.plans) + JSON.stringify(keep.payment) !== JSON.stringify((liveCache || {}).plans) + JSON.stringify((liveCache || {}).payment || null);
+      liveCache = keep; sSet(LIVE_KEY, JSON.stringify(keep));
+      // Re-draw an open plans sheet so new prices show at once.
+      if (changed && root.document && root.document.getElementById('proSheet') && !root.document.querySelector('#proSheet form.req-form')) showPlans();
+      return keep;
+    }).catch(function () { return null; });
   }
   function proxyUrl() {
     try {
@@ -651,7 +699,8 @@
     var nm = el('input', 'char-search'); nm.type = 'text'; nm.maxLength = 60; nm.autocomplete = 'name';
     var ph = el('input', 'char-search'); ph.type = 'tel'; ph.inputMode = 'tel'; ph.placeholder = '03xx xxxxxxx'; ph.autocomplete = 'tel';
     var me = el('select', 'select');
-    txa('methods').forEach(function (m) { var o = el('option', '', m); o.value = m; me.appendChild(o); });
+    var payNames = ((c.payment && c.payment.methods) || []).filter(function (m) { return m && m.value; }).map(function (m) { return pick(m.label); }).filter(Boolean);
+    (payNames.length ? payNames.concat([txa('methods').slice(-1)[0]]) : txa('methods')).forEach(function (m) { var o = el('option', '', m); o.value = m; me.appendChild(o); });
     var ti = el('input', 'char-search'); ti.type = 'text'; ti.maxLength = 60;
     var sh = el('input', 'req-file'); sh.type = 'file'; sh.accept = 'image/*';
     f.appendChild(field(tx('reqName'), nm));
@@ -928,6 +977,7 @@
     // they also show up as a user in the admin dashboard. Silent on failure.
     if (code()) refresh();
     else if (proxyUrl()) startTrial().catch(function () {});
+    loadLivePlans();
     var pr = pendingRequest();
     if (pr && pr.status === 'pending') { checkRequest(); schedulePoll(); }
   }
@@ -959,6 +1009,7 @@
     showUpsell: showUpsell,
     setPro: setPro,
     refreshBadges: refreshBadges,
+    loadLivePlans: loadLivePlans,
     _config: cfg
   };
 

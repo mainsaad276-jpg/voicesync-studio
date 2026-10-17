@@ -54,8 +54,28 @@ t('default_paid_features', JSON.stringify(Pro._config().proFeatures) === JSON.st
 t('no_code_initially', Pro.code() === '' && Pro.planActive() === false);
 var rejected = null;
 Pro.activate('not-a-code').then(null, function (e) { rejected = e && e.kind; });
+// 4) Live plans from the server override config.js (no buyCost needed).
+VS_CONFIG.ttsProxy = 'https://api.example/api';
+VS_CONFIG.pro = { enforce: false, plans: [{ id: 'starter', name: 'Starter', chars: 1000000, price: 1500, firstMonth: 1200, perks: { en: ['hand perk'], ur: ['x'] } }], payment: { whatsapp: '920000000000', methods: [] } };
+var fetched = null;
+globalThis.fetch = function (u) {
+  fetched = u;
+  return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ plans: [
+    { id: 'starter', name: 'Starter', chars: 1000000, price: 1700, firstMonth: 1400, badge: '' },
+    { id: 'mega', name: 'Mega', chars: 20000000, price: 25000, firstMonth: 25000, badge: 'popular' }
+  ], payment: { whatsapp: '923107100275', methods: [{ label: { en: 'JazzCash', ur: 'جاز کیش' }, value: '0300 1', name: 'S' }] }, freeTrialChars: 5000 }); } });
+};
+var liveDone = false;
+Pro.loadLivePlans().then(function () { liveDone = true; });
+
 setTimeout(function () {
   t('activate_rejects_bad_format', rejected === 'badCode');
+  var c = Pro._config();
+  t('live_fetch_url', fetched === 'https://api.example/api/pro/plans' && liveDone);
+  t('live_price_wins', c.plans[0].price === 1700 && c.plans[0].firstMonth === 1400 && c.plans[0].perks.en[0] === 'hand perk');
+  t('live_new_plan_auto_perks', c.plans[1].name === 'Mega' && /20M/.test(c.plans[1].perks.en[0]) && c.plans[1].badge === 'popular');
+  t('live_payment_wins', c.payment.whatsapp === '923107100275' && c.payment.methods[0].value === '0300 1');
+  t('live_trial_chars', c.freeTrialChars === 5000);
   console.log('PRO QA: ' + (n - fails.length) + ' / ' + n);
   if (fails.length) { console.log(fails.join('\n')); process.exit(1); }
 }, 20);

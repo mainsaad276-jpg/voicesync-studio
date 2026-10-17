@@ -23,6 +23,7 @@ Boss order (2026-10-09): work as ONE team, no stepping on each other.
 6. **QA gate**: web changes must keep `bash qa/run-qa.sh` green.
 
 ## Active work
+- **Claude — `admin-pricing-profit` (MERGED 2026-10-17):** Plans editor with buyCost/profit, Payment accounts tab, `GET /pro/plans` (app loads live prices + accounts; buyCost never public).
 - **Claude — branch `admin-dashboard` (MERGED in PR #5, live on Vercel, 2026-10-16, boss order "expert level"):**
   admin dashboard (users + active users, payments ledger, plans, charts, CSV),
   user tracking (lastSeen, auto free trial on first open), security fixes from
