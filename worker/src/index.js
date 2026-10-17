@@ -14,6 +14,7 @@
  *   POST /admin/codes         x-admin-key; json {plan, chars, days, note} -> new code
  *   GET  /admin/codes         x-admin-key                      -> recent codes
  *   POST /admin/topup         x-admin-key; json {code, chars, days}
+ *   POST /admin/user          x-admin-key; json {code, name, phone, note} -> edit a user's label
  *   POST /pro/trial           json {device}  -> free trial code (FREE_TRIAL_CHARS, default 10,000)
  *   POST /pro/request         json {name, phone, plan, chars, price, method, tid, screenshot?, device}
  *   POST /pro/request/status  json {id, secret} -> {status, code?} (app activates itself when approved)
@@ -197,6 +198,7 @@ async function requireCode(request, env, cors) {
     return { error: json(402, { error: 'clone limit reached for this plan', code: 'CLONE_LIMIT' }, cors) };
   }
   rec.lastSeen = Date.now();
+  noteClient(rec, request);
   return { code, rec };
 }
 
@@ -207,7 +209,7 @@ async function proStatus(request, env, cors) {
   const code = normCode(body.code);
   const rec = await loadCode(env, code);
   if (!rec) return json(404, { valid: false, error: 'activation code not found' }, cors);
-  if (!rec.lastSeen || Date.now() - rec.lastSeen > 10 * 60000) { rec.lastSeen = Date.now(); await saveCode(env, code, rec); }
+  if (!rec.lastSeen || Date.now() - rec.lastSeen > 10 * 60000 || (!rec.os && !rec.via)) { rec.lastSeen = Date.now(); noteClient(rec, request); await saveCode(env, code, rec); }
   return json(200, publicStatus(code, rec), cors);
 }
 
@@ -255,6 +257,25 @@ function clientIp(request) {
   return request.headers.get('CF-Connecting-IP') ||
     (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim() || 'unknown';
 }
+// Where a user comes from, for the admin Users list (no IP is stored).
+function clientInfo(request) {
+  const h = (n) => request.headers.get(n) || '';
+  const origin = h('Origin'), ua = h('User-Agent');
+  let via = '';
+  if (/^(capacitor|https?):\/\/localhost(:\d+)?$/.test(origin) || /; wv\)/.test(ua)) via = 'app';
+  else if (/github\.io$/.test(origin)) via = 'web-github';
+  else if (/vercel\.app$/.test(origin)) via = 'web-vercel';
+  else if (origin) via = 'web';
+  const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iPhone' : /Windows/.test(ua) ? 'Windows'
+    : /Macintosh|Mac OS X/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : '';
+  let city = h('X-Vercel-IP-City') || '';
+  try { city = decodeURIComponent(city); } catch { /* keep raw */ }
+  return { via, os, country: (h('X-Vercel-IP-Country') || h('CF-IPCountry')).slice(0, 2).toUpperCase().replace('XX', ''), city: cleanStr(city, 40) };
+}
+function noteClient(rec, request) {
+  const c = clientInfo(request);
+  for (const k of ['via', 'os', 'country', 'city']) if (c[k]) rec[k] = c[k];
+}
 function today() { return new Date().toISOString().slice(0, 10); }
 async function bumpDaily(env, key, max) {
   const k = key + ':' + today();
@@ -293,14 +314,14 @@ async function proTrial(request, env, cors) {
   const existing = await env.PRO.get('trial:' + device);
   if (existing) {
     const rec = await loadCode(env, existing);
-    if (rec) return json(200, publicStatus(existing, rec), cors);
+    if (rec) { rec.lastSeen = Date.now(); noteClient(rec, request); await saveCode(env, existing, rec); return json(200, publicStatus(existing, rec), cors); }
   }
   if (!(await bumpDaily(env, 'trialip:' + clientIp(request), Number(env.TRIALS_PER_IP_PER_DAY) || 3))) {
     return json(429, { error: 'free trial limit reached on this network today', code: 'TRIAL_LIMIT' }, cors);
   }
   const chars = Math.max(0, Math.floor(Number(env.FREE_TRIAL_CHARS) || 10000));
   const { code, rec } = await createCode(env, { plan: 'Free', chars, days: 0, note: 'free trial', source: 'trial', device });
-  rec.lastSeen = Date.now(); await saveCode(env, code, rec);
+  rec.lastSeen = Date.now(); noteClient(rec, request); await saveCode(env, code, rec);
   await env.PRO.put('trial:' + device, code);
   await bumpStat(env, 'new');
   return json(200, publicStatus(code, rec), cors);
@@ -371,6 +392,7 @@ function userRow(code, rec) {
     ...publicStatus(code, rec), note: rec.note || '', created: rec.created || null, clones: rec.clones | 0,
     source: rec.source || (rec.plan === 'Free' ? 'trial' : 'manual'), lastSeen: rec.lastSeen || null,
     device: rec.device ? rec.device.slice(0, 8) : '', name: rec.name || '', phone: rec.phone || '', paid: rec.paid | 0,
+    via: rec.via || '', os: rec.os || '', country: rec.country || '', city: rec.city || '',
   };
 }
 async function allCodes(env) {
@@ -539,6 +561,16 @@ async function admin(request, env, cors, url) {
     return json(200, { ...publicStatus(code, rec), note: rec.note }, cors);
   }
 
+  if (url.pathname === '/admin/user' && request.method === 'POST') {
+    const code = normCode(body.code);
+    const rec = await loadCode(env, code);
+    if (!rec) return json(404, { error: 'code not found' }, cors);
+    if (body.name != null) rec.name = cleanStr(body.name, 60);
+    if (body.phone != null) rec.phone = String(body.phone).replace(/[^0-9+]/g, '').slice(0, 16);
+    if (body.note != null) rec.note = cleanStr(body.note, 120);
+    await saveCode(env, code, rec);
+    return json(200, userRow(code, rec), cors);
+  }
   if (url.pathname === '/admin/topup' && request.method === 'POST') {
     const code = normCode(body.code);
     const rec = await loadCode(env, code);

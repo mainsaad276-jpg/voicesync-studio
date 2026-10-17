@@ -328,6 +328,17 @@ t('same_origin_allowed', r.status === 200);
   t('users_rows', paidU.source === 'request' && paidU.name === 'Cheater' && paidU.paid === 1200 && j.users.find((u) => u.plan === 'Free').source === 'trial');
   r = await worker.fetch(ipReq('/admin/plans', null, ADMIN, '6.6.6.6'), envD);
   t('plans_table', (await r.json()).plans.length === 5);
+  // device + location info and admin edit
+  await worker.fetch(new Request('https://w.example.workers.dev/pro/trial', { method: 'POST', headers: { Origin: 'https://localhost', 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP; wv) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36', 'X-Vercel-IP-Country': 'PK', 'X-Vercel-IP-City': 'Faisalabad', 'Content-Type': 'application/json', 'CF-Connecting-IP': '4.4.4.5' }, body: JSON.stringify({ device: 'dev_INFO_AAAAAAAAAAAAAA' }) }), envD);
+  r = await worker.fetch(ipReq('/admin/users', null, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  const appU = j.users.find((u) => u.device === 'dev_INFO');
+  t('user_device_info', appU && appU.via === 'app' && appU.os === 'Android' && appU.country === 'PK' && appU.city === 'Faisalabad');
+  r = await worker.fetch(ipReq('/admin/user', { code: appU.code, name: 'Ali', phone: '0300-1234567', note: 'friend' }, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  t('admin_edit_user', r.status === 200 && j.name === 'Ali' && j.phone === '03001234567' && j.note === 'friend');
+  r = await worker.fetch(ipReq('/admin/user', { code: appU.code, name: 'X' }, 'wrong', '6.6.6.7'), envD);
+  t('admin_edit_needs_key', r.status === 401);
   r = await worker.fetch(req('/health'), envD);
   t('health_no_debug_origin', !('origin' in (await r.json())));
 }
