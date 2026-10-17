@@ -8,6 +8,7 @@
   'use strict';
   var KEY = 'voicesync.theme';
   var THEMES = [
+    { id: 'gold',     en: 'Gold',     ur: 'گولڈ',    swatch: 'linear-gradient(135deg,#0b0906 35%,#d4af37 65%,#f5d77a)', bar: '#0b0906' },
     { id: 'classic',  en: 'Classic',  ur: 'کلاسک',   swatch: 'linear-gradient(135deg,#f7f3ea,#1d5c4d)', bar: '#1d5c4d' },
     { id: 'viral',    en: 'Viral',    ur: 'وائرل',   swatch: 'linear-gradient(135deg,#ff2d87,#8b5cff)', bar: '#0d0a1c' },
     { id: 'midnight', en: 'Midnight', ur: 'مڈنائٹ',  swatch: 'linear-gradient(135deg,#0e1513,#3fc79c)', bar: '#0e1513' },
