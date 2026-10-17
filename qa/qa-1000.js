@@ -452,7 +452,8 @@ async function main() {
   t('fix_clear_disables', /'\btnPlay', 'btnListenBig'/.test(appjs) || appjs.indexOf("'btnPlay', 'btnListenBig'") !== -1);
   t('fix_clear_i18n', i18njs.indexOf('cleared:') !== -1);
   // 5: parts divisor 400
-  t('fix_parts_400', appjs.indexOf('Math.ceil(txt.length / 400)') !== -1);
+  t('fix_parts_by_engine', appjs.indexOf('Math.ceil(txt.length / partSize)') !== -1 && appjs.indexOf('? 2500 : 400') !== -1);
+  t('long_text_no_blocking_confirm', appjs.indexOf('window.confirm(') === -1 && appjs.indexOf('HARD_MAX_CHARS = 60000') !== -1);
   t('fix_parts_no2000', appjs.indexOf('/ 2000)') === -1 || appjs.indexOf('txt.length / 2000') === -1);
   // 6: renderLangPills in 3 paths
   t('fix_pills_dropdown', /tl\.addEventListener\('change', function \(\) \{(?:\s*\/\/[^\n]*|\s*if \(state\.generating\)[^\n]*)*\s*state\.ttsLang = tl\.value \|\| 'en';\s*\n?\s*loadVoices\(\);\s*\n?\s*renderLangPills\(\);/.test(appjs));
