@@ -1,0 +1,186 @@
+/* ============================================================
+   VoxNova — gold accents + motion (loaded after style.css)
+   1. Gold tokens for every theme
+   2. Gold touches across the app (brand, cards, buttons, plans, tabs)
+   3. "Gold" luxury theme (black + gold)
+   4. Animations (all switched off for prefers-reduced-motion)
+   ============================================================ */
+
+:root {
+  --gold: #c9a227;
+  --gold-hi: #f5d77a;
+  --gold-lo: #8a6a12;
+  --gold-ink: #6b4f00;          /* gold text on light backgrounds (AA) */
+  --gold-grad: linear-gradient(135deg, #8a6a12 0%, #c9a227 28%, #f5d77a 50%, #c9a227 72%, #8a6a12 100%);
+  --gold-soft: rgba(201, 162, 39, .14);
+  --gold-glow: rgba(201, 162, 39, .35);
+  --glow: rgba(0, 0, 0, .08);   /* style.css had a self-referencing --glow */
+}
+:root[data-theme="viral"], :root[data-theme="midnight"], :root[data-theme="gold"] { --gold-ink: #f5d77a; }
+
+/* ---------- 3. Gold luxury theme ---------- */
+:root[data-theme="gold"] {
+  --bg: #0b0906; --bg-soft: #17130c; --card: #14100a; --card-edge: #3a2f17;
+  --ink: #f8f1de; --ink-dim: #c7b98f; --accent: #d4af37; --accent-2: #f5d77a;
+  --tint: rgba(212, 175, 55, .16); --tint-2: rgba(212, 175, 55, .09); --on-accent: #1b1405;
+  --btn-dark: #2a2112; --glow: rgba(212, 175, 55, .16); --danger: #ff6b5e; color-scheme: dark;
+}
+:root[data-theme="gold"] body {
+  background:
+    radial-gradient(1000px 520px at 85% -10%, rgba(212, 175, 55, .20), transparent 60%),
+    radial-gradient(800px 480px at -10% 30%, rgba(245, 215, 122, .08), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+:root[data-theme="gold"] .topbar { background: rgba(11, 9, 6, .82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+:root[data-theme="gold"] .tabbar { background: rgba(20, 16, 10, .92); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-color: var(--card-edge); }
+:root[data-theme="gold"] .btn-primary,
+:root[data-theme="gold"] .btn-big:not(.btn-light),
+:root[data-theme="gold"] .plan-buy {
+  background: var(--gold-grad); background-size: 200% 100%; color: #1b1405; border-color: transparent;
+  box-shadow: 0 6px 22px rgba(212, 175, 55, .35); font-weight: 800;
+}
+:root[data-theme="gold"] .btn-accent { background: #2a2112; border-color: var(--gold); color: var(--gold-hi); }
+:root[data-theme="gold"] .card,
+:root[data-theme="gold"] .plan-face { box-shadow: 0 0 0 1px var(--card-edge), 0 14px 34px rgba(0, 0, 0, .45); }
+:root[data-theme="gold"] .pro-offers { background: rgba(212, 175, 55, .08); color: var(--ink); border-color: var(--gold); }
+:root[data-theme="gold"] .pill.green { background: rgba(63, 199, 156, .14); border-color: rgba(63, 199, 156, .4); color: #8ee6c6; }
+:root[data-theme="gold"] input[type="range"] { accent-color: var(--gold); }
+:root[data-theme="gold"] .pro-toast { background: #1b160c; border: 1px solid var(--gold); }
+
+/* ---------- 2. Gold touches in every theme ---------- */
+/* Brand: gold gradient title + soft halo on the mic */
+.brand h1 {
+  background: var(--gold-grad); background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  -webkit-text-fill-color: transparent; font-weight: 900; letter-spacing: .2px;
+}
+:root:not([data-theme]) .brand h1, :root[data-theme="sunset"] .brand h1 {
+  background-image: linear-gradient(135deg, #6b4f00 0%, #a8820f 35%, #d9b445 50%, #a8820f 65%, #6b4f00 100%);
+}
+.brand-mark { display: inline-grid; place-items: center; filter: drop-shadow(0 0 6px var(--gold-glow)); }
+
+/* Thin gold line under the top bar */
+.topbar { border-bottom-color: transparent; }
+.topbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold) 20%, var(--gold-hi) 50%, var(--gold) 80%, transparent);
+  opacity: .85; pointer-events: none;
+}
+
+/* Cards: gold hairline on top + gold marker before titles */
+.card { position: relative; }
+.card::before {
+  content: ""; position: absolute; top: 0; left: 18px; right: 18px; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: .7; pointer-events: none;
+}
+.card-title { display: flex; align-items: center; gap: 8px; }
+.card-title::before {
+  content: ""; width: 4px; height: 1.05em; border-radius: 4px; flex: 0 0 auto;
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo));
+}
+
+/* Pro / plans button in the top bar: gold */
+.plans-btn {
+  background: var(--gold-grad); background-size: 200% 100%; color: #1b1405 !important;
+  border-color: transparent !important; font-weight: 800; box-shadow: 0 3px 12px var(--gold-glow);
+}
+
+/* Pills, badges, plan cards */
+.pill.gold { background: var(--gold-soft); border-color: rgba(201, 162, 39, .5); color: var(--gold-ink); }
+.plan-card.featured .plan-face { border: 2px solid var(--gold); box-shadow: 0 0 0 4px var(--gold-soft), 0 14px 34px var(--gold-glow); }
+.plan-card.featured .plan-badge, .plan-badge:not(.free) { background: var(--gold-grad); background-size: 200% 100%; color: #1b1405; }
+.plan-amt {
+  background: var(--gold-grad); background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+}
+:root:not([data-theme]) .plan-amt, :root[data-theme="sunset"] .plan-amt {
+  background-image: linear-gradient(135deg, #5c4300, #a8820f 50%, #5c4300);
+}
+.plan-save { background: var(--gold-soft); color: var(--gold-ink); border: 1px solid rgba(201, 162, 39, .45); }
+.pro-title { color: var(--gold-ink); }
+
+/* Bottom tab bar: gold dot under the active tab */
+.tabbar .tab { position: relative; }
+.tabbar .tab.active::after {
+  content: ""; position: absolute; top: 4px; left: 50%; width: 18px; height: 3px; margin-left: -9px;
+  border-radius: 3px; background: var(--gold-grad);
+}
+
+/* Focus ring in gold (visible on every theme) */
+.btn:focus-visible, .tab:focus-visible, .select:focus-visible, .char-search:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+
+/* Theme picker: gold ring on the chosen theme */
+.theme-opt[aria-checked="true"] { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }
+
+/* ---------- 4. Motion ---------- */
+@keyframes vn-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes vn-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@keyframes vn-float { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-3px) rotate(-6deg); } }
+@keyframes vn-glow { 0%, 100% { box-shadow: 0 3px 12px var(--gold-glow); } 50% { box-shadow: 0 3px 22px rgba(245, 215, 122, .75); } }
+@keyframes vn-sheen { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(220%) skewX(-20deg); } }
+@keyframes vn-pop { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes vn-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vn-line { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* page: cards rise in one after another */
+  .studio > *, .card { animation: vn-rise .55s cubic-bezier(.2, .8, .2, 1) both; }
+  .studio > *:nth-child(2) { animation-delay: .06s; }
+  .studio > *:nth-child(3) { animation-delay: .12s; }
+  .studio > *:nth-child(4) { animation-delay: .18s; }
+  .studio > *:nth-child(5) { animation-delay: .24s; }
+  .studio > *:nth-child(n+6) { animation-delay: .3s; }
+
+  /* brand shimmer + floating mic */
+  .brand h1 { animation: vn-shimmer 6s linear infinite; }
+  .brand-mark { animation: vn-float 4s ease-in-out infinite; }
+
+  /* moving light along the gold line */
+  .topbar::after {
+    background: linear-gradient(90deg, transparent, var(--gold) 20%, #fff6d1 50%, var(--gold) 80%, transparent);
+    background-size: 200% 100%; animation: vn-line 7s linear infinite;
+  }
+
+  /* Pro button breathes */
+  .plans-btn { animation: vn-glow 2.8s ease-in-out infinite, vn-shimmer 5s linear infinite; }
+
+  /* buttons: lift + light sweep */
+  .btn { transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease, background-color .2s ease; }
+  .btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
+  .btn-big, .btn-primary, .plan-buy { position: relative; overflow: hidden; isolation: isolate; }
+  .btn-big::after, .btn-primary::after, .plan-buy::after {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; z-index: -1; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  .btn-big:hover:not(:disabled)::after, .btn-primary:hover:not(:disabled)::after,
+  .plan-buy:hover::after { animation: vn-sheen .8s ease; }
+
+  /* cards: gold glow on hover (pointer devices) */
+  @media (hover: hover) {
+    .card { transition: box-shadow .25s ease, border-color .25s ease; }
+    .card:hover { border-color: rgba(201, 162, 39, .45); box-shadow: 0 12px 30px var(--glow), 0 0 0 3px var(--gold-soft); }
+  }
+
+  /* plans sheet: fade + plan cards pop in */
+  .pro-backdrop { animation: vn-fade .25s ease both; }
+  .pro-sheet { animation: vn-pop .4s cubic-bezier(.2, .8, .2, 1) both; }
+  .plan-grid > * { animation: vn-pop .5s cubic-bezier(.2, .8, .2, 1) both; }
+  .plan-grid > *:nth-child(2) { animation-delay: .07s; }
+  .plan-grid > *:nth-child(3) { animation-delay: .14s; }
+  .plan-grid > *:nth-child(4) { animation-delay: .21s; }
+  .plan-grid > *:nth-child(5) { animation-delay: .28s; }
+  .plan-grid > *:nth-child(n+6) { animation-delay: .35s; }
+  .plan-card.featured .plan-badge { animation: vn-shimmer 3.5s linear infinite; }
+
+  /* bottom tabs: icon bounce on select */
+  .tabbar .tab .tab-ico { transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+  .tabbar .tab.active .tab-ico { transform: translateY(-2px) scale(1.12); }
+
+  /* gold buttons in the Gold theme slowly shine */
+  :root[data-theme="gold"] .btn-big:not(.btn-light), :root[data-theme="gold"] .btn-primary { animation: vn-shimmer 6s linear infinite; }
+}
