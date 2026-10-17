@@ -33,7 +33,7 @@
     .live { font-size: 12px; color: var(--ink-dim); }
 
     /* tabs */
-    .tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; margin: 10px 0 0; scrollbar-width: none; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; margin: 10px 0 0; }
     .tab-btn { flex: 0 0 auto; border: 1px solid var(--card-edge); background: var(--bg-soft); color: var(--ink); padding: 8px 14px; border-radius: 999px; font: inherit; font-weight: 800; cursor: pointer; white-space: nowrap; }
     .tab-btn[aria-selected="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: #ff3b30; color: #fff; font-size: 12px; margin-inline-start: 4px; }
@@ -319,6 +319,7 @@
       var pending = data.overview.requests.pending;
       $('pendingCount').textContent = String(pending); $('pendingCount').hidden = !pending;
       renderDash(); renderRequests(); renderUsers(); renderPayments(); renderPlans();
+      lastLoad = Date.now();
       $('liveAt').textContent = 'Updated ' + new Date().toLocaleTimeString();
     });
   }
@@ -493,12 +494,19 @@
       if (state.uf === 'expiring' && !(u.plan !== 'Free' && u.expires && u.expires > now && u.expires - now < 5 * D)) return false;
       if (state.uf === 'expired' && u.valid) return false;
       if (state.q) {
-        var hay = [u.name, u.phone, u.code, u.plan, u.note, u.device].join(' ').toLowerCase();
+        var hay = [u.name, u.phone, u.code, u.plan, u.note, u.device, deviceLabel(u), placeLabel(u)].join(' ').toLowerCase();
         if (hay.indexOf(state.q) === -1) return false;
       }
       return true;
     });
   }
+  var VIA = { app: '📱 Android app', 'web-github': '🌐 Website (GitHub)', 'web-vercel': '🌐 Website (Vercel)', web: '🌐 Website' };
+  function deviceLabel(u) {
+    var v = VIA[u.via] || '';
+    if (u.os && !(u.via === 'app' && u.os === 'Android')) v = v ? v + ' · ' + u.os : u.os;
+    return v;
+  }
+  function placeLabel(u) { return [u.city, u.country].filter(Boolean).join(', '); }
   function renderUsers() {
     var rows = filteredUsers(), tb = $('userRows'); tb.innerHTML = '';
     $('usersCount').textContent = fmt(rows.length) + ' of ' + fmt(data.users.length) + ' users';
@@ -508,9 +516,11 @@
       var tr = el('tr');
       var who = el('td');
       var online = now - (u.lastSeen || 0) < 86400000;
-      var nm = el('div'); nm.appendChild(el('span', 'dot ' + (online ? 'on' : 'off'))); nm.appendChild(document.createTextNode(u.name || (u.source === 'trial' ? 'Free user' : 'Customer')));
+      var nm = el('div'); nm.appendChild(el('span', 'dot ' + (online ? 'on' : 'off'))); nm.appendChild(document.createTextNode(u.name || ((u.source === 'trial' ? 'Free user' : 'Customer') + ' ' + (u.device || u.code.slice(-4)))));
       who.appendChild(nm);
-      who.appendChild(el('div', 'muted small', (u.phone || (u.device ? 'device ' + u.device : u.source)) + ' · ' + ago(u.lastSeen)));
+      var where = [deviceLabel(u), placeLabel(u)].filter(Boolean).join(' · ');
+      who.appendChild(el('div', 'muted small', [u.phone, where || (u.device ? 'device ' + u.device : '')].filter(Boolean).join(' · ')));
+      who.appendChild(el('div', 'muted small', (u.lastSeen ? 'active ' + ago(u.lastSeen) : 'not seen yet') + (u.created ? ' · joined ' + date(u.created) : '') + (u.note && u.note !== 'free trial' ? ' · ' + u.note : '')));
       tr.appendChild(who);
       var pl = el('td'); pl.appendChild(el('span', 'tag ' + (u.plan === 'Free' ? 'free' : (u.valid ? 'paid' : 'expired')), u.plan));
       if (u.paid) pl.appendChild(el('div', 'muted small', rs(u.paid)));
@@ -530,14 +540,22 @@
         api('/admin/topup', { method: 'POST', body: { code: u.code, chars: Number(more) || 0, days: Number(days) || 0 } }).then(loadAll, function (e) { alert(e.message); });
       });
       act.appendChild(b);
+      var ed = el('button', 'btn btn-secondary btn-small', '✏️'); ed.type = 'button'; ed.title = 'Naam / WhatsApp / note';
+      ed.addEventListener('click', function () {
+        var n = prompt('Naam (' + u.code + ')', u.name || ''); if (n === null) return;
+        var ph = prompt('WhatsApp number', u.phone || ''); if (ph === null) return;
+        var nt = prompt('Note', u.note || ''); if (nt === null) return;
+        api('/admin/user', { method: 'POST', body: { code: u.code, name: n, phone: ph, note: nt } }).then(loadAll, function (e) { alert(e.message); });
+      });
+      act.appendChild(ed);
       if (u.phone) { var w = el('a', 'btn btn-secondary btn-small', '💬'); w.href = 'https://wa.me/' + waNumber(u.phone); w.target = '_blank'; w.rel = 'noopener'; w.title = 'WhatsApp'; act.appendChild(w); }
       tr.appendChild(act);
       tb.appendChild(tr);
     });
   }
   $('btnUsersCsv').addEventListener('click', function () {
-    var rows = [['Name', 'WhatsApp', 'Plan', 'Paid (Rs)', 'Used', 'Total', 'Remaining', 'Last active', 'Created', 'Valid until', 'Code', 'Source']];
-    filteredUsers().forEach(function (u) { rows.push([u.name, u.phone, u.plan, u.paid, u.used, u.chars, u.remaining, u.lastSeen ? new Date(u.lastSeen).toISOString() : '', u.created ? new Date(u.created).toISOString() : '', u.expires ? new Date(u.expires).toISOString() : '', u.code, u.source]); });
+    var rows = [['Name', 'WhatsApp', 'Plan', 'Paid (Rs)', 'Used', 'Total', 'Remaining', 'Last active', 'Created', 'Valid until', 'Code', 'Source', 'Device', 'Location']];
+    filteredUsers().forEach(function (u) { rows.push([u.name, u.phone, u.plan, u.paid, u.used, u.chars, u.remaining, u.lastSeen ? new Date(u.lastSeen).toISOString() : '', u.created ? new Date(u.created).toISOString() : '', u.expires ? new Date(u.expires).toISOString() : '', u.code, u.source, deviceLabel(u).replace(/[^\x20-\x7E]/g, '').trim(), placeLabel(u)]); });
     csv(rows, 'voxnova-users-' + new Date().toISOString().slice(0, 10) + '.csv');
   });
 
@@ -664,6 +682,10 @@
     }, function (e) { $('loginMsg').textContent = e.message; $('loginMsg').className = 'msg err'; });
   });
   $('adminKey').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btnLogin').click(); });
+  var lastLoad = 0;
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && key && !$('app').hidden && Date.now() - lastLoad > 60000) loadAll().catch(function () {});
+  });
   $('btnRefreshAll').addEventListener('click', function () { loadAll().catch(function (e) { $('liveAt').textContent = e.message; }); });
   $('btnLogout').addEventListener('click', function () { try { sessionStorage.removeItem('vsAdminKey'); } catch (e) {} location.reload(); });
   if (key && base) $('btnLogin').click();
