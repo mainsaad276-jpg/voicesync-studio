@@ -17,7 +17,8 @@
  *   POST /admin/user          x-admin-key; json {code, name, phone, note} -> edit a user's label
  *   GET/POST /admin/plans     x-admin-key; json {plans:[{name,chars,price,firstMonth,buyCost,badge}]} or {reset:true}
  *   GET/POST /admin/paysettings x-admin-key; json {whatsapp, methods:[{label:{en,ur}, value, name}]}
- *   GET  /pro/plans           public plans (no buyCost) + payment accounts for the app
+ *   GET/POST /admin/ticker    x-admin-key; json {enabled, speed, items:[{icon,en,ur,action,url}]} or {reset:true}
+ *   GET  /pro/plans           public plans (no buyCost) + payment accounts + ticker for the app
  *   POST /pro/trial           json {device}  -> free trial code (FREE_TRIAL_CHARS, default 10,000)
  *   POST /pro/request         json {name, phone, plan, chars, price, method, tid, screenshot?, device}
  *   POST /pro/request/status  json {id, secret} -> {status, code?} (app activates itself when approved)
@@ -151,6 +152,28 @@ function planSource(env) {
 // What the app may see: no buyCost.
 function publicPlans(env) {
   return planTable(env).map((p) => ({ id: p.id, name: p.name, chars: p.chars, price: p.price, firstMonth: p.firstMonth || p.price, badge: p.badge || '' }));
+}
+
+// Scrolling promo ticker at the bottom of the app (KV "ticker").
+const TICKER_ACTIONS = ['none', 'link', 'share', 'plans', 'whatsapp'];
+function validateTicker(body) {
+  const clean = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001F<>]/g, ' ').trim().slice(0, n);
+  const list = Array.isArray(body.items) ? body.items : [];
+  if (list.length > 12) return { error: 'at most 12 messages' };
+  const items = [];
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i] || {};
+    const en = clean(m.en, 120), ur = clean(m.ur, 120), icon = clean(m.icon, 8);
+    if (!en && !ur) continue;
+    const action = TICKER_ACTIONS.includes(m.action) ? m.action : 'none';
+    let url = clean(m.url, 300);
+    if (action === 'link' || (action === 'whatsapp' && url)) {
+      if (!/^https:\/\/[^\s]+$/.test(url)) return { error: 'message ' + (i + 1) + ': link must start with https://' };
+    } else url = '';
+    items.push({ icon, en: en || ur, ur: ur || en, action, url });
+  }
+  const speed = ['slow', 'normal', 'fast'].includes(body.speed) ? body.speed : 'normal';
+  return { ticker: { enabled: body.enabled !== false, speed, items } };
 }
 
 // Payment accounts shown on the back of the plan cards (KV "paysettings").
@@ -293,10 +316,11 @@ async function loadSettings(env) {
   if (_settingsCache && Date.now() - _settingsAt < 30000) return _settingsCache;
   let st = {};
   let raws = [];
-  try { raws = await getMany(env, ['settings', 'plans', 'paysettings']); } catch { raws = []; }
+  try { raws = await getMany(env, ['settings', 'plans', 'paysettings', 'ticker']); } catch { raws = []; }
   st = parseJson(raws[0]) || {};
   Object.defineProperty(st, '_plans', { value: parseJson(raws[1]), enumerable: false });
   Object.defineProperty(st, '_pay', { value: parseJson(raws[2]), enumerable: false });
+  Object.defineProperty(st, '_ticker', { value: parseJson(raws[3]), enumerable: false });
   _settingsCache = st; _settingsAt = Date.now();
   return st;
 }
@@ -312,6 +336,7 @@ async function withSettings(env) {
     AZURE_SPEECH_REGION: env.AZURE_SPEECH_REGION || st.azureRegion || '',
     _plans: Array.isArray(st._plans) ? st._plans : null,
     _pay: st._pay && typeof st._pay === 'object' ? st._pay : null,
+    _ticker: st._ticker && typeof st._ticker === 'object' ? st._ticker : null,
   };
 }
 function hint(k) { k = String(k || ''); return k ? k.slice(0, 4) + '\u2026' + k.slice(-4) : ''; }
@@ -563,6 +588,9 @@ async function admin(request, env, cors, url) {
   if (url.pathname === '/admin/plans' && request.method === 'GET') {
     return json(200, { plans: planTable(env), source: planSource(env), defaults: DEFAULT_PLAN_TABLE, freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000 }, cors);
   }
+  if (url.pathname === '/admin/ticker' && request.method === 'GET') {
+    return json(200, { ...(env._ticker || { enabled: true, speed: 'normal', items: [] }), saved: !!env._ticker }, cors);
+  }
   if (url.pathname === '/admin/paysettings' && request.method === 'GET') {
     return json(200, { ...(env._pay || { whatsapp: '', methods: [] }), saved: !!env._pay }, cors);
   }
@@ -620,6 +648,13 @@ async function admin(request, env, cors, url) {
     if (v.error) return json(400, { error: v.error }, cors);
     await env.PRO.put('plans', JSON.stringify(v.plans)); dropSettingsCache();
     return json(200, { ok: true, plans: v.plans, source: 'admin' }, cors);
+  }
+  if (url.pathname === '/admin/ticker' && request.method === 'POST') {
+    if (body.reset === true) { await env.PRO.put('ticker', 'null'); dropSettingsCache(); return json(200, { ok: true, saved: false }, cors); }
+    const v = validateTicker(body);
+    if (v.error) return json(400, { error: v.error }, cors);
+    await env.PRO.put('ticker', JSON.stringify(v.ticker)); dropSettingsCache();
+    return json(200, { ok: true, ...v.ticker, saved: true }, cors);
   }
   if (url.pathname === '/admin/paysettings' && request.method === 'POST') {
     const v = validatePay(body);
@@ -811,7 +846,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/pro/plans') {
       if (origin && !_ok) return json(403, { error: 'origin not allowed' }, cors);
       const pay = env._pay && (env._pay.whatsapp || (env._pay.methods || []).length) ? env._pay : null;
-      return json(200, { plans: publicPlans(env), source: planSource(env), freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000, payment: pay }, cors);
+      return json(200, { plans: publicPlans(env), source: planSource(env), freeTrialChars: Number(env.FREE_TRIAL_CHARS) || 10000, payment: pay, ticker: env._ticker || null }, cors);
     }
 
     const isJsf = url.pathname === '/jsf/clone' || url.pathname === '/jsf/tts';

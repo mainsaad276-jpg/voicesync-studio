@@ -184,3 +184,71 @@
   /* gold buttons in the Gold theme slowly shine */
   :root[data-theme="gold"] .btn-big:not(.btn-light), :root[data-theme="gold"] .btn-primary { animation: vn-shimmer 6s linear infinite; }
 }
+
+/* ---------- 5. Promo ticker (js/ticker.js) ---------- */
+.vn-ticker {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 29; height: 38px;
+  display: flex; align-items: center; gap: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: content-box;
+  background: linear-gradient(90deg, #120e06, #1d1609 50%, #120e06);
+  color: #f8f1de; border-top: 1px solid rgba(212, 175, 55, .55);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, .25); font-size: 14px; font-weight: 700;
+}
+.vn-ticker::before {
+  content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, #f5d77a, transparent);
+}
+.vn-ticker-label {
+  flex: 0 0 auto; align-self: stretch; display: flex; align-items: center; gap: 6px;
+  padding: 0 12px; background: var(--gold-grad); background-size: 200% 100%; color: #1b1405;
+  font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;
+}
+.vn-ticker-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #d11a2a; box-shadow: 0 0 0 0 rgba(209, 26, 42, .6); }
+.vn-ticker-view {
+  flex: 1 1 auto; overflow: hidden; height: 100%; display: flex; align-items: center;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+}
+.vn-ticker-track { display: flex; align-items: center; width: max-content; white-space: nowrap; }
+.vn-ticker-item {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 28px 0 0; margin: 0;
+  background: none; border: 0; color: inherit; font: inherit; white-space: nowrap; position: relative;
+}
+.vn-ticker-item::after { content: "✦"; position: absolute; right: 9px; color: #d4af37; font-size: 10px; }
+.vn-ticker-item.is-action { cursor: pointer; text-decoration: underline; text-decoration-color: rgba(212, 175, 55, .6); text-underline-offset: 3px; }
+.vn-ticker-item.is-action:hover, .vn-ticker-item.is-action:focus-visible { color: #f5d77a; outline: none; }
+.vn-ticker-ico { font-size: 15px; }
+.vn-ticker-x {
+  flex: 0 0 auto; width: 38px; height: 100%; border: 0; background: rgba(0, 0, 0, .25); color: #c7b98f;
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.vn-ticker-x:hover { color: #fff; }
+[dir="rtl"].vn-ticker .vn-ticker-item { padding: 0 0 0 28px; }
+[dir="rtl"].vn-ticker .vn-ticker-item::after { right: auto; left: 9px; }
+
+/* room for the ticker */
+body.has-ticker { padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+body.has-ticker .footer { padding-bottom: 50px; }
+body.tabbed .vn-ticker { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); padding-bottom: 0; }
+body.tabbed.has-ticker { padding-bottom: calc(116px + env(safe-area-inset-bottom, 0px)); }
+body.tabbed.has-ticker[data-current-tab="write"] .quick-cta,
+body.tabbed.has-ticker[data-current-tab="voices"] .quick-cta { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); }
+body.tabbed.has-ticker[data-current-tab="voices"] { padding-bottom: calc(186px + env(safe-area-inset-bottom, 0px)); }
+body.has-ticker .pro-toast { bottom: 140px; }
+
+@keyframes vn-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes vn-marquee-rtl { from { transform: translateX(0); } to { transform: translateX(50%); } }
+@keyframes vn-live { 0% { box-shadow: 0 0 0 0 rgba(209, 26, 42, .6); } 70% { box-shadow: 0 0 0 7px rgba(209, 26, 42, 0); } 100% { box-shadow: 0 0 0 0 rgba(209, 26, 42, 0); } }
+@media (prefers-reduced-motion: no-preference) {
+  .vn-ticker-track { animation: vn-marquee 30s linear infinite; }
+  [dir="rtl"].vn-ticker .vn-ticker-track { animation-name: vn-marquee-rtl; }
+  .vn-ticker:hover .vn-ticker-track, .vn-ticker:focus-within .vn-ticker-track { animation-play-state: paused; }
+  .vn-ticker-label::before { animation: vn-live 1.6s ease-out infinite; }
+  .vn-ticker-label { animation: vn-shimmer 5s linear infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vn-ticker-track { width: 100%; }
+  .vn-ticker-item { display: none; padding: 0 8px; }
+  .vn-ticker-item.on { display: inline-flex; }
+  .vn-ticker-item::after { display: none; }
+}

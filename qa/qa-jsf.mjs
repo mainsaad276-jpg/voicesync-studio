@@ -382,6 +382,15 @@ t('same_origin_allowed', r.status === 200);
   t('plans_reset', (await r.json()).plans.length === 5);
   r = await worker.fetch(new Request('https://w.example.workers.dev/pro/trial', { method: 'POST', headers: { Origin: ORIGIN, 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)', 'Content-Type': 'application/json', 'CF-Connecting-IP': '4.4.4.6' }, body: JSON.stringify({ device: 'dev_BOT_AAAAAAAAAAAAAAA' }) }), envD);
   t('no_trial_for_bots', r.status === 403);
+  // promo ticker
+  r = await worker.fetch(ipReq('/admin/ticker', { items: [{ en: 'x', action: 'link', url: 'javascript:alert(1)' }] }, ADMIN, '6.6.6.6'), envD);
+  t('ticker_rejects_bad_link', r.status === 400);
+  r = await worker.fetch(ipReq('/admin/ticker', { enabled: true, speed: 'fast', items: [{ icon: '🔔', en: 'Subscribe for more', ur: 'مزید کے لیے سبسکرائب', action: 'link', url: 'https://youtube.com/@x' }, { en: 'Share <b>VoxNova</b>', action: 'share', url: 'https://ignored' }, { en: '', ur: '' }] }, ADMIN, '6.6.6.6'), envD);
+  j = await r.json();
+  t('ticker_saved', r.status === 200 && j.items.length === 2 && j.speed === 'fast' && j.items[1].url === '' && !j.items[1].en.includes('<'));
+  r = await worker.fetch(new Request('https://w.example.workers.dev/pro/plans', { headers: { Origin: ORIGIN } }), envD);
+  j = await r.json();
+  t('ticker_public', j.ticker && j.ticker.items[0].ur === 'مزید کے لیے سبسکرائب');
   r = await worker.fetch(req('/health'), envD);
   t('health_no_debug_origin', !('origin' in (await r.json())));
 }

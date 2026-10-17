@@ -6,6 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>VoxNova Admin</title>
   <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/gold.css">
   <script src="../js/theme.js"></script>
   <script src="../js/config.js"></script>
   <style>
@@ -112,20 +113,24 @@
     [hidden] { display: none !important; }
     @media (max-width: 600px) { .kpi .val { font-size: 24px; } .hide-sm { display: none; } }
   </style>
+  <link rel="stylesheet" href="admin-ui.css">
 </head>
-<body>
+<body class="admin">
 <main>
-  <div class="topline">
-    <div>
-      <h1>⭐ VoxNova — Admin</h1>
-      <p class="muted small" style="margin:0">Users, payments, plans aur requests — sab ek jagah. Ye page sirf aap ke liye hai.</p>
+  <header class="hero">
+    <div class="hero-brand">
+      <div class="logo" aria-hidden="true">VN</div>
+      <div>
+        <h1>VoxNova Command Center</h1>
+        <p class="muted small" style="margin:2px 0 0">Users, payments, plans aur promo — sab ek jagah. <span class="live-dot" id="liveDot" hidden>LIVE</span> <span class="clock" id="clock"></span></p>
+      </div>
     </div>
-    <div class="actions" style="margin-top:4px" id="topActions" hidden>
+    <div class="actions" style="margin-top:0" id="topActions" hidden>
       <span class="live" id="liveAt"></span>
       <button class="btn btn-secondary btn-small" id="btnRefreshAll" type="button">↻ Refresh</button>
       <button class="btn btn-secondary btn-small" id="btnLogout" type="button">Logout</button>
     </div>
-  </div>
+  </header>
 
   <section class="box" id="loginBox">
     <label for="adminKey">Admin key</label>
@@ -144,6 +149,7 @@
       <button class="tab-btn" role="tab" data-tab="payments" aria-selected="false">💰 Payments</button>
       <button class="tab-btn" role="tab" data-tab="plans" aria-selected="false">📦 Plans</button>
       <button class="tab-btn" role="tab" data-tab="pay" aria-selected="false">🏦 Payment accounts</button>
+      <button class="tab-btn" role="tab" data-tab="ticker" aria-selected="false">📣 Promo ticker</button>
       <button class="tab-btn" role="tab" data-tab="settings" aria-selected="false">🔑 API settings</button>
     </nav>
 
@@ -275,6 +281,23 @@
       <p class="msg" id="payMsg"></p>
     </section>
 
+    <!-- PROMO TICKER -->
+    <section class="box" data-panel="ticker" hidden>
+      <div class="topline"><h2>Promo ticker — app ke neeche chalne wale messages</h2><span class="muted small" id="tkSource"></span></div>
+      <p class="hint">"Subscribe for more", "Join our community", "Share with friends" jaise messages. Message par tap karne se kya ho: link khule, share ho, plans khulein ya WhatsApp. Save karte hi website aur app par lag jata hai. Neeche isi page par preview chal raha hai.</p>
+      <div class="row">
+        <div><label class="check" style="margin-top:12px"><input type="checkbox" id="tkOn" checked> Ticker chalu</label></div>
+        <div><label for="tkSpeed">Speed</label><select id="tkSpeed"><option value="slow">Slow</option><option value="normal" selected>Normal</option><option value="fast">Fast</option></select></div>
+      </div>
+      <div id="tkList"></div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnTkAdd" type="button">＋ Add message</button>
+        <button class="btn btn-primary" id="btnTkSave" type="button">Save ticker</button>
+        <button class="btn btn-no btn-small" id="btnTkReset" type="button">Default messages</button>
+      </div>
+      <p class="msg" id="tkMsg"></p>
+    </section>
+
     <!-- SETTINGS -->
     <section class="box" data-panel="settings" hidden>
       <h2>API settings — yahan apni API keys lagayein</h2>
@@ -297,6 +320,7 @@
   </div>
 </main>
 <div class="tip" id="tip"></div>
+<script src="../js/ticker.js"></script>
 <script>
 (function () {
   'use strict';
@@ -349,6 +373,7 @@
     document.querySelectorAll('[data-panel]').forEach(function (p) { p.hidden = p.getAttribute('data-panel') !== t; });
     if (t === 'settings') loadSettings();
     if (t === 'pay') loadPay();
+    if (t === 'ticker') loadTicker();
     if (t === 'plans' && !planDirty) renderPlanEditor();
     try { localStorage.setItem('vsAdminTab', t); } catch (e) {}
   }
@@ -369,22 +394,40 @@
   }
 
   // ---------- dashboard ----------
+  function countUp(node, text) {
+    var m = /^(\D*)([\d,]+(?:\.\d+)?)(.*)$/.exec(text);
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!m || reduce || node.dataset.shown === text) { node.textContent = text; node.dataset.shown = text; return; }
+    var target = Number(m[2].replace(/,/g, '')), dec = (m[2].split('.')[1] || '').length, t0 = performance.now(), dur = 900;
+    function step(now) {
+      var p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3), v = target * e;
+      node.textContent = m[1] + (dec ? v.toFixed(dec) : Math.round(v).toLocaleString('en-US')) + m[3];
+      if (p < 1) requestAnimationFrame(step); else { node.textContent = text; node.dataset.shown = text; }
+    }
+    requestAnimationFrame(step);
+  }
+  var lastVals = {};
   function kpi(box, lab, val, sub, opts) {
-    var k = el('div', 'kpi' + (opts && opts.alert ? ' alert' : ''));
-    k.appendChild(el('div', 'lab', lab)); k.appendChild(el('div', 'val', val));
+    opts = opts || {};
+    var k = el('div', 'kpi c-' + (opts.color || 'gold') + (opts.alert ? ' alert' : ''));
+    if (opts.icon) k.appendChild(el('div', 'ico', opts.icon));
+    k.appendChild(el('div', 'lab', lab));
+    var v = el('div', 'val'); k.appendChild(v);
+    if (lastVals[lab] === val) v.textContent = val; else countUp(v, val);
+    lastVals[lab] = val;
     if (sub) k.appendChild(el('div', 'sub', sub));
     if (opts && opts.go) { k.setAttribute('role', 'button'); k.tabIndex = 0; k.addEventListener('click', function () { showTab(opts.go); }); }
     box.appendChild(k);
   }
   function renderDash() {
     var o = data.overview, box = $('kpis'); box.innerHTML = '';
-    kpi(box, 'Total users', fmt(o.users.total), fmt(o.users.free) + ' free · ' + fmt(o.users.paid) + ' paid', { go: 'users' });
-    kpi(box, 'Active today', fmt(o.users.active24h), fmt(o.users.active7d) + ' in 7 days · ' + fmt(o.users.active30d) + ' in 30', { go: 'users' });
-    kpi(box, 'Paid plans active', fmt(o.users.paidActive), o.users.expiringSoon ? fmt(o.users.expiringSoon) + ' expiring in 5 days' : 'none expiring soon', { go: 'users' });
-    kpi(box, 'Revenue this month', rs(o.revenue.thisMonth), rs(o.revenue.total) + ' all time · ' + fmt(o.revenue.payments) + ' payments', { go: 'payments' });
-    kpi(box, 'Profit this month', rs(o.revenue.profitThisMonth || 0), 'cost ' + rs(o.revenue.costThisMonth || 0) + ' · ' + rs(o.revenue.profit || 0) + ' all time', { go: 'plans', alert: (o.revenue.profitThisMonth || 0) < 0 });
-    kpi(box, 'Pending requests', fmt(o.requests.pending), o.requests.pending ? 'Tap to review' : 'All clear', { go: 'requests', alert: o.requests.pending > 0 });
-    kpi(box, 'HD characters used', short(o.chars.used), short(o.chars.usedPaid) + ' by paid users');
+    kpi(box, 'Total users', fmt(o.users.total), fmt(o.users.free) + ' free · ' + fmt(o.users.paid) + ' paid', { go: 'users', icon: '👥', color: 'blue' });
+    kpi(box, 'Active today', fmt(o.users.active24h), fmt(o.users.active7d) + ' in 7 days · ' + fmt(o.users.active30d) + ' in 30', { go: 'users', icon: '⚡', color: 'green' });
+    kpi(box, 'Paid plans active', fmt(o.users.paidActive), o.users.expiringSoon ? fmt(o.users.expiringSoon) + ' expiring in 5 days' : 'none expiring soon', { go: 'users', icon: '⭐', color: 'gold' });
+    kpi(box, 'Revenue this month', rs(o.revenue.thisMonth), rs(o.revenue.total) + ' all time · ' + fmt(o.revenue.payments) + ' payments', { go: 'payments', icon: '💰', color: 'gold' });
+    kpi(box, 'Profit this month', rs(o.revenue.profitThisMonth || 0), 'cost ' + rs(o.revenue.costThisMonth || 0) + ' · ' + rs(o.revenue.profit || 0) + ' all time', { go: 'plans', icon: '📈', color: 'green', alert: (o.revenue.profitThisMonth || 0) < 0 });
+    kpi(box, 'Pending requests', fmt(o.requests.pending), o.requests.pending ? 'Tap to review' : 'All clear', { go: 'requests', icon: '📥', color: o.requests.pending ? 'red' : 'violet', alert: o.requests.pending > 0 });
+    kpi(box, 'HD characters used', short(o.chars.used), short(o.chars.usedPaid) + ' by paid users', { icon: '🎙️', color: 'amber' });
     var days = o.series.days;
     barChart($('chartUsers'), 'New users / day', days, o.series['new'], function (v) { return fmt(v) + ' new'; }, fmt(sum(o.series['new'])) + ' in 30 days');
     barChart($('chartRevenue'), 'Revenue / day (Rs)', days, o.series.revenue, function (v) { return rs(v); }, rs(sum(o.series.revenue)) + ' in 30 days');
@@ -417,6 +460,9 @@
     var W = 600, H = 180, padL = 4, padB = 18, padT = 8;
     var max = Math.max.apply(null, vals.concat([1]));
     var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, preserveAspectRatio: 'none', role: 'img', 'aria-label': title + ', ' + total });
+    var defs = svgEl('defs', {}), lg = svgEl('linearGradient', { id: 'vnGold', x1: '0', y1: '0', x2: '0', y2: '1' });
+    lg.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#f5d77a' })); lg.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#8a6a12' }));
+    defs.appendChild(lg); svg.appendChild(defs);
     var bw = (W - padL) / vals.length, gap = 2;
     svg.appendChild(svgEl('line', { x1: 0, x2: W, y1: H - padB, y2: H - padB, class: 'axis' }));
     vals.forEach(function (v, i) {
@@ -665,9 +711,9 @@
     var rows = all.filter(function (p) { return !state.month || monthOf(p.at) === state.month; });
     var k = $('payKpis'); k.innerHTML = '';
     var thisM = new Date().toISOString().slice(0, 7);
-    kpi(k, 'This month', rs((months[thisM] || {}).sum || 0), fmt((months[thisM] || {}).n || 0) + ' payments');
-    kpi(k, 'All time', rs(all.reduce(function (s, p) { return s + p.amount; }, 0)), fmt(all.length) + ' payments');
-    kpi(k, 'Average payment', all.length ? rs(Math.round(all.reduce(function (s, p) { return s + p.amount; }, 0) / all.length)) : '—', '');
+    kpi(k, 'This month', rs((months[thisM] || {}).sum || 0), fmt((months[thisM] || {}).n || 0) + ' payments', { icon: '📅', color: 'gold' });
+    kpi(k, 'All time', rs(all.reduce(function (s, p) { return s + p.amount; }, 0)), fmt(all.length) + ' payments', { icon: '🏆', color: 'green' });
+    kpi(k, 'Average payment', all.length ? rs(Math.round(all.reduce(function (s, p) { return s + p.amount; }, 0) / all.length)) : '—', '', { icon: '🧾', color: 'blue' });
     var tb = $('payRows'); tb.innerHTML = '';
     if (!rows.length) { var tr0 = el('tr'); var td0 = el('td', 'empty', 'Abhi koi payment nahi.'); td0.colSpan = 7; tr0.appendChild(td0); tb.appendChild(tr0); }
     rows.forEach(function (p) {
@@ -806,6 +852,58 @@
     }, function (e) { $('payMsg').textContent = e.message; $('payMsg').className = 'msg err'; });
   });
 
+  // ---------- promo ticker ----------
+  var TK_ACTIONS = [['none', 'Sirf message'], ['link', 'Link kholo'], ['share', 'Share karo'], ['plans', 'Plans kholo'], ['whatsapp', 'WhatsApp']];
+  function tkRow(m) {
+    m = m || { icon: '✨', en: '', ur: '', action: 'none', url: '' };
+    var row = el('div', 'tk-row');
+    function f(lab, node) { var w = el('div'); w.appendChild(el('label', '', lab)); w.appendChild(node); row.appendChild(w); return node; }
+    function inp(v, ph, max) { var i = el('input'); i.type = 'text'; i.value = v || ''; i.placeholder = ph; i.maxLength = max; return i; }
+    var ic = f('Icon', inp(m.icon, '🔔', 8));
+    var en = f('Message (English)', inp(m.en, 'Subscribe for more', 120));
+    var ur = f('پیغام (اردو)', inp(m.ur, 'مزید کے لیے سبسکرائب کریں', 120)); ur.dir = 'rtl';
+    var ac = el('select'); TK_ACTIONS.forEach(function (a) { var o = el('option', '', a[1]); o.value = a[0]; ac.appendChild(o); }); ac.value = m.action || 'none'; f('Tap par', ac);
+    var url = f('Link (https://…)', inp(m.url, 'https://youtube.com/@yourchannel', 300));
+    function sync() { url.disabled = !(ac.value === 'link' || ac.value === 'whatsapp'); url.placeholder = ac.value === 'whatsapp' ? 'Khali = aap ka WhatsApp number' : 'https://youtube.com/@yourchannel'; }
+    ac.addEventListener('change', function () { sync(); tkPreview(); }); sync();
+    var btns = el('div', 'tk-btns');
+    var up = el('button', 'btn btn-secondary btn-small', '↑'); up.type = 'button'; up.title = 'Upar';
+    var del = el('button', 'btn btn-no btn-small', '🗑'); del.type = 'button'; del.title = 'Hatao';
+    up.addEventListener('click', function () { if (row.previousElementSibling) { row.parentNode.insertBefore(row, row.previousElementSibling); tkPreview(); } });
+    del.addEventListener('click', function () { row.remove(); tkPreview(); });
+    btns.appendChild(up); btns.appendChild(del); row.appendChild(btns);
+    [ic, en, ur, url].forEach(function (i) { i.addEventListener('input', tkPreview); });
+    row._read = function () { return { icon: ic.value.trim(), en: en.value.trim(), ur: ur.value.trim(), action: ac.value, url: url.disabled ? '' : url.value.trim() }; };
+    return row;
+  }
+  function tkCollect() {
+    return { enabled: $('tkOn').checked, speed: $('tkSpeed').value, items: [].map.call($('tkList').children, function (r) { return r._read(); }) };
+  }
+  function tkPreview() { if (window.VSTicker) window.VSTicker.preview(tkCollect()); }
+  function loadTicker() {
+    $('tkMsg').textContent = 'Loading…'; $('tkMsg').className = 'msg';
+    return api('/admin/ticker').then(function (t) {
+      var src = t.saved ? t : (window.VSTicker ? window.VSTicker.defaults : { enabled: true, speed: 'normal', items: [] });
+      $('tkOn').checked = src.enabled !== false; $('tkSpeed').value = src.speed || 'normal';
+      var list = $('tkList'); list.innerHTML = '';
+      (src.items || []).forEach(function (m) { list.appendChild(tkRow(m)); });
+      $('tkSource').textContent = t.saved ? 'Saved from this page' : 'Default messages (abhi save nahi)';
+      $('tkMsg').textContent = ''; tkPreview();
+    }, function (e) { $('tkMsg').textContent = e.message; $('tkMsg').className = 'msg err'; });
+  }
+  $('tkOn').addEventListener('change', tkPreview); $('tkSpeed').addEventListener('change', tkPreview);
+  $('btnTkAdd').addEventListener('click', function () { var r = tkRow(); $('tkList').appendChild(r); r.querySelectorAll('input')[1].focus(); tkPreview(); });
+  $('btnTkSave').addEventListener('click', function () {
+    $('tkMsg').textContent = 'Saving…'; $('tkMsg').className = 'msg';
+    api('/admin/ticker', { method: 'POST', body: tkCollect() }).then(function () {
+      $('tkMsg').textContent = '✅ Saved — app aur website par chal raha hai'; $('tkMsg').className = 'msg ok'; $('tkSource').textContent = 'Saved from this page';
+    }, function (e) { $('tkMsg').textContent = e.message; $('tkMsg').className = 'msg err'; });
+  });
+  $('btnTkReset').addEventListener('click', function () {
+    if (!confirm('Default messages wapas? Aap ke likhe messages mit jayenge.')) return;
+    api('/admin/ticker', { method: 'POST', body: { reset: true } }).then(loadTicker, function (e) { $('tkMsg').textContent = e.message; $('tkMsg').className = 'msg err'; });
+  });
+
   // ---------- settings ----------
   function loadSettings() {
     $('setMsg').textContent = '';
@@ -833,7 +931,8 @@
     try { sessionStorage.setItem('vsAdminKey', key); localStorage.setItem('vsAdminWorker', base); } catch (e) {}
     $('loginMsg').textContent = 'Checking…'; $('loginMsg').className = 'msg';
     loadAll().then(function () {
-      $('loginBox').hidden = true; $('app').hidden = false; $('topActions').hidden = false;
+      $('loginBox').hidden = true; $('app').hidden = false; $('topActions').hidden = false; $('liveDot').hidden = false;
+      if (window.VSTicker && !$('tkList').children.length) window.VSTicker.preview(null);
       var t = 'dash'; try { t = localStorage.getItem('vsAdminTab') || 'dash'; } catch (e) {}
       showTab(t);
       clearInterval(timer); timer = setInterval(function () { if (!document.hidden) loadAll().catch(function () {}); }, 60000);
@@ -847,6 +946,7 @@
   $('btnRefreshAll').addEventListener('click', function () { loadAll().catch(function (e) { $('liveAt').textContent = e.message; }); });
   $('btnLogout').addEventListener('click', function () { try { sessionStorage.removeItem('vsAdminKey'); } catch (e) {} location.reload(); });
   if (key && base) $('btnLogin').click();
+  (function tick() { var c = $('clock'); if (c) c.textContent = new Date().toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' }); setTimeout(tick, 15000); })();
 })();
 </script>
 </body>
