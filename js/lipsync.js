@@ -40,6 +40,7 @@
   var READY_TIMEOUT_MS = 25000;   // then honestly report 'heuristic' instead of hanging
   var VISEMES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'X'];
 
+  var RHUBARB_MAX_SEC = 120;        // longer audio -> heuristic cues (fast)
   var _state = null;              // 'rhubarb' | 'heuristic' once ready() settles
   var _readyPromise = null;
   var _analyzeFn = null;          // rhubarb analyze(pcm16, {sampleRate}) when loaded
@@ -298,6 +299,10 @@
       pcm16 = new Int16Array(0);
     }
     return ready().then(function () {
+      // Rhubarb runs on the main thread and takes minutes on long audio
+      // (the app froze after a 12-minute voiceover). Long audio uses the
+      // fast heuristic mouth cues instead.
+      if (duration > RHUBARB_MAX_SEC) return heuristicCues(pcm16, TARGET_RATE, duration);
       if (_state === 'rhubarb' && _analyzeFn) {
         // never let a mid-run Rhubarb failure reach the UI: degrade to heuristic
         return rhubarbAnalyze(pcm16, duration).catch(function () {
