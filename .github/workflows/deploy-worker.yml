@@ -12,10 +12,9 @@ name: Deploy voice Worker (Cloudflare)
 #   VS_ADMIN_KEY           recommended — your password for docs/admin.html (plan codes)
 #   AZURE_SPEECH_KEY       optional — Azure Speech key (Studio voices)
 
+# The API now runs on Vercel (api/router.js), so this only runs by hand
+# (Actions -> Deploy voice Worker -> Run workflow) if you move to Cloudflare.
 on:
-  push:
-    branches: [main]
-    paths: ['worker/**', '.github/workflows/deploy-worker.yml']
   workflow_dispatch:
 
 permissions:

@@ -375,12 +375,15 @@ async function createCode(env, { plan, chars, days, note, source, device, name, 
 
 // Free trial: one per device (and at most a few per network per day).
 const DEVICE_RE = /^[A-Za-z0-9_-]{16,64}$/;
+const BOT_RE = /bot|crawl|spider|slurp|headless|lighthouse|pagespeed|preview|vercel|facebookexternalhit|whatsapp\/|curl|wget|python-requests|node-fetch|axios/i;
 async function proTrial(request, env, cors) {
   if (!env.PRO) return json(503, { error: 'plans are not set up yet', code: 'PLANS_OFF' }, cors);
   let body;
   try { body = await request.json(); } catch { return json(400, { error: 'bad json' }, cors); }
   const device = String(body.device || '');
   if (!DEVICE_RE.test(device)) return json(400, { error: 'bad device id' }, cors);
+  // Crawlers and page-preview bots open the site too; they get no trial (and no user row).
+  if (BOT_RE.test(request.headers.get('User-Agent') || '')) return json(403, { error: 'no trial for bots', code: 'BOT' }, cors);
   const existing = await env.PRO.get('trial:' + device);
   if (existing) {
     const rec = await loadCode(env, existing);

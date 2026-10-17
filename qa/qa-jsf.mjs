@@ -380,6 +380,8 @@ t('same_origin_allowed', r.status === 200);
   r = await worker.fetch(ipReq('/admin/plans', { reset: true }, ADMIN, '6.6.6.6'), envD);
   r = await worker.fetch(new Request('https://w.example.workers.dev/pro/plans', { headers: { Origin: ORIGIN } }), envD);
   t('plans_reset', (await r.json()).plans.length === 5);
+  r = await worker.fetch(new Request('https://w.example.workers.dev/pro/trial', { method: 'POST', headers: { Origin: ORIGIN, 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)', 'Content-Type': 'application/json', 'CF-Connecting-IP': '4.4.4.6' }, body: JSON.stringify({ device: 'dev_BOT_AAAAAAAAAAAAAAA' }) }), envD);
+  t('no_trial_for_bots', r.status === 403);
   r = await worker.fetch(req('/health'), envD);
   t('health_no_debug_origin', !('origin' in (await r.json())));
 }
